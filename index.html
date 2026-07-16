@@ -4,13 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; form-action 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' https://*.supabase.co; img-src 'self' data:; upgrade-insecure-requests">
-  <meta name="description" content="HOME31 Enterprise Management Platform V7.7.7 — senior-friendly accessible edition">
+  <meta name="description" content="HOME31 Enterprise Management Platform V7.7.8 — senior-friendly accessible edition">
   <meta name="theme-color" content="#061b2b">
-  <title>HOME31 Enterprise Management Platform V7.7.7</title>
+  <title>HOME31 Enterprise Management Platform V7.7.8</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=7.7.7">
+  <link rel="stylesheet" href="styles.css?v=7.7.8">
 </head>
 <body>
 
@@ -157,50 +157,66 @@
   </section>
 
   <div id="platform" class="app-shell hidden">
-    <aside id="sidebar" class="sidebar">
-      <div class="brand">
+    <aside id="sidebar" class="sidebar" aria-label="Primary navigation">
+      <div class="brand sidebar-brand-row">
         <div class="brand-mark">H31</div>
-        <div>
+        <div class="sidebar-brand-copy">
           <strong>HOME31</strong>
           <span>Enterprise Management Platform</span>
         </div>
+        <button
+          id="sidebar-collapse-button"
+          class="sidebar-collapse-button"
+          type="button"
+          aria-label="Collapse navigation sidebar"
+          aria-expanded="true"
+          aria-controls="sidebar"
+          title="Collapse navigation"
+        >
+          <span aria-hidden="true">‹</span>
+        </button>
       </div>
 
       <div class="sidebar-user">
         <div id="sidebar-avatar" class="avatar">U</div>
-        <div>
+        <div class="sidebar-user-copy">
           <strong id="sidebar-name">User</strong>
           <span id="sidebar-role">Normal User</span>
         </div>
       </div>
 
       <nav id="user-nav" class="module-nav" aria-label="User navigation">
-        <button class="nav-item active" data-module="user-home"><span>⌂</span><b>My Dashboard</b></button>
-        <button class="nav-item" data-module="my-initiatives"><span>▤</span><b>My Initiatives</b></button>
-        <button class="nav-item" data-module="readiness"><span>✓</span><b>Readiness & HR</b></button>
-        <button class="nav-item" data-module="account"><span>⚙</span><b>My Account</b></button>
+        <button class="nav-item active" data-module="user-home" data-tooltip="My Dashboard" aria-label="My Dashboard"><span>⌂</span><b>My Dashboard</b></button>
+        <button class="nav-item" data-module="my-initiatives" data-tooltip="My Initiatives" aria-label="My Initiatives"><span>▤</span><b>My Initiatives</b></button>
+        <button class="nav-item" data-module="readiness" data-tooltip="Readiness & HR" aria-label="Readiness and HR"><span>✓</span><b>Readiness & HR</b></button>
+        <button class="nav-item" data-module="account" data-tooltip="My Account" aria-label="My Account"><span>⚙</span><b>My Account</b></button>
       </nav>
 
       <nav id="admin-nav" class="module-nav hidden" aria-label="Super admin navigation">
         <div class="nav-separator">SUPER ADMIN</div>
-        <button class="nav-item" data-module="admin-overview"><span>◫</span><b>Executive Overview</b></button>
-        <button class="nav-item" data-module="admin-portfolio"><span>▦</span><b>Enterprise Portfolio</b></button>
-        <button class="nav-item" data-module="admin-users"><span>♙</span><b>User Administration</b></button>
-        <button class="nav-item" data-module="admin-exceptions"><span>!</span><b>Risks & Exceptions</b></button>
-        <button class="nav-item" data-module="admin-system"><span>⚙</span><b>System & Future</b></button>
-        <button class="nav-item" data-module="account"><span>👤</span><b>My Account</b></button>
+        <button class="nav-item" data-module="admin-overview" data-tooltip="Executive Overview" aria-label="Executive Overview"><span>◫</span><b>Executive Overview</b></button>
+        <button class="nav-item" data-module="admin-portfolio" data-tooltip="Enterprise Portfolio" aria-label="Enterprise Portfolio"><span>▦</span><b>Enterprise Portfolio</b></button>
+        <button class="nav-item" data-module="admin-users" data-tooltip="User Administration" aria-label="User Administration"><span>♙</span><b>User Administration</b></button>
+        <button class="nav-item" data-module="admin-exceptions" data-tooltip="Risks & Exceptions" aria-label="Risks and Exceptions"><span>!</span><b>Risks & Exceptions</b></button>
+        <button class="nav-item" data-module="admin-system" data-tooltip="System & Future" aria-label="System and Future"><span>⚙</span><b>System & Future</b></button>
+        <button class="nav-item" data-module="account" data-tooltip="My Account" aria-label="My Account"><span>👤</span><b>My Account</b></button>
       </nav>
 
       <div class="sidebar-footer">
-        <button id="logout-button" class="sidebar-logout" type="button">Sign out</button>
-        <span>HOME31 Platform V7.7.7</span>
+        <button id="logout-button" class="sidebar-logout" type="button" data-tooltip="Sign out" aria-label="Sign out">
+          <span class="sidebar-logout-icon" aria-hidden="true">↪</span>
+          <span class="sidebar-logout-label">Sign out</span>
+        </button>
+        <span class="sidebar-version">HOME31 Platform V7.7.8</span>
       </div>
     </aside>
+
+    <button id="sidebar-overlay" class="sidebar-overlay" type="button" aria-label="Close navigation menu" tabindex="-1"></button>
 
     <main class="main">
       <header class="topbar">
         <div class="topbar-left">
-          <button id="menu-toggle" class="icon-button" type="button" aria-label="Open navigation menu" aria-expanded="false" aria-controls="sidebar">☰</button>
+          <button id="menu-toggle" class="icon-button" type="button" aria-label="Toggle navigation" aria-expanded="true" aria-controls="sidebar" title="Toggle navigation">☰</button>
           <div>
             <span class="eyebrow">LPPSA • HOME31 2027–2031</span>
             <h1 id="page-title">My Dashboard</h1>
@@ -981,7 +997,7 @@
               <p>Translate the working prototype into a secure, integrated and governable enterprise platform roadmap.</p>
             </div>
             <div class="admin-command-actions">
-              <span class="admin-command-chip good">V7.7.7 foundation</span>
+              <span class="admin-command-chip good">V7.7.8 foundation</span>
             </div>
           </div>
 
@@ -1156,7 +1172,7 @@
           </article>
 
           <div class="admin-command-assurance-strip">
-            <article><strong>V7.7.7</strong><span>Security & accessibility edition</span></article>
+            <article><strong>V7.7.8</strong><span>Security & accessibility edition</span></article>
             <article><strong>Modular</strong><span>Expandable architecture</span></article>
             <article><strong>RBAC</strong><span>Controlled role model</span></article>
             <article><strong>RLS</strong><span>Database security</span></article>
@@ -1818,6 +1834,6 @@
   <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
-  <script type="module" src="app.js?v=7.7.7"></script>
+  <script type="module" src="app.js?v=7.7.8"></script>
 </body>
 </html>

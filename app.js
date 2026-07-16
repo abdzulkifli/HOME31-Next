@@ -1,7 +1,7 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.8/+esm";
 
-const SUPABASE_URL = "https://ueuvavxdvclnfffujafz.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_AhkBD0Tcki8RECDar7_vkw_fsV_wxX0";
+const SUPABASE_URL = "https://YOUR-PROJECT.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = "YOUR-PUBLISHABLE-KEY";
 const AUTH_REDIRECT_URL = new URL(".", window.location.href).href;
 
 const configured =
@@ -44,10 +44,14 @@ let selectedAdminYear = DEFAULT_ADMIN_YEAR;
 
 const DISPLAY_SETTINGS_KEY = "home31-display-settings-v2";
 const DISPLAY_MODES = ["standard", "comfortable", "large"];
+const SIDEBAR_STATE_KEY = "home31-sidebar-collapsed-v1";
+const MOBILE_NAVIGATION_QUERY = "(max-width: 850px)";
 let currentDisplaySize = "standard";
 let highContrastEnabled = false;
 let tableEnhancementScheduled = false;
 let responsiveTableObserver = null;
+let sidebarMediaQuery = null;
+let sidebarCollapsed = false;
 
 
 let currentUser = null;
@@ -65,6 +69,7 @@ document.addEventListener("DOMContentLoaded", initialise);
 
 async function initialise() {
   initialiseDisplaySettings();
+  initialiseNavigation();
   bindEvents();
   populatePillars();
   handleResetLink();
@@ -90,6 +95,156 @@ async function initialise() {
   scheduleAuthRoute(data.session);
 }
 
+function initialiseNavigation() {
+  sidebarMediaQuery = window.matchMedia(MOBILE_NAVIGATION_QUERY);
+
+  try {
+    sidebarCollapsed = localStorage.getItem(SIDEBAR_STATE_KEY) === "true";
+  } catch (_error) {
+    sidebarCollapsed = false;
+  }
+
+  if (typeof sidebarMediaQuery.addEventListener === "function") {
+    sidebarMediaQuery.addEventListener("change", handleSidebarBreakpointChange);
+  } else if (typeof sidebarMediaQuery.addListener === "function") {
+    sidebarMediaQuery.addListener(handleSidebarBreakpointChange);
+  }
+
+  applySidebarState();
+}
+
+function isMobileNavigation() {
+  return sidebarMediaQuery?.matches ?? window.innerWidth <= 850;
+}
+
+function applySidebarState() {
+  const mobile = isMobileNavigation();
+  document.body.classList.toggle("sidebar-collapsed", !mobile && sidebarCollapsed);
+
+  if (mobile) {
+    closeSidebarDrawer();
+  } else {
+    document.body.classList.remove("sidebar-drawer-open", "navigation-scroll-locked");
+    $("#sidebar")?.classList.remove("open");
+    $("#sidebar-overlay")?.classList.remove("visible");
+    if ($("#sidebar")) $("#sidebar").inert = false;
+  }
+
+  updateSidebarControls();
+  window.setTimeout(() => Object.values(charts).forEach(chart => chart?.resize?.()), 220);
+}
+
+function toggleNavigation() {
+  if (isMobileNavigation()) {
+    if (document.body.classList.contains("sidebar-drawer-open")) {
+      closeSidebarDrawer({ restoreFocus: true });
+    } else {
+      openSidebarDrawer();
+    }
+    return;
+  }
+
+  sidebarCollapsed = !sidebarCollapsed;
+  try {
+    localStorage.setItem(SIDEBAR_STATE_KEY, String(sidebarCollapsed));
+  } catch (_error) {
+    // The interface remains usable when browser storage is unavailable.
+  }
+  applySidebarState();
+}
+
+function openSidebarDrawer() {
+  if (!isMobileNavigation()) return;
+
+  const sidebar = $("#sidebar");
+  document.body.classList.add("sidebar-drawer-open", "navigation-scroll-locked");
+  sidebar?.classList.add("open");
+  $("#sidebar-overlay")?.classList.add("visible");
+  if (sidebar) sidebar.inert = false;
+  updateSidebarControls();
+
+  window.requestAnimationFrame(() => $("#sidebar-collapse-button")?.focus());
+}
+
+function closeSidebarDrawer({ restoreFocus = false } = {}) {
+  const sidebar = $("#sidebar");
+  const wasOpen = document.body.classList.contains("sidebar-drawer-open");
+
+  document.body.classList.remove("sidebar-drawer-open", "navigation-scroll-locked");
+  sidebar?.classList.remove("open");
+  $("#sidebar-overlay")?.classList.remove("visible");
+
+  if (sidebar) sidebar.inert = isMobileNavigation();
+  updateSidebarControls();
+
+  if (restoreFocus && wasOpen) $("#menu-toggle")?.focus();
+}
+
+function updateSidebarControls() {
+  const mobile = isMobileNavigation();
+  const drawerOpen = document.body.classList.contains("sidebar-drawer-open");
+  const expanded = mobile ? drawerOpen : !sidebarCollapsed;
+  const menuButton = $("#menu-toggle");
+  const sidebarButton = $("#sidebar-collapse-button");
+  const sidebarIcon = sidebarButton?.querySelector("span");
+
+  menuButton?.setAttribute("aria-expanded", String(expanded));
+  menuButton?.setAttribute("aria-label", mobile
+    ? (drawerOpen ? "Close navigation menu" : "Open navigation menu")
+    : (sidebarCollapsed ? "Expand navigation sidebar" : "Collapse navigation sidebar"));
+  if (menuButton) menuButton.title = menuButton.getAttribute("aria-label");
+
+  sidebarButton?.setAttribute("aria-expanded", String(expanded));
+  sidebarButton?.setAttribute("aria-label", mobile
+    ? "Close navigation menu"
+    : (sidebarCollapsed ? "Expand navigation sidebar" : "Collapse navigation sidebar"));
+  if (sidebarButton) sidebarButton.title = sidebarButton.getAttribute("aria-label");
+  if (sidebarIcon) sidebarIcon.textContent = mobile ? "×" : (sidebarCollapsed ? "›" : "‹");
+}
+
+function handleSidebarBreakpointChange() {
+  applySidebarState();
+}
+
+function handleNavigationKeydown(event) {
+  if (event.altKey && event.shiftKey && event.key.toLowerCase() === "m") {
+    event.preventDefault();
+    toggleNavigation();
+    return;
+  }
+
+  if (event.key === "Escape" && document.body.classList.contains("sidebar-drawer-open")) {
+    event.preventDefault();
+    closeSidebarDrawer({ restoreFocus: true });
+    return;
+  }
+
+  if (event.key === "Tab" && document.body.classList.contains("sidebar-drawer-open")) {
+    trapSidebarDrawerFocus(event);
+  }
+}
+
+function trapSidebarDrawerFocus(event) {
+  const sidebar = $("#sidebar");
+  if (!sidebar) return;
+
+  const focusable = [...sidebar.querySelectorAll(
+    'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+  )].filter(element => !element.closest(".hidden") && element.getClientRects().length > 0);
+
+  if (!focusable.length) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
+}
+
 function bindEvents() {
   $("#login-form").addEventListener("submit", login);
   $("#forgot-password-button").addEventListener("click", () => toggleAuthCard("forgot"));
@@ -101,12 +256,10 @@ function bindEvents() {
   $("#force-logout-button").addEventListener("click", logout);
 
   $("#logout-button").addEventListener("click", logout);
-  $("#menu-toggle").addEventListener("click", () => {
-    const sidebar = $("#sidebar");
-    const opening = !sidebar.classList.contains("open");
-    sidebar.classList.toggle("open", opening);
-    $("#menu-toggle").setAttribute("aria-expanded", String(opening));
-  });
+  $("#menu-toggle").addEventListener("click", toggleNavigation);
+  $("#sidebar-collapse-button").addEventListener("click", toggleNavigation);
+  $("#sidebar-overlay").addEventListener("click", () => closeSidebarDrawer({ restoreFocus: true }));
+  document.addEventListener("keydown", handleNavigationKeydown);
   $("#top-account-button").addEventListener("click", () => showModule("account"));
   $("#top-new-initiative").addEventListener("click", () => openInitiativeModal());
   $("#admin-year-select").addEventListener("change", handleAdminYearChange);
@@ -221,8 +374,7 @@ function resetSessionState() {
   adminProfiles = [];
   destroyCharts();
   document.body.classList.remove("super-admin-shell", "admin-command-active");
-  $("#sidebar")?.classList.remove("open");
-  $("#menu-toggle")?.setAttribute("aria-expanded", "false");
+  closeSidebarDrawer();
   $("#initiative-modal")?.classList.add("hidden");
 }
 
@@ -485,14 +637,14 @@ function showModule(name) {
   $$(".nav-item").forEach(button => button.classList.remove("active"));
 
   const module = $(`#module-${name}`);
-  const nav = $(`.nav-item[data-module="${name}"]`);
+  const matchingNavItems = $$(`.nav-item[data-module="${name}"]`);
+  const nav = matchingNavItems.find(button => !button.closest(".hidden")) || matchingNavItems[0];
   if (!module) return;
 
   module.classList.add("active");
   nav?.classList.add("active");
   $("#page-title").textContent = nav?.querySelector("b")?.textContent || "HOME31";
-  $("#sidebar").classList.remove("open");
-  $("#menu-toggle").setAttribute("aria-expanded", "false");
+  if (isMobileNavigation()) closeSidebarDrawer();
   document.body.classList.toggle("admin-command-active", name.startsWith("admin-"));
   const yearAwareModules = ["admin-overview", "admin-portfolio", "admin-exceptions"];
   $("#admin-year-control").classList.toggle("hidden", !yearAwareModules.includes(name));
