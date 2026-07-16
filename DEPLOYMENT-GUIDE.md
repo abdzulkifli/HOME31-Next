@@ -13,3 +13,11 @@ Deploy with `--no-verify-jwt`. The functions themselves reject missing or invali
 ## GitHub Pages
 
 Publish from the `main` branch and `/(root)`. Keep `.nojekyll` in the repository root.
+
+## V7.8.1 protected form and Excel import
+
+For an existing V7.8.0 deployment, replace `index.html`, `styles.css` and `app.js`.
+
+No SQL migration or Edge Function redeployment is required.
+
+V7.8.1 loads SheetJS Community Edition from `https://cdn.sheetjs.com` to parse Excel workbooks and generate the HOME31 import template in the browser. The supplied Content Security Policy already permits this source.

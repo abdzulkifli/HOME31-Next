@@ -3398,3 +3398,177 @@ body.modal-open .display-settings{
   filter:grayscale(.35);
   box-shadow:none;
 }
+
+/* ================================================================
+   V7.9.0 MANAGEMENT CLARITY EXPERIENCE
+   ================================================================ */
+.management-view-panel{
+  margin-top:16px;
+  padding:20px;
+  border:1px solid rgba(116,159,185,.36);
+  border-radius:18px;
+  background:linear-gradient(145deg,rgba(16,47,73,.96),rgba(9,35,55,.96));
+  box-shadow:0 12px 30px rgba(0,0,0,.14);
+}
+.management-view-heading{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:18px;
+  margin-bottom:14px;
+}
+.management-view-heading h3{
+  margin:6px 0 4px;
+  color:#f4f8fa;
+  font-size:18px;
+  line-height:1.25;
+}
+.management-view-heading p{
+  margin:0;
+  color:#a9bdcc;
+  font-size:12px;
+  line-height:1.5;
+}
+.management-view-reset{
+  flex:0 0 auto;
+  padding:8px 12px;
+  border:1px solid #55718a;
+  border-radius:999px;
+  color:#d8e8f1;
+  background:#0b2940;
+  font-size:11px;
+  font-weight:700;
+}
+.management-view-grid{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:10px;
+}
+.management-view-card{
+  min-width:0;
+  display:grid;
+  grid-template-columns:38px minmax(0,1fr);
+  grid-template-areas:
+    "icon title"
+    "icon description"
+    "icon count";
+  gap:3px 10px;
+  align-items:center;
+  padding:14px;
+  border:1px solid #31516a;
+  border-radius:14px;
+  color:#eef5f8;
+  background:#0c293f;
+  text-align:left;
+  transition:border-color .18s ease,background .18s ease,transform .18s ease;
+}
+.management-view-card:hover,
+.management-view-card:focus-visible{
+  transform:translateY(-1px);
+  border-color:#7aaac4;
+  background:#123650;
+  outline:none;
+}
+.management-view-card.active{
+  border-color:#d1ad63;
+  box-shadow:inset 3px 0 0 #d1ad63;
+}
+.management-view-icon{
+  grid-area:icon;
+  width:38px;
+  height:38px;
+  display:grid;
+  place-items:center;
+  border-radius:11px;
+  color:#102638;
+  background:#7fa8bf;
+  font-size:10px;
+  font-weight:800;
+}
+.management-view-card:nth-child(2) .management-view-icon,
+.management-view-card:nth-child(4) .management-view-icon{background:#d1ad63}
+.management-view-card:nth-child(3) .management-view-icon,
+.management-view-card:nth-child(6) .management-view-icon{background:#65a4a4}
+.management-view-card:nth-child(5) .management-view-icon{background:#91a7b5}
+.management-view-card strong{
+  grid-area:title;
+  font-size:12px;
+}
+.management-view-card small{
+  grid-area:description;
+  color:#99afbd;
+  font-size:10px;
+  line-height:1.35;
+}
+.management-view-card em{
+  grid-area:count;
+  color:#d9be7a;
+  font-size:10px;
+  font-style:normal;
+  font-weight:700;
+}
+.portfolio-active-filters{
+  display:flex;
+  align-items:center;
+  flex-wrap:wrap;
+  gap:7px;
+  min-height:32px;
+  margin-top:12px;
+  padding-top:12px;
+  border-top:1px solid rgba(95,137,163,.28);
+}
+.portfolio-filter-empty{
+  color:#8fa8b8;
+  font-size:10px;
+}
+.portfolio-filter-chip{
+  display:inline-flex;
+  align-items:center;
+  gap:7px;
+  padding:7px 9px;
+  border:1px solid #4b6f86;
+  border-radius:999px;
+  color:#dce9f0;
+  background:#0a263c;
+  font-size:10px;
+  font-weight:700;
+}
+.portfolio-filter-chip:hover,
+.portfolio-filter-chip:focus-visible{
+  border-color:#d1ad63;
+  color:#fff;
+  outline:none;
+}
+.portfolio-filter-chip b{
+  color:#d1ad63;
+  font-size:14px;
+  line-height:1;
+}
+.excel-import-guidance div:first-child{
+  border-color:#8d7444;
+  background:rgba(209,173,99,.09);
+}
+#admin-download-template{
+  border-color:#8d7444;
+  color:#ead39b;
+}
+
+@media(max-width:1150px){
+  .management-view-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:700px){
+  .management-view-heading{display:block}
+  .management-view-reset{margin-top:12px}
+  .management-view-grid{grid-template-columns:1fr}
+}
+.sr-only{
+  position:absolute!important;
+  width:1px!important;
+  height:1px!important;
+  padding:0!important;
+  margin:-1px!important;
+  overflow:hidden!important;
+  clip:rect(0,0,0,0)!important;
+  white-space:nowrap!important;
+  border:0!important;
+}

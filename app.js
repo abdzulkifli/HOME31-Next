@@ -1,7 +1,7 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.8/+esm";
 
-const SUPABASE_URL = "https://ueuvavxdvclnfffujafz.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_AhkBD0Tcki8RECDar7_vkw_fsV_wxX0";
+const SUPABASE_URL = "https://YOUR-PROJECT.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = "YOUR-PUBLISHABLE-KEY";
 const AUTH_REDIRECT_URL = new URL(".", window.location.href).href;
 
 const configured =
@@ -390,7 +390,11 @@ function bindEvents() {
   $("#admin-overview-refresh").addEventListener("click", loadAdminData);
   $("#admin-portfolio-refresh").addEventListener("click", loadAdminData);
   $("#admin-export-portfolio").addEventListener("click", exportAdminPortfolioCsv);
+  $("#admin-download-template").addEventListener("click", downloadExcelImportTemplate);
   $("#admin-import-excel").addEventListener("click", openExcelImportModal);
+  $('[data-management-view]').forEach(button =>
+    button.addEventListener('click', () => applyManagementView(button.dataset.managementView))
+  );
   $("#admin-user-search").addEventListener("input", renderAdminUsers);
   $("#admin-user-role-filter").addEventListener("change", renderAdminUsers);
   $("#admin-user-password-filter").addEventListener("change", renderAdminUsers);
@@ -1068,6 +1072,16 @@ function matchesAdminQuickFilter(project) {
       return project.status !== 'Completed';
     case 'cost-benefit':
       return hasPortfolioCost(project) && numericValue(project.cba_ratio) !== null;
+    case 'finance-review':
+      return managementViewMatches(project, 'finance');
+    case 'ict-review':
+      return managementViewMatches(project, 'ict');
+    case 'watchlist':
+      return managementViewMatches(project, 'watchlist');
+    case 'missing-information':
+      return managementViewMatches(project, 'missing');
+    case 'department-readiness':
+      return managementViewMatches(project, 'readiness');
     default:
       return true;
   }
@@ -1082,11 +1096,85 @@ function adminQuickFilterLabel() {
     'approved-populated': 'Approved budget populated',
     'budget-gaps': 'Approved budget gaps',
     active: 'Active delivery',
-    'cost-benefit': 'Cost-benefit assessed'
+    'cost-benefit': 'Cost-benefit assessed',
+    'finance-review': 'Finance review',
+    'ict-review': 'ICT review',
+    watchlist: 'Watchlist',
+    'missing-information': 'Missing information',
+    'department-readiness': 'Department readiness'
   }[adminQuickFilter] || '';
 }
 
+function applyManagementView(view) {
+  if (currentProfile?.role !== 'super_admin') return;
+  const map = {
+    executive: '',
+    finance: 'finance-review',
+    ict: 'ict-review',
+    watchlist: 'watchlist',
+    missing: 'missing-information',
+    readiness: 'department-readiness'
+  };
+  adminQuickFilter = map[view] ?? '';
+  resetAdminFilterControls();
+  showModule('admin-portfolio');
+}
 
+function managementViewMatches(project, view) {
+  const readiness = Number(project.readiness_score || 0);
+  const systemDependent = Boolean(project.system_type && project.system_type !== 'Non System');
+  const ictPending = project.ict_classification === 'New - Pending ICT review' || (systemDependent && (!project.ict_classification || ['N/A', 'None'].includes(project.ict_classification)));
+  const financePending = !financialFieldConfirmed(project, 'approved_budget') || (financialFieldConfirmed(project, 'approved_budget') && !String(project.finance_remarks || '').trim());
+  const watch = ['Watchlist / Under Review', 'Not Assessed'].includes(project.priority_status) || project.status === 'At Risk' || ['High', 'Extreme'].includes(project.risk_level);
+  const missing = calculateProjectReadiness(project).score < 100 || !String(project.accountable_owner || '').trim() || !String(project.department || '').trim();
+  if (view === 'finance') return financePending;
+  if (view === 'ict') return ictPending;
+  if (view === 'watchlist') return watch;
+  if (view === 'missing') return missing;
+  if (view === 'readiness') return readiness < 70;
+  return true;
+}
+
+function renderManagementViews(records = projectsForYear()) {
+  const counts = {
+    executive: records.length,
+    finance: records.filter(project => managementViewMatches(project, 'finance')).length,
+    ict: records.filter(project => managementViewMatches(project, 'ict')).length,
+    watchlist: records.filter(project => managementViewMatches(project, 'watchlist')).length,
+    missing: records.filter(project => managementViewMatches(project, 'missing')).length,
+    readiness: records.filter(project => managementViewMatches(project, 'readiness')).length
+  };
+  Object.entries(counts).forEach(([key, value]) => {
+    const target = $(`#management-view-count-${key}`);
+    if (target) target.textContent = `${value} record${value === 1 ? '' : 's'}`;
+  });
+}
+
+function renderPortfolioActiveFilters() {
+  const container = $('#portfolio-active-filters');
+  if (!container) return;
+  const chips = [];
+  if (adminQuickFilter) chips.push({ key: 'quick', label: adminQuickFilterLabel() });
+  const query = $('#admin-search').value.trim();
+  if (query) chips.push({ key: 'search', label: `Search: ${query}` });
+  if ($('#admin-status-filter').value) chips.push({ key: 'status', label: `Status: ${$('#admin-status-filter').value}` });
+  if ($('#admin-pillar-filter').value) chips.push({ key: 'pillar', label: `Pillar: ${shortPillar($('#admin-pillar-filter').value)}` });
+  if ($('#admin-risk-filter').value) chips.push({ key: 'risk', label: `Risk: ${$('#admin-risk-filter').value}` });
+  if (!chips.length) {
+    container.innerHTML = '<span class="portfolio-filter-empty">No active filters. Showing the selected portfolio year.</span>';
+    return;
+  }
+  container.innerHTML = chips.map(chip => `<button class="portfolio-filter-chip" type="button" data-clear-portfolio-filter="${chip.key}"><span>${escapeHtml(chip.label)}</span><b aria-hidden="true">×</b><span class="sr-only">Remove filter</span></button>`).join('');
+  $('[data-clear-portfolio-filter]').forEach(button => button.addEventListener('click', () => {
+    const key = button.dataset.clearPortfolioFilter;
+    if (key === 'quick') adminQuickFilter = '';
+    if (key === 'search') $('#admin-search').value = '';
+    if (key === 'status') $('#admin-status-filter').value = '';
+    if (key === 'pillar') $('#admin-pillar-filter').value = '';
+    if (key === 'risk') $('#admin-risk-filter').value = '';
+    renderAdminPortfolio();
+  }));
+}
 
 
 function executiveChartOptions() {
@@ -2728,30 +2816,13 @@ async function importPreparedExcelRows() {
 }
 
 function downloadExcelImportTemplate() {
-  if (!window.XLSX) return showToast("Excel processing library is unavailable. Refresh the page and try again.", true);
-  const headers = [
-    "No.", "YEAR", "Departments", "Initiative", "Project Description", "Project Owner Name",
-    "Executive Sponsor", "Delivery Lead", "Action Plan Date", "Category", "System",
-    "Strategic Thrust", "Strategic Priority Area", "HOME31 Strategic Pillar", "Estimated Cost",
-    "CBA Ratio", "Remarks (Post Challenge Session)", "Estimated Cost (Post Challenge)",
-    "ICT Classification", "ICT Remarks", "Priority Status", "Proposed Budget (Post Retreat)",
-    "Approved Budget", "Remarks from Finance (Approved Budget 2027)", "Remarks", "Status",
-    "Risk Level", "Progress %", "Readiness %"
-  ];
-  const example = [
-    "AMP-001", 2027, "Corporate Planning", "Example HOME31 Initiative",
-    "Replace this example row with the initiative description.", "Project Owner Full Name",
-    "Executive Sponsor Full Name", "Delivery Lead Full Name", "2027-01-15 to 2027-12-15",
-    "New Initiative", "Non System", "Operational Excellence",
-    "Improving Productivity, Efficiency and Delivery of Service (PEDS)", pillars[0],
-    0, 1.5, "", 0, "N/A", "", "Not Assessed", "", "", "", "",
-    "Planning", "Medium", 0, 0
-  ];
-  const worksheet = window.XLSX.utils.aoa_to_sheet([headers, example]);
-  worksheet["!cols"] = headers.map((header, index) => ({ wch: Math.min(42, Math.max(14, header.length + (index < 5 ? 4 : 2))) }));
-  const workbook = window.XLSX.utils.book_new();
-  window.XLSX.utils.book_append_sheet(workbook, worksheet, "HOME31 Import");
-  window.XLSX.writeFile(workbook, "HOME31-Initiative-Import-Template.xlsx");
+  const link = document.createElement('a');
+  link.href = 'HOME31-Initiative-Import-Template.xlsx?v=7.9.0';
+  link.download = 'HOME31-Initiative-Import-Template.xlsx';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  showToast('Official HOME31 Excel template download started.');
 }
 
 function populatePillars() {
@@ -3027,6 +3098,7 @@ function renderAdminOverview() {
   $("#admin-assurance-evidence").textContent=`${metrics.evidenceAverage}%`;
   $("#admin-assurance-budget").textContent=`${metrics.approvedBudgetCoverage}%`;
   $("#admin-assurance-overdue").textContent=metrics.overdue;
+  renderManagementViews(metrics.records);
   renderExecutiveNarrative(metrics); renderExecutiveAttention(metrics); renderExecutiveBudget(metrics); renderExecutiveReadiness(metrics); renderExecutiveComparison(); renderExecutiveLists(metrics); renderAdminCharts(metrics); bindExecutiveRecordButtons();
 }
 function renderExecutiveNarrative(metrics) {
@@ -3333,7 +3405,8 @@ function renderAdminPortfolio() {
   $("#portfolio-selection-insight").textContent=filtered.length?`${selectedYearLabel()} selection contains ${filtered.length} initiatives with ${formatRinggit(cost)} under the ${costBasisLabel().toLowerCase()} rule. ${atRisk} require risk attention and ${ready} meet the delivery-ready rule.`:`No ${selectedYearLabel()} initiative matches the selected filters.`;
   $("#portfolio-selection-facts").innerHTML=`<article><strong>${escapeHtml(topD?.label||"No data")}</strong><span>Highest approved budget: ${topD?compactRinggit(topD.value):"RM0"}</span></article><article><strong>${escapeHtml(shortPillar(topP?.label||"No data"))}</strong><span>Largest concentration: ${topP?.value||0} records</span></article><article><strong>${evidence}% evidence maturity</strong><span>${hr} HR and ${ict} ICT follow-ups remain.</span></article>`;
   $("#admin-portfolio-table tbody").innerHTML=filtered.length?filtered.map(p=>`<tr><td><span class="portfolio-year-pill">AMP${projectImplementationYear(p)}</span></td><td><strong>${escapeHtml(p.initiative_name)}</strong></td><td>${escapeHtml(p.accountable_owner||"Not recorded")}</td><td>${escapeHtml(p.department)}</td><td>${escapeHtml(p.initiative_category||"Not recorded")}</td><td>${escapeHtml(p.system_type||"Not recorded")}</td><td>${escapeHtml(p.priority_status||"Not assessed")}</td><td>${escapeHtml(p.strategic_pillar)}</td><td><span class="status-pill">${escapeHtml(p.status)}</span></td><td><span class="risk-pill">${escapeHtml(p.risk_level)}</span></td><td>${financialFieldConfirmed(p,"approved_budget") ? formatRinggit(p.approved_budget) : "Not recorded"}</td><td>${Number(p.readiness_score||0)}%</td><td>${progressBar(p.progress)}</td><td><button class="text-button" data-admin-edit="${p.id}" type="button">Edit</button></td></tr>`).join(""):'<tr><td colspan="14">No records match the active year and filters.</td></tr>';
-  $$('[data-admin-edit]').forEach(b=>b.addEventListener('click',()=>openInitiativeModal(b.dataset.adminEdit)));
+  renderPortfolioActiveFilters();
+  $('[data-admin-edit]').forEach(b=>b.addEventListener('click',()=>openInitiativeModal(b.dataset.adminEdit)));
 }
 function safeCsvCell(value) {
   let text = String(value ?? "");

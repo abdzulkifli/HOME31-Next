@@ -55,9 +55,9 @@ const AMP2026_BASELINE = { ... };
 Replace it with formally reconciled baseline values when available.
 
 
-## V7.5 live year-aware comparison
+## V7.8.0 live year-aware comparison
 
-The Executive Overview no longer uses a fixed AMP2026 constant.
+The Executive Overview uses live Supabase records separated by `implementation_year`.
 
 ### Record separation
 
@@ -66,12 +66,15 @@ implementation_year = 2026 → AMP2026
 implementation_year = 2027 → AMP2027
 ```
 
-### Cost basis
+### Consistent portfolio cost basis
 
 ```text
 AMP2026 → Approved Budget
-AMP2027 → Estimated Cost Post Challenge
+AMP2027 → Approved Budget
+All Years → Approved Budget
 ```
+
+Original estimate, post-challenge cost and proposed budget remain visible as separate financial stages. They are not substituted for the portfolio cost basis.
 
 ### Automatic updates
 
@@ -79,7 +82,7 @@ Adding, editing or deleting year-specific records updates:
 
 - Headline portfolio figures
 - AMP2026 versus AMP2027 comparison
-- Department cost concentration
+- Department approved-budget concentration
 - Priority and watchlist counts
 - Department representation
 - Year-filtered risks and exceptions

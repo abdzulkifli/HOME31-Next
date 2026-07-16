@@ -4,9 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; form-action 'self'; script-src 'self' https://cdn.jsdelivr.net https://cdn.sheetjs.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' https://*.supabase.co; img-src 'self' data:; upgrade-insecure-requests">
-  <meta name="description" content="HOME31 Enterprise Management Platform V7.8.1 — senior-friendly accessible edition">
+  <meta name="description" content="HOME31 Enterprise Management Platform V7.9.0 — senior-friendly accessible edition">
   <meta name="theme-color" content="#061b2b">
-  <title>HOME31 Enterprise Management Platform V7.8.1</title>
+  <title>HOME31 Enterprise Management Platform V7.9.0</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
@@ -207,7 +207,7 @@
           <span class="sidebar-logout-icon" aria-hidden="true">↪</span>
           <span class="sidebar-logout-label">Sign out</span>
         </button>
-        <span class="sidebar-version">HOME31 Platform V7.8.1</span>
+        <span class="sidebar-version">HOME31 Platform V7.9.0</span>
       </div>
     </aside>
 
@@ -348,6 +348,55 @@
               <button class="executive-button gold" data-jump="admin-portfolio" type="button">Open Enterprise Portfolio</button>
             </div>
           </div>
+
+          <section class="management-view-panel" aria-labelledby="management-view-title">
+            <div class="management-view-heading">
+              <div>
+                <span class="executive-section-code">MANAGEMENT VIEWS</span>
+                <h3 id="management-view-title">Start with the question you need to answer</h3>
+                <p>Each view opens the Enterprise Portfolio with a clear, reusable management filter.</p>
+              </div>
+              <button class="management-view-reset" type="button" data-management-view="executive">Reset view</button>
+            </div>
+            <div class="management-view-grid">
+              <button class="management-view-card active" type="button" data-management-view="executive">
+                <span class="management-view-icon">▦</span>
+                <strong>Executive Overview</strong>
+                <small>All initiatives and headline portfolio position</small>
+                <em id="management-view-count-executive">0 records</em>
+              </button>
+              <button class="management-view-card" type="button" data-management-view="finance">
+                <span class="management-view-icon">RM</span>
+                <strong>Finance Review</strong>
+                <small>Approved-budget or finance-review gaps</small>
+                <em id="management-view-count-finance">0 records</em>
+              </button>
+              <button class="management-view-card" type="button" data-management-view="ict">
+                <span class="management-view-icon">ICT</span>
+                <strong>ICT Review</strong>
+                <small>System initiatives awaiting ICT classification</small>
+                <em id="management-view-count-ict">0 records</em>
+              </button>
+              <button class="management-view-card" type="button" data-management-view="watchlist">
+                <span class="management-view-icon">!</span>
+                <strong>Watchlist</strong>
+                <small>Under-review, at-risk, high or extreme exposure</small>
+                <em id="management-view-count-watchlist">0 records</em>
+              </button>
+              <button class="management-view-card" type="button" data-management-view="missing">
+                <span class="management-view-icon">?</span>
+                <strong>Missing Information</strong>
+                <small>Records with incomplete management information</small>
+                <em id="management-view-count-missing">0 records</em>
+              </button>
+              <button class="management-view-card" type="button" data-management-view="readiness">
+                <span class="management-view-icon">✓</span>
+                <strong>Department Readiness</strong>
+                <small>Initiatives below the 70% readiness threshold</small>
+                <em id="management-view-count-readiness">0 records</em>
+              </button>
+            </div>
+          </section>
 
           <div class="executive-kpi-grid">
             <article class="executive-kpi-card featured">
@@ -605,6 +654,7 @@
             <div class="admin-command-actions">
               <button id="admin-portfolio-refresh" class="admin-command-button ghost" type="button">↻ Refresh</button>
               <button id="admin-export-portfolio" class="admin-command-button ghost" type="button">⇩ Export CSV</button>
+              <button id="admin-download-template" class="admin-command-button ghost" type="button">⇩ Excel Template</button>
               <button id="admin-import-excel" class="admin-command-button ghost" type="button">⇧ Import Excel</button>
               <button class="admin-command-button gold" type="button" data-open-initiative>+ Key In Initiative</button>
             </div>
@@ -687,6 +737,9 @@
                     <option value="">All risk</option><option>Low</option><option>Medium</option><option>High</option><option>Extreme</option>
                   </select>
                 </label>
+              </div>
+              <div id="portfolio-active-filters" class="portfolio-active-filters" aria-live="polite">
+                <span class="portfolio-filter-empty">No active filters. Showing the selected portfolio year.</span>
               </div>
             </article>
           </div>
@@ -1005,7 +1058,7 @@
               <p>Translate the working prototype into a secure, integrated and governable enterprise platform roadmap.</p>
             </div>
             <div class="admin-command-actions">
-              <span class="admin-command-chip good">V7.8.1 foundation</span>
+              <span class="admin-command-chip good">V7.9.0 foundation</span>
             </div>
           </div>
 
@@ -1180,7 +1233,7 @@
           </article>
 
           <div class="admin-command-assurance-strip">
-            <article><strong>V7.8.1</strong><span>Protected form & Excel import</span></article>
+            <article><strong>V7.9.0</strong><span>Management clarity & Excel import</span></article>
             <article><strong>Modular</strong><span>Expandable architecture</span></article>
             <article><strong>RBAC</strong><span>Controlled role model</span></article>
             <article><strong>RLS</strong><span>Database security</span></article>
@@ -1873,13 +1926,13 @@
         <div>
           <span class="section-label">Admin bulk upload</span>
           <h2 id="excel-import-title">Import initiatives from Excel</h2>
-          <p id="excel-import-description" class="muted">Upload an AMP register workbook, review mapped rows and import only records that pass validation.</p>
+          <p id="excel-import-description" class="muted">Upload the official HOME31 workbook or an AMP register, review mapped rows and import only records that pass validation.</p>
         </div>
         <button id="close-excel-import" class="icon-button" type="button" aria-label="Close Excel import">×</button>
       </div>
 
       <div class="excel-import-guidance">
-        <div><strong>1. Download template</strong><span>Use the HOME31 column headings for the cleanest mapping.</span></div>
+        <div><strong>1. Download template</strong><span>Download the official workbook with instructions, dropdown lists and the exact HOME31 import headings.</span></div>
         <div><strong>2. Select workbook</strong><span>XLSX, XLS or CSV. The first worksheet will be read.</span></div>
         <div><strong>3. Review and import</strong><span>Invalid rows are never uploaded.</span></div>
       </div>
@@ -1919,7 +1972,7 @@
       </div>
 
       <div class="excel-import-toolbar">
-        <button id="excel-download-template" class="button light" type="button">Download Excel Template</button>
+        <button id="excel-download-template" class="button light" type="button">Download Official Template</button>
         <button id="excel-validate-file" class="button secondary" type="button">Review File</button>
         <span id="excel-import-file-name" class="muted">No file selected.</span>
       </div>
