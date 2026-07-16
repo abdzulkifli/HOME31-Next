@@ -1,7 +1,7 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.8/+esm";
 
-const SUPABASE_URL = "https://ueuvavxdvclnfffujafz.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_AhkBD0Tcki8RECDar7_vkw_fsV_wxX0";
+const SUPABASE_URL = "https://YOUR-PROJECT.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = "YOUR-PUBLISHABLE-KEY";
 const AUTH_REDIRECT_URL = new URL(".", window.location.href).href;
 
 const configured =
@@ -1134,6 +1134,9 @@ function openInitiativeModal(projectId = null) {
   $("#initiative-communication-plan-status").value = "Not started";
   $("#initiative-hr-review-status").value = "Not submitted";
   $("#initiative-created-by").value = currentUser.id;
+  if (!projectId && currentProfile?.role !== "super_admin") {
+    $("#initiative-owner").value = currentProfile?.full_name || currentUser?.email || "";
+  }
   $("#initiative-modal-title").textContent = projectId ? "Edit Initiative" : "Create Initiative";
 
   const source = currentProfile?.role === "super_admin" ? adminProjects : userProjects;
@@ -1444,7 +1447,7 @@ function renderInitiativeReviewSummary() {
       <strong>${escapeHtml($("#initiative-executive-sponsor").value || "Not completed")}</strong>
     </article>
     <article class="review-card">
-      <span>Accountable owner / Delivery lead</span>
+      <span>Project owner / Delivery lead</span>
       <strong>${escapeHtml($("#initiative-owner").value || "Not completed")} / ${escapeHtml($("#initiative-delivery-lead").value || "Not completed")}</strong>
     </article>
     <article class="review-card">
@@ -1654,7 +1657,7 @@ function initiativeCard(project) {
         <span class="status-pill">${escapeHtml(project.status)}</span>
       </div>
       <span>${escapeHtml(project.initiative_category || "Unclassified")} · ${escapeHtml(project.system_type || "System not recorded")} · ${escapeHtml(project.priority_status || "Not assessed")}</span>
-      <span>Sponsor: ${escapeHtml(project.executive_sponsor || "Not recorded")} · Delivery lead: ${escapeHtml(project.delivery_lead || "Not recorded")}</span>
+      <span>Project owner: ${escapeHtml(project.accountable_owner || "Not recorded")} · Sponsor: ${escapeHtml(project.executive_sponsor || "Not recorded")} · Delivery lead: ${escapeHtml(project.delivery_lead || "Not recorded")}</span>
       <span>Risk: ${escapeHtml(project.risk_level)} · Readiness: ${Number(project.readiness_score || 0)}% · HR: ${escapeHtml(project.hr_collaboration_status || "Not required")} · Evidence: ${Number(project.evidence_completeness || 0)}%</span>
       <div class="progress-track"><span style="width:${Number(project.progress || 0)}%"></span></div>
       <div class="initiative-actions">
@@ -1960,7 +1963,7 @@ function safeCsvCell(value) {
   if (/^[=+\-@]/.test(text)) text = `'${text}`;
   return `"${text.replaceAll('"', '""')}"`;
 }
-function exportAdminPortfolioCsv() {if(currentProfile?.role!=="super_admin")return;const records=getFilteredAdminPortfolioRecords(),headers=["Implementation Year","Initiative","Department","Executive Sponsor","Accountable Owner","Delivery Lead","Category","System Type","Priority Status","Strategic Pillar","Status","Risk","Year-Specific Portfolio Cost","Approved Budget","Readiness","Progress","Evidence Completeness"],rows=records.map(p=>[projectImplementationYear(p),p.initiative_name,p.department,p.executive_sponsor,p.accountable_owner,p.delivery_lead,p.initiative_category,p.system_type,p.priority_status,p.strategic_pillar,p.status,p.risk_level,projectPortfolioCost(p),financialFieldConfirmed(p,"approved_budget")?(p.approved_budget??0):"",p.readiness_score??0,p.progress??0,p.evidence_completeness??0]),csv="\uFEFF"+[headers,...rows].map(r=>r.map(safeCsvCell).join(',')).join('\n'),blob=new Blob([csv],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=`HOME31-${selectedYearLabel().replaceAll(' ','-')}-Portfolio-${new Date().toISOString().slice(0,10)}.csv`;link.click();URL.revokeObjectURL(url);}
+function exportAdminPortfolioCsv() {if(currentProfile?.role!=="super_admin")return;const records=getFilteredAdminPortfolioRecords(),headers=["Implementation Year","Initiative","Department","Executive Sponsor","Project Owner Name","Delivery Lead","Category","System Type","Priority Status","Strategic Pillar","Status","Risk","Year-Specific Portfolio Cost","Approved Budget","Readiness","Progress","Evidence Completeness"],rows=records.map(p=>[projectImplementationYear(p),p.initiative_name,p.department,p.executive_sponsor,p.accountable_owner,p.delivery_lead,p.initiative_category,p.system_type,p.priority_status,p.strategic_pillar,p.status,p.risk_level,projectPortfolioCost(p),financialFieldConfirmed(p,"approved_budget")?(p.approved_budget??0):"",p.readiness_score??0,p.progress??0,p.evidence_completeness??0]),csv="\uFEFF"+[headers,...rows].map(r=>r.map(safeCsvCell).join(',')).join('\n'),blob=new Blob([csv],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=`HOME31-${selectedYearLabel().replaceAll(' ','-')}-Portfolio-${new Date().toISOString().slice(0,10)}.csv`;link.click();URL.revokeObjectURL(url);}
 function renderAdminExceptions() {
   if(currentProfile?.role!=="super_admin")return;const records=projectsForYear(),today=new Date().toISOString().slice(0,10),risk=records.filter(p=>["High","Extreme"].includes(p.risk_level)),readiness=records.filter(p=>Number(p.readiness_score||0)<70),overdue=records.filter(p=>p.target_date&&p.target_date<today&&p.status!=="Completed"),hrPending=records.filter(p=>["Required","To be confirmed"].includes(p.hr_collaboration_status)&&!["Supported","Not required"].includes(p.hr_review_status)),ictPending=records.filter(p=>p.ict_classification==="New - Pending ICT review"||((p.system_type&&p.system_type!=="Non System")&&!p.ict_classification)),evidence=records.filter(p=>Number(p.evidence_completeness||0)<70);
   $("#admin-exception-risk-count").textContent=risk.length;$("#admin-exception-readiness-count").textContent=readiness.length;$("#admin-exception-overdue-count").textContent=overdue.length;$("#admin-exception-hr-count").textContent=hrPending.length;$("#admin-exception-ict-count").textContent=ictPending.length;$("#admin-exception-evidence-count").textContent=evidence.length;$("#admin-exception-risk-badge").textContent=risk.length;$("#admin-exception-readiness-badge").textContent=readiness.length;$("#admin-exception-overdue-badge").textContent=overdue.length;

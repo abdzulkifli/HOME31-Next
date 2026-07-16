@@ -4,13 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; form-action 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' https://*.supabase.co; img-src 'self' data:; upgrade-insecure-requests">
-  <meta name="description" content="HOME31 Enterprise Management Platform V7.7.3 — senior-friendly accessible edition">
+  <meta name="description" content="HOME31 Enterprise Management Platform V7.7.4 — senior-friendly accessible edition">
   <meta name="theme-color" content="#061b2b">
-  <title>HOME31 Enterprise Management Platform V7.7.3</title>
+  <title>HOME31 Enterprise Management Platform V7.7.4</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=7.7.3">
+  <link rel="stylesheet" href="styles.css?v=7.7.4">
 </head>
 <body>
 
@@ -193,7 +193,7 @@
 
       <div class="sidebar-footer">
         <button id="logout-button" class="sidebar-logout" type="button">Sign out</button>
-        <span>HOME31 Platform V7.7.3</span>
+        <span>HOME31 Platform V7.7.4</span>
       </div>
     </aside>
 
@@ -681,7 +681,7 @@
               <table id="admin-portfolio-table" class="admin-command-table">
                 <thead>
                   <tr>
-                    <th>Year</th><th>Initiative</th><th>Owner</th><th>Department</th><th>Category</th><th>System</th><th>Priority Status</th><th>Pillar</th><th>Status</th><th>Risk</th><th>Approved Budget</th><th>Readiness</th><th>Progress</th><th>Action</th>
+                    <th>Year</th><th>Initiative</th><th>Project Owner</th><th>Department</th><th>Category</th><th>System</th><th>Priority Status</th><th>Pillar</th><th>Status</th><th>Risk</th><th>Approved Budget</th><th>Readiness</th><th>Progress</th><th>Action</th>
                   </tr>
                 </thead>
                 <tbody></tbody>
@@ -981,7 +981,7 @@
               <p>Translate the working prototype into a secure, integrated and governable enterprise platform roadmap.</p>
             </div>
             <div class="admin-command-actions">
-              <span class="admin-command-chip good">V7.7.3 foundation</span>
+              <span class="admin-command-chip good">V7.7.4 foundation</span>
             </div>
           </div>
 
@@ -1156,7 +1156,7 @@
           </article>
 
           <div class="admin-command-assurance-strip">
-            <article><strong>V7.7.3</strong><span>Security & accessibility edition</span></article>
+            <article><strong>V7.7.4</strong><span>Security & accessibility edition</span></article>
             <article><strong>Modular</strong><span>Expandable architecture</span></article>
             <article><strong>RBAC</strong><span>Controlled role model</span></article>
             <article><strong>RLS</strong><span>Database security</span></article>
@@ -1274,9 +1274,9 @@
             </label>
 
             <label class="field">
-              <span>Accountable owner *</span>
-              <input id="initiative-owner" required>
-              <small>Single person accountable for the outcome and management reporting.</small>
+              <span>Project owner name *</span>
+              <input id="initiative-owner" autocomplete="name" placeholder="Enter the full name of the project owner" required>
+              <small>Named person accountable for the initiative outcome, decisions and management reporting.</small>
             </label>
 
             <label class="field">
@@ -1818,6 +1818,6 @@
   <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
-  <script type="module" src="app.js?v=7.7.3"></script>
+  <script type="module" src="app.js?v=7.7.4"></script>
 </body>
 </html>
