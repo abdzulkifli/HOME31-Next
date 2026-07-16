@@ -5,8 +5,8 @@ const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_AhkBD0Tcki8RECDar7_vkw_fsV_wxX0
 const AUTH_REDIRECT_URL = new URL(".", window.location.href).href;
 
 const configured =
-  !SUPABASE_URL.includes("https://ueuvavxdvclnfffujafz.supabase.co") &&
-  !SUPABASE_PUBLISHABLE_KEY.includes("sb_publishable_AhkBD0Tcki8RECDar7_vkw_fsV_wxX0");
+  !SUPABASE_URL.includes("YOUR-PROJECT") &&
+  !SUPABASE_PUBLISHABLE_KEY.includes("YOUR-PUBLISHABLE-KEY");
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 
