@@ -1,7 +1,7 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.8/+esm";
 
-const SUPABASE_URL = "https://ueuvavxdvclnfffujafz.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_AhkBD0Tcki8RECDar7_vkw_fsV_wxX0";
+const SUPABASE_URL = "https://YOUR-PROJECT.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = "YOUR-PUBLISHABLE-KEY";
 const AUTH_REDIRECT_URL = new URL(".", window.location.href).href;
 
 const configured =
@@ -41,6 +41,7 @@ const EXECUTIVE_COLORS = {
 
 let pillarMetric = "count";
 let selectedAdminYear = DEFAULT_ADMIN_YEAR;
+let executivePortfolioFocus = "";
 
 const DISPLAY_SETTINGS_KEY = "home31-display-settings-v2";
 const DISPLAY_MODES = ["standard", "comfortable", "large"];
@@ -985,6 +986,7 @@ function aggregateFiltered(records, labelFn, valueFn) {
 }
 
 function clearAdminFilters() {
+  executivePortfolioFocus = "";
   $("#admin-search").value = "";
   $("#admin-status-filter").value = "";
   $("#admin-pillar-filter").value = "";
@@ -2022,7 +2024,7 @@ function renderAdminOverview() {
   $("#admin-assurance-evidence").textContent=`${metrics.evidenceAverage}%`;
   $("#admin-assurance-budget").textContent=`${metrics.approvedBudgetCoverage}%`;
   $("#admin-assurance-overdue").textContent=metrics.overdue;
-  renderExecutiveNarrative(metrics); renderExecutiveAttention(metrics); renderExecutiveBudget(metrics); renderExecutiveReadiness(metrics); renderExecutiveComparison(); renderExecutiveLists(metrics); renderAdminCharts(metrics); bindExecutiveRecordButtons();
+  renderExecutiveNarrative(metrics); renderExecutiveAttention(metrics); renderExecutiveBudget(metrics); renderExecutiveReadiness(metrics); renderExecutiveComparison(); renderExecutiveLists(metrics); renderAdminCharts(metrics); bindExecutiveRecordButtons(); bindExecutiveKpiActions();
 }
 function renderExecutiveNarrative(metrics) {
   const topDepartment=departmentCostData(metrics.records)[0], topPillar=pillarData("count",metrics.records)[0];
@@ -2042,6 +2044,7 @@ function renderExecutiveBudget(metrics) {
 }
 function renderExecutiveReadiness(metrics) {
   $("#admin-readiness-gauge-value").textContent=`${metrics.strategicReadiness}%`;
+  $("#admin-readiness-score-bar").style.width=`${metrics.strategicReadiness}%`;
   const departments=departmentReadinessData(metrics.records).slice(0,10);
   $("#admin-department-readiness-bars").innerHTML=departments.length?departments.map(i=>`<div class="department-readiness-row"><span>${escapeHtml(i.label)}</span><div class="department-readiness-track"><i style="width:${i.value}%"></i></div><strong>${i.value}%</strong></div>`).join(""):'<div class="executive-empty">No departmental readiness data for this year.</div>';
   $("#admin-readiness-footnote").innerHTML=`<strong>${metrics.fullyReady}</strong> ${selectedYearLabel()} initiatives meet all seven checks; <strong>${metrics.followUp}</strong> have at least one follow-up.`;
@@ -2071,12 +2074,28 @@ function renderAdminCharts(metrics=calculateExecutiveMetrics()) {
   ["adminBudgetJourney","adminReadinessGauge","adminDeliveryLoad","adminCostBenefit","adminPillar","adminHome31Fit","adminDepartmentCost"].forEach(k=>charts[k]?.destroy());
   if(typeof Chart==="undefined") return;
   const records=metrics.records, common=executiveChartOptions();
-  charts.adminBudgetJourney=new Chart($("#admin-budget-journey-chart"),{type:"bar",data:{labels:["Original Estimate","Post-Challenge Cost","Proposed Budget","Approved Budget"],datasets:[{data:[metrics.originalCost,metrics.effectiveCost,metrics.proposedBudget,metrics.approvedBudget],backgroundColor:[EXECUTIVE_COLORS.blue,EXECUTIVE_COLORS.gold,EXECUTIVE_COLORS.teal,EXECUTIVE_COLORS.green],borderRadius:8,maxBarThickness:88}]},options:{...common,plugins:{...common.plugins,legend:{display:false},tooltip:{callbacks:{label:c=>formatRinggit(c.raw)}}},scales:executiveMoneyScales()}});
-  charts.adminReadinessGauge=new Chart($("#admin-readiness-gauge-chart"),{type:"doughnut",data:{datasets:[{data:[metrics.strategicReadiness,Math.max(0,100-metrics.strategicReadiness)],backgroundColor:[EXECUTIVE_COLORS.teal,"#294a62"],borderWidth:0,circumference:230,rotation:245,cutout:"78%"}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{enabled:false}}}});
+  const challengeStart=Math.min(metrics.originalCost,metrics.effectiveCost),challengeEnd=Math.max(metrics.originalCost,metrics.effectiveCost);
+  charts.adminBudgetJourney=new Chart($("#admin-budget-journey-chart"),{
+    type:"bar",
+    data:{
+      labels:["Original Estimate","Challenge Movement","Post-Challenge Cost","Proposed Budget","Approved Budget"],
+      datasets:[{
+        data:[[0,metrics.originalCost],[challengeStart,challengeEnd],[0,metrics.effectiveCost],[0,metrics.proposedBudget],[0,metrics.approvedBudget]],
+        backgroundColor:[EXECUTIVE_COLORS.blue,metrics.challengeReduction>=0?EXECUTIVE_COLORS.teal:EXECUTIVE_COLORS.red,EXECUTIVE_COLORS.gold,EXECUTIVE_COLORS.lightBlue,EXECUTIVE_COLORS.green],
+        borderRadius:7,
+        maxBarThickness:72
+      }]
+    },
+    options:{...common,plugins:{...common.plugins,legend:{display:false},tooltip:{callbacks:{label:c=>{const raw=c.raw;return Array.isArray(raw)?formatRinggit(Math.abs(raw[1]-raw[0])):formatRinggit(raw);}}}},scales:executiveMoneyScales()}
+  });
   const delivery=quarterlyDeliveryData(records);
   charts.adminDeliveryLoad=new Chart($("#admin-delivery-load-chart"),{data:{labels:delivery.labels,datasets:[{type:"bar",label:"All Active",data:delivery.active,backgroundColor:"rgba(87,153,155,.85)",borderRadius:5},{type:"line",label:"Strategic Priority",data:delivery.priority,borderColor:EXECUTIVE_COLORS.gold,backgroundColor:EXECUTIVE_COLORS.gold,pointRadius:4,borderWidth:2,tension:.25}]},options:{...common,scales:executiveCountScales()}});
-  const groups=["Strategic Priority","Watchlist / Under Review","Recommended","Not Classified"],colors={"Strategic Priority":"#5978c7","Watchlist / Under Review":"#7fae71",Recommended:EXECUTIVE_COLORS.gold,"Not Classified":EXECUTIVE_COLORS.red};
-  charts.adminCostBenefit=new Chart($("#admin-cost-benefit-chart"),{type:"bubble",data:{datasets:groups.map(g=>({label:g,data:records.filter(p=>normalizePriorityGroup(p)===g).map(p=>({x:projectPortfolioCost(p),y:Number(p.cba_ratio||0),r:p.ict_classification==="High"||p.people_impact_level==="Enterprise-wide"?22:p.ict_classification==="Medium"||p.people_impact_level==="High"?16:10,project:p})),backgroundColor:colors[g]+"cc",borderColor:colors[g],borderWidth:1}))},options:{...common,onClick:(_e,elements,chart)=>{if(elements.length){const point=chart.data.datasets[elements[0].datasetIndex].data[elements[0].index];if(point?.project?.id)openInitiativeModal(point.project.id);}},scales:{x:{beginAtZero:true,grid:{color:EXECUTIVE_COLORS.grid},ticks:{color:EXECUTIVE_COLORS.text,callback:v=>compactRinggit(v)},title:{display:true,text:`${selectedYearLabel()} portfolio cost basis`,color:EXECUTIVE_COLORS.text}},y:{beginAtZero:true,grid:{color:EXECUTIVE_COLORS.grid},ticks:{color:EXECUTIVE_COLORS.text},title:{display:true,text:"CBA ratio",color:EXECUTIVE_COLORS.text}}}}});
+  const groups=["Strategic Priority","Watchlist / Under Review","Recommended","Not Classified"],colors={"Strategic Priority":"#d1ad63","Watchlist / Under Review":"#7f99af",Recommended:EXECUTIVE_COLORS.teal,"Not Classified":EXECUTIVE_COLORS.red};
+  const matrixRecords=records.filter(p=>projectPortfolioCost(p)>0&&Number(p.cba_ratio||0)>0);
+  const sortedCosts=matrixRecords.map(projectPortfolioCost).sort((a,b)=>a-b),sortedBenefits=matrixRecords.map(p=>Number(p.cba_ratio||0)).sort((a,b)=>a-b);
+  const median=value=>value.length?value[Math.floor(value.length/2)]:0, costMid=median(sortedCosts), benefitMid=median(sortedBenefits);
+  const quadrantPlugin={id:"home31Quadrants",afterDraw(chart){const {ctx,chartArea:{left,right,top,bottom},scales:{x,y}}=chart;if(!costMid||!benefitMid)return;ctx.save();ctx.setLineDash([5,5]);ctx.strokeStyle="rgba(180,198,210,.5)";ctx.lineWidth=1;const xp=x.getPixelForValue(costMid),yp=y.getPixelForValue(benefitMid);ctx.beginPath();ctx.moveTo(xp,top);ctx.lineTo(xp,bottom);ctx.moveTo(left,yp);ctx.lineTo(right,yp);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle="rgba(205,220,230,.72)";ctx.font="600 11px IBM Plex Sans";ctx.fillText("High benefit / lower cost",left+10,top+18);ctx.fillText("High benefit / higher cost",Math.max(left+10,xp+10),top+18);ctx.fillText("Lower benefit / lower cost",left+10,bottom-10);ctx.fillText("Lower benefit / higher cost",Math.max(left+10,xp+10),bottom-10);ctx.restore();}};
+  charts.adminCostBenefit=new Chart($("#admin-cost-benefit-chart"),{type:"bubble",plugins:[quadrantPlugin],data:{datasets:groups.map(g=>({label:g,data:matrixRecords.filter(p=>normalizePriorityGroup(p)===g).map(p=>({x:projectPortfolioCost(p),y:Number(p.cba_ratio||0),r:10,project:p})),backgroundColor:colors[g]+"cc",borderColor:colors[g],borderWidth:2}))},options:{...common,onClick:(_e,elements,chart)=>{if(elements.length){const point=chart.data.datasets[elements[0].datasetIndex].data[elements[0].index];if(point?.project?.id)openInitiativeModal(point.project.id);}},scales:{x:{beginAtZero:true,grid:{color:EXECUTIVE_COLORS.grid},ticks:{color:EXECUTIVE_COLORS.text,callback:v=>compactRinggit(v)},title:{display:true,text:`${selectedYearLabel()} portfolio cost basis`,color:EXECUTIVE_COLORS.text}},y:{beginAtZero:true,grid:{color:EXECUTIVE_COLORS.grid},ticks:{color:EXECUTIVE_COLORS.text},title:{display:true,text:"CBA ratio",color:EXECUTIVE_COLORS.text}}}}});
   renderExecutivePillarChart(records);
   const fits=["Enabler","Supporting Activity","Core Initiative","Duplicate / Consolidate","Needs Validation","BAU · Supporting Enhancement","Policy Review"];
   charts.adminHome31Fit=new Chart($("#admin-home31-fit-chart"),{type:"doughnut",data:{labels:fits,datasets:[{data:fits.map(f=>records.filter(p=>deriveHome31Fit(p)===f).length),backgroundColor:["#d1ad63","#7f99af","#57999b","#6f86a0","#d9b769","#a76a6f","#8aa1b1"],borderColor:"#102f49",borderWidth:4,cutout:"62%"}]},options:common});
@@ -2101,7 +2120,21 @@ function pillarData(metric="count",records=projectsForYear()) {return pillars.ma
 function departmentCostData(records=projectsForYear()) {const map=new Map();records.forEach(p=>{const d=p.department||"Not recorded";map.set(d,(map.get(d)||0)+projectPortfolioCost(p));});return[...map.entries()].map(([label,value])=>({label,value})).sort((a,b)=>b.value-a.value);}
 function departmentReadinessData(records=projectsForYear()) {const map=new Map();records.forEach(p=>{const d=p.department||"Not recorded",c=map.get(d)||{total:0,count:0};c.total+=calculateProjectReadiness(p).score;c.count++;map.set(d,c);});return[...map.entries()].map(([label,d])=>({label,value:Math.round(d.total/d.count)})).sort((a,b)=>a.value-b.value);}
 function quarterlyDeliveryData(records=projectsForYear()) {const ranges=records.map(project=>({project,range:extractProjectDateRange(project)})).filter(i=>i.range);const fallback=selectedAdminYear==="all"?new Date().getFullYear():Number(selectedAdminYear);const min=ranges.length?Math.min(...ranges.map(i=>i.range.start.getFullYear())):fallback,max=ranges.length?Math.max(...ranges.map(i=>i.range.end.getFullYear())):fallback,quarters=[];for(let year=min;year<=Math.min(min+4,Math.max(min,max));year++)for(let q=1;q<=4;q++){const sm=(q-1)*3;quarters.push({label:`${year} Q${q}`,start:new Date(year,sm,1),end:new Date(year,sm+3,0,23,59,59)});}return{labels:quarters.map(q=>q.label),active:quarters.map(q=>ranges.filter(i=>i.range.start<=q.end&&i.range.end>=q.start).length),priority:quarters.map(q=>ranges.filter(i=>i.range.start<=q.end&&i.range.end>=q.start&&normalizePriorityGroup(i.project)==="Strategic Priority").length)};}
-function getFilteredAdminPortfolioRecords() {const query=($("#admin-search").value||"").toLowerCase(),status=$("#admin-status-filter").value||"",pillar=$("#admin-pillar-filter").value||"",risk=$("#admin-risk-filter").value||"";return projectsForYear().filter(p=>{const profile=profileFor(p.created_by),hay=[projectImplementationYear(p),p.initiative_name,p.accountable_owner,p.executive_sponsor,p.delivery_lead,p.department,p.initiative_category,p.system_type,p.priority_status,profile?.full_name,profile?.email].join(" ").toLowerCase();return(!query||hay.includes(query))&&(!status||p.status===status)&&(!pillar||p.strategic_pillar===pillar)&&(!risk||p.risk_level===risk);});}
+function bindExecutiveKpiActions() {
+  $$('[data-executive-action]').forEach(card=>{
+    if(card.dataset.actionBound==="true") return;
+    card.dataset.actionBound="true";
+    const activate=()=>{
+      const action=card.dataset.executiveAction;
+      executivePortfolioFocus=["risk","priority","approved","budget-gap","readiness"].includes(action)?action:"";
+      $("#admin-search").value="";$("#admin-status-filter").value="";$("#admin-pillar-filter").value="";$("#admin-risk-filter").value="";
+      showModule("admin-portfolio");renderAdminPortfolio();
+    };
+    card.addEventListener("click",activate);
+    card.addEventListener("keydown",event=>{if(event.key==="Enter"||event.key===" "){event.preventDefault();activate();}});
+  });
+}
+function getFilteredAdminPortfolioRecords() {const query=($("#admin-search").value||"").toLowerCase(),status=$("#admin-status-filter").value||"",pillar=$("#admin-pillar-filter").value||"",risk=$("#admin-risk-filter").value||"";return projectsForYear().filter(p=>{const profile=profileFor(p.created_by),hay=[projectImplementationYear(p),p.initiative_name,p.accountable_owner,p.executive_sponsor,p.delivery_lead,p.department,p.initiative_category,p.system_type,p.priority_status,profile?.full_name,profile?.email].join(" ").toLowerCase(),focusMatch=!executivePortfolioFocus||(executivePortfolioFocus==="risk"&&(p.status==="At Risk"||["High","Extreme"].includes(p.risk_level)))||(executivePortfolioFocus==="priority"&&(["Strategic Priority","Corporate Priority"].includes(p.priority_status)||p.priority==="Strategic"))||(executivePortfolioFocus==="approved"&&financialFieldConfirmed(p,"approved_budget"))||(executivePortfolioFocus==="budget-gap"&&!financialFieldConfirmed(p,"approved_budget"))||(executivePortfolioFocus==="readiness"&&calculateProjectReadiness(p).score<100);return focusMatch&&(!query||hay.includes(query))&&(!status||p.status===status)&&(!pillar||p.strategic_pillar===pillar)&&(!risk||p.risk_level===risk);});}
 function renderAdminPortfolio() {
   if(currentProfile?.role!=="super_admin")return;const yearRecords=projectsForYear(),filtered=getFilteredAdminPortfolioRecords(),cost=filtered.reduce((s,p)=>s+projectPortfolioCost(p),0),approved=filtered.filter(p=>financialFieldConfirmed(p,"approved_budget")).length,atRisk=filtered.filter(p=>p.status==="At Risk"||["High","Extreme"].includes(p.risk_level)).length,ready=filtered.filter(p=>Number(p.readiness_score||0)>=80&&!["High","Extreme"].includes(p.risk_level)&&p.status!=="At Risk").length,today=new Date().toISOString().slice(0,10),ownership=filtered.filter(p=>p.executive_sponsor&&p.accountable_owner&&p.delivery_lead).length,evidence=filtered.length?Math.round(filtered.reduce((s,p)=>s+Number(p.evidence_completeness||0),0)/filtered.length):0,ict=filtered.filter(p=>p.ict_classification==="New - Pending ICT review"||((p.system_type&&p.system_type!=="Non System")&&!p.ict_classification)).length,hr=filtered.filter(p=>["Required","To be confirmed"].includes(p.hr_collaboration_status)&&!["Supported","Not required"].includes(p.hr_review_status)).length,overdue=filtered.filter(p=>p.target_date&&p.target_date<today&&p.status!=="Completed").length;
   $("#portfolio-kpi-total").textContent=yearRecords.length;$("#portfolio-kpi-filtered").textContent=filtered.length;$("#portfolio-kpi-cost").textContent=compactRinggit(cost);$("#portfolio-kpi-budget").textContent=`${filtered.length?Math.round(approved/filtered.length*100):0}%`;$("#portfolio-kpi-risk").textContent=atRisk;$("#portfolio-kpi-ready").textContent=ready;$("#portfolio-table-count").textContent=`${selectedYearLabel()} · ${filtered.length} record${filtered.length===1?"":"s"}`;$("#portfolio-assurance-ownership").textContent=`${filtered.length?Math.round(ownership/filtered.length*100):0}%`;$("#portfolio-assurance-evidence").textContent=`${evidence}%`;$("#portfolio-assurance-ict").textContent=ict;$("#portfolio-assurance-hr").textContent=hr;$("#portfolio-assurance-overdue").textContent=overdue;

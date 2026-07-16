@@ -2130,7 +2130,7 @@ body.super-admin-shell .admin-command-module {
 }
 
 /* ================================================================
-   V7.7.8 RESPONSIVE & COLLAPSIBLE NAVIGATION
+   V7.7.9 RESPONSIVE & COLLAPSIBLE NAVIGATION
    Desktop: 280px expanded / 78px collapsed.
    Mobile: accessible slide-in drawer with overlay and focus management.
    ================================================================ */
@@ -2505,4 +2505,237 @@ body.navigation-scroll-locked {
     display: inline-grid;
     place-items: center;
   }
+}
+
+/* ================================================================
+   V7.7.9 EXECUTIVE VISUAL POLISH
+   Calm management presentation with consistent cards and charts.
+   ================================================================ */
+.executive-command-centre,
+.admin-command-module{
+  background-color:#071d2d;
+  background-image:
+    linear-gradient(rgba(110,150,175,.022) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(110,150,175,.022) 1px,transparent 1px);
+  background-size:48px 48px;
+}
+
+.executive-hero,
+.admin-command-hero{
+  border-radius:18px;
+  background:
+    radial-gradient(circle at 88% 12%,rgba(87,153,155,.11),transparent 30%),
+    linear-gradient(135deg,#123750,#0c2a40 68%,#102f47);
+  box-shadow:0 14px 34px rgba(0,0,0,.18);
+}
+
+.executive-panel,
+.admin-command-panel{
+  border-radius:16px;
+  border-color:#35556d;
+  background:linear-gradient(145deg,#102f49,#0d2940);
+  box-shadow:0 10px 26px rgba(0,0,0,.13);
+}
+
+.executive-panel-heading,
+.admin-command-panel-heading{
+  margin-bottom:18px;
+}
+
+.executive-panel-heading h3,
+.admin-command-panel-heading h3{
+  font-size:18px;
+  letter-spacing:-.015em;
+}
+
+.executive-panel-heading p,
+.admin-command-panel-heading p{
+  max-width:720px;
+  font-size:12px;
+  line-height:1.55;
+}
+
+.executive-kpi-grid{
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:14px;
+}
+
+.executive-kpi-card{
+  min-height:148px;
+  padding:18px;
+  border-radius:16px;
+  border-color:#36566d;
+  background:#102f49;
+  box-shadow:0 8px 20px rgba(0,0,0,.12);
+  transition:transform .16s ease,border-color .16s ease,background .16s ease,box-shadow .16s ease;
+}
+
+.executive-kpi-card::after{
+  display:none;
+}
+
+.executive-kpi-card[role="button"]{
+  cursor:pointer;
+}
+
+.executive-kpi-card[role="button"]:hover,
+.executive-kpi-card[role="button"]:focus-visible{
+  transform:translateY(-2px);
+  border-color:#7ba7c0;
+  background:#123651;
+  box-shadow:0 12px 28px rgba(0,0,0,.2);
+  outline:none;
+}
+
+.executive-kpi-card.kpi-budget{border-top:3px solid #d1ad63}
+.executive-kpi-card.kpi-ready,
+.executive-kpi-card.kpi-positive{border-top:3px solid #57999b}
+.executive-kpi-card.kpi-danger{border-top:3px solid #d26066}
+.executive-kpi-card.kpi-priority{border-top:3px solid #d1ad63}
+.executive-kpi-card.kpi-coverage,
+.executive-kpi-card.kpi-neutral{border-top:3px solid #7f99af}
+
+.executive-kpi-card .kpi-icon{
+  width:36px;
+  height:36px;
+  border-radius:10px;
+  font-size:11px;
+}
+
+.executive-kpi-card>span{
+  margin-top:14px;
+  font-size:10px;
+  letter-spacing:.07em;
+}
+
+.executive-kpi-card>strong{
+  margin-top:6px;
+  font-size:28px;
+  font-variant-numeric:tabular-nums;
+}
+
+.executive-kpi-card>small{
+  margin-top:7px;
+  font-size:10px;
+  line-height:1.4;
+}
+
+.executive-story-grid,
+.executive-dashboard-grid,
+.executive-decision-grid{
+  gap:16px;
+  margin-top:16px;
+}
+
+.executive-chart-shell{
+  height:320px;
+}
+
+.executive-chart-shell.large{
+  height:340px;
+}
+
+.executive-chart-shell.wide{
+  height:410px;
+}
+
+.readiness-composite{
+  grid-template-columns:minmax(210px,.7fr) minmax(320px,1.3fr);
+  gap:26px;
+}
+
+.readiness-summary-wrap{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  min-height:250px;
+}
+
+.readiness-score-card{
+  width:min(280px,100%);
+  padding:26px;
+  border:1px solid #3d6178;
+  border-radius:16px;
+  background:#0b283e;
+  text-align:center;
+}
+
+.readiness-gauge-label{
+  position:static;
+  display:block;
+}
+
+.readiness-gauge-label strong{
+  display:block;
+  font-size:42px;
+  line-height:1;
+  font-variant-numeric:tabular-nums;
+}
+
+.readiness-gauge-label span{
+  display:block;
+  margin-top:8px;
+  color:#a9bdcc;
+  font-size:11px;
+  text-transform:uppercase;
+  letter-spacing:.08em;
+}
+
+.readiness-score-track{
+  height:12px;
+  margin-top:22px;
+  overflow:hidden;
+  border-radius:999px;
+  background:#294a62;
+}
+
+.readiness-score-track i{
+  display:block;
+  width:0;
+  height:100%;
+  border-radius:999px;
+  background:linear-gradient(90deg,#57999b,#7fb6b4);
+  transition:width .35s ease;
+}
+
+.department-readiness-row{
+  grid-template-columns:minmax(145px,1fr) minmax(130px,1.25fr) 44px;
+  gap:10px;
+}
+
+.department-readiness-track{
+  height:12px;
+  border-radius:999px;
+}
+
+.department-readiness-track i{
+  border-radius:999px;
+}
+
+.executive-metric-row article,
+.comparison-card,
+.traffic-card,
+.executive-list-item{
+  border-radius:13px;
+  box-shadow:none;
+}
+
+.executive-chart-note{
+  font-size:10.5px;
+}
+
+@media(max-width:1250px){
+  .executive-kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+
+@media(max-width:850px){
+  .readiness-composite{grid-template-columns:1fr}
+  .readiness-summary-wrap{min-height:auto}
+}
+
+@media(max-width:560px){
+  .executive-kpi-grid{grid-template-columns:1fr}
+  .executive-kpi-card{min-height:132px}
+  .executive-chart-shell,
+  .executive-chart-shell.large{height:290px}
 }

@@ -4,13 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; form-action 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' https://*.supabase.co; img-src 'self' data:; upgrade-insecure-requests">
-  <meta name="description" content="HOME31 Enterprise Management Platform V7.7.8 — senior-friendly accessible edition">
+  <meta name="description" content="HOME31 Enterprise Management Platform V7.7.9 — senior-friendly accessible edition">
   <meta name="theme-color" content="#061b2b">
-  <title>HOME31 Enterprise Management Platform V7.7.8</title>
+  <title>HOME31 Enterprise Management Platform V7.7.9</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=7.7.8">
+  <link rel="stylesheet" href="styles.css?v=7.7.9">
 </head>
 <body>
 
@@ -207,7 +207,7 @@
           <span class="sidebar-logout-icon" aria-hidden="true">↪</span>
           <span class="sidebar-logout-label">Sign out</span>
         </button>
-        <span class="sidebar-version">HOME31 Platform V7.7.8</span>
+        <span class="sidebar-version">HOME31 Platform V7.7.9</span>
       </div>
     </aside>
 
@@ -341,7 +341,7 @@
             <div>
               <span class="executive-kicker">HOME31 • ENTERPRISE COMMAND CENTRE</span>
               <h2>Executive Portfolio Overview</h2>
-              <p>One management view of strategic readiness, delivery load, cost challenge, priority, risk, HR impact, ICT dependency and evidence certainty.</p>
+              <p>A calm management view of portfolio scale, approved budget, delivery readiness, risk and decisions requiring attention.</p>
             </div>
             <div class="executive-hero-actions">
               <button id="admin-overview-refresh" class="executive-button ghost" type="button">↻ Refresh</button>
@@ -350,49 +350,49 @@
           </div>
 
           <div class="executive-kpi-grid">
-            <article class="executive-kpi-card featured">
+            <article class="executive-kpi-card featured kpi-neutral" tabindex="0" role="button" data-executive-action="portfolio" aria-label="Open all portfolio items">
               <div class="kpi-icon">▦</div>
               <span>Portfolio items</span>
               <strong id="admin-kpi-total">0</strong>
               <small id="admin-kpi-total-note">Enterprise initiatives</small>
             </article>
-            <article class="executive-kpi-card">
+            <article class="executive-kpi-card kpi-ready" tabindex="0" role="button" data-executive-action="readiness" aria-label="Open initiatives requiring readiness follow-up">
               <div class="kpi-icon">✓</div>
               <span>Strategic readiness</span>
               <strong id="admin-kpi-health">0%</strong>
               <small id="admin-kpi-health-note">Completeness across seven checks</small>
             </article>
-            <article class="executive-kpi-card">
+            <article class="executive-kpi-card kpi-budget" tabindex="0" role="button" data-executive-action="portfolio" aria-label="Open portfolio cost records">
               <div class="kpi-icon">RM</div>
               <span id="admin-kpi-cost-label">Selected portfolio cost</span>
               <strong id="admin-kpi-effective-cost">RM0</strong>
               <small id="admin-kpi-effective-note">Year-specific cost basis</small>
             </article>
-            <article class="executive-kpi-card positive">
+            <article class="executive-kpi-card positive kpi-positive" tabindex="0" role="button" data-executive-action="portfolio" aria-label="Open portfolio challenge records">
               <div class="kpi-icon">↓</div>
               <span>Challenge reduction</span>
               <strong id="admin-kpi-reduction">RM0</strong>
               <small id="admin-kpi-reduction-note">Versus original estimate</small>
             </article>
-            <article class="executive-kpi-card priority">
+            <article class="executive-kpi-card priority kpi-priority" tabindex="0" role="button" data-executive-action="priority" aria-label="Open strategic priority initiatives">
               <div class="kpi-icon">★</div>
               <span>Strategic priority</span>
               <strong id="admin-kpi-priority">0</strong>
               <small>Corporate / strategic priority records</small>
             </article>
-            <article class="executive-kpi-card danger">
+            <article class="executive-kpi-card danger kpi-danger" tabindex="0" role="button" data-executive-action="risk" aria-label="Open initiatives at risk">
               <div class="kpi-icon">!</div>
               <span>At risk</span>
               <strong id="admin-kpi-risk">0</strong>
               <small>High, extreme or at-risk status</small>
             </article>
-            <article class="executive-kpi-card positive">
+            <article class="executive-kpi-card positive kpi-budget" tabindex="0" role="button" data-executive-action="approved" aria-label="Open approved budget records">
               <div class="kpi-icon">RM</div>
               <span>Approved budget</span>
               <strong id="admin-kpi-approved-budget">RM0</strong>
               <small id="admin-kpi-approved-budget-note">Confirmed management allocation</small>
             </article>
-            <article class="executive-kpi-card">
+            <article class="executive-kpi-card kpi-coverage" tabindex="0" role="button" data-executive-action="budget-gap" aria-label="Open records missing approved budget">
               <div class="kpi-icon">%</div>
               <span>Budget coverage</span>
               <strong id="admin-kpi-approved-coverage">0%</strong>
@@ -447,8 +447,8 @@
               <div class="executive-panel-heading">
                 <div>
                   <span class="executive-section-code">BUDGET 01</span>
-                  <h3>Budget Journey & Challenge Impact</h3>
-                  <p>Original estimate, confirmed post-challenge position and downstream budget fields.</p>
+                  <h3>Budget Journey</h3>
+                  <p>Movement from original estimate through challenge, proposal and approved allocation.</p>
                 </div>
               </div>
               <div class="executive-chart-shell large"><canvas id="admin-budget-journey-chart" role="img" tabindex="0" aria-label="Budget journey and challenge impact chart"></canvas></div>
@@ -465,11 +465,13 @@
                 </div>
               </div>
               <div class="readiness-composite">
-                <div class="readiness-gauge-wrap">
-                  <canvas id="admin-readiness-gauge-chart" role="img" tabindex="0" aria-label="Strategic register readiness gauge"></canvas>
+                <div class="readiness-summary-wrap">
+                  <div class="readiness-score-card" aria-label="Strategic register readiness percentage">
                   <div class="readiness-gauge-label">
                     <strong id="admin-readiness-gauge-value">0%</strong>
                     <span>Strategic readiness</span>
+                  </div>
+                  <div class="readiness-score-track" aria-hidden="true"><i id="admin-readiness-score-bar"></i></div>
                   </div>
                 </div>
                 <div id="admin-department-readiness-bars" class="department-readiness-bars"></div>
@@ -495,8 +497,8 @@
               <div class="executive-panel-heading">
                 <div>
                   <span class="executive-section-code">DECISION 04</span>
-                  <h3>Cost–Benefit–Complexity Matrix</h3>
-                  <p>Effective cost versus CBA ratio. Bubble size reflects delivery complexity; colour represents priority status.</p>
+                  <h3>Cost–Benefit Decision Matrix</h3>
+                  <p>Cost versus benefit, divided into clear decision quadrants. Select a point to open its initiative.</p>
                 </div>
               </div>
               <div class="executive-chart-shell"><canvas id="admin-cost-benefit-chart" role="img" tabindex="0" aria-label="Cost benefit and complexity matrix"></canvas></div>
@@ -997,7 +999,7 @@
               <p>Translate the working prototype into a secure, integrated and governable enterprise platform roadmap.</p>
             </div>
             <div class="admin-command-actions">
-              <span class="admin-command-chip good">V7.7.8 foundation</span>
+              <span class="admin-command-chip good">V7.7.9 foundation</span>
             </div>
           </div>
 
@@ -1172,7 +1174,7 @@
           </article>
 
           <div class="admin-command-assurance-strip">
-            <article><strong>V7.7.8</strong><span>Security & accessibility edition</span></article>
+            <article><strong>V7.7.9</strong><span>Security & accessibility edition</span></article>
             <article><strong>Modular</strong><span>Expandable architecture</span></article>
             <article><strong>RBAC</strong><span>Controlled role model</span></article>
             <article><strong>RLS</strong><span>Database security</span></article>
@@ -1834,6 +1836,6 @@
   <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
-  <script type="module" src="app.js?v=7.7.8"></script>
+  <script type="module" src="app.js?v=7.7.9"></script>
 </body>
 </html>
