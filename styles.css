@@ -3746,3 +3746,59 @@ body.modal-open .display-settings{
   .continuity-footer{display:block}
   .continuity-footer span{display:block;margin-top:5px}
 }
+
+
+/* ================================================================
+   V7.9.4 EXECUTIVE WORKSPACE TABS & POSITION STABILITY
+   ================================================================ */
+.executive-workspace-tabs{
+  position:sticky;
+  top:78px;
+  z-index:24;
+  display:flex;
+  justify-content:flex-end;
+  gap:7px;
+  margin:14px 0;
+  padding:7px;
+  border:1px solid rgba(75,112,137,.72);
+  border-radius:15px;
+  background:rgba(6,27,43,.9);
+  box-shadow:0 12px 28px rgba(0,0,0,.18);
+  backdrop-filter:blur(13px);
+}
+.executive-workspace-tab{
+  min-height:42px;
+  padding:10px 16px;
+  border:1px solid transparent;
+  border-radius:11px;
+  color:#a9bdcc;
+  background:transparent;
+  font-weight:800;
+  letter-spacing:.01em;
+}
+.executive-workspace-tab:hover{color:#f2f7fa;background:#123651}
+.executive-workspace-tab[aria-selected="true"]{
+  border-color:#d1ad63;
+  color:#102638;
+  background:#d1ad63;
+  box-shadow:0 8px 20px rgba(209,173,99,.2);
+}
+.executive-workspace-tab:focus-visible{outline:3px solid rgba(120,170,199,.5);outline-offset:2px}
+.executive-tab-hidden{display:none!important}
+.executive-tab-summary-note{
+  margin-right:auto;
+  align-self:center;
+  padding-left:8px;
+  color:#8fa8b8;
+  font-size:12px;
+}
+@media(max-width:850px){
+  .executive-workspace-tabs{top:67px;overflow-x:auto;justify-content:flex-start}
+  .executive-tab-summary-note{display:none}
+  .executive-workspace-tab{flex:1 0 auto}
+}
+@media(max-width:520px){
+  .executive-workspace-tabs{top:62px;margin-inline:-2px;padding:6px}
+  .executive-workspace-tab{min-height:40px;padding:9px 12px;font-size:13px}
+}
+@media(prefers-reduced-motion:reduce){.executive-workspace-tabs{scroll-behavior:auto}}

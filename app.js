@@ -107,6 +107,8 @@ const DISPLAY_SETTINGS_KEY = "home31-display-settings-v2";
 const DISPLAY_MODES = ["standard", "comfortable", "large"];
 const SIDEBAR_STATE_KEY = "home31-sidebar-collapsed-v1";
 const MOBILE_NAVIGATION_QUERY = "(max-width: 850px)";
+const WORKSPACE_STATE_KEY = "home31-workspace-state-v1";
+const EXECUTIVE_TAB_STATE_KEY = "home31-executive-tab-v1";
 let currentDisplaySize = "standard";
 let highContrastEnabled = false;
 let tableEnhancementScheduled = false;
@@ -114,6 +116,8 @@ let responsiveTableObserver = null;
 let sidebarMediaQuery = null;
 let sidebarCollapsed = false;
 let adminQuickFilter = "";
+let activeExecutiveTab = "summary";
+let workspaceScrollTimer = null;
 
 const CONTINUITY_STOP_WORDS = new Set([
   "a","an","and","annual","amp","for","from","in","of","on","project","programme",
@@ -149,6 +153,8 @@ async function initialise() {
   initialiseDisplaySettings();
   initialiseNavigation();
   initialiseExecutiveInteractions();
+  initialiseExecutiveWorkspaceTabs();
+  initialiseWorkspacePersistence();
   bindEvents();
   populatePillars();
   handleResetLink();
@@ -161,8 +167,12 @@ async function initialise() {
 
   // Keep the auth callback synchronous. Supabase can deadlock when another
   // Supabase API call is awaited directly inside onAuthStateChange.
-  supabase.auth.onAuthStateChange((_event, session) => {
-    scheduleAuthRoute(session);
+  supabase.auth.onAuthStateChange((event, session) => {
+    if (shouldRouteAuthEvent(event, session)) {
+      scheduleAuthRoute(session);
+    } else if (session?.user) {
+      currentUser = session.user;
+    }
   });
 
   const { data, error } = await supabase.auth.getSession();
@@ -597,7 +607,10 @@ async function openPlatform(revision = authRouteRevision, userId = currentUser?.
   $("#auth-screen").classList.add("hidden");
   $("#force-password-screen").classList.add("hidden");
   $("#platform").classList.remove("hidden");
-  showModule(isSuperAdmin ? "admin-overview" : "user-home");
+  const defaultModule = isSuperAdmin ? "admin-overview" : "user-home";
+  const targetModule = resolveRestoredModule(defaultModule, isSuperAdmin);
+  showModule(targetModule, { preserveScroll: true, restore: true });
+  restoreWorkspaceScroll(targetModule);
 }
 
 function renderIdentity() {
@@ -643,6 +656,7 @@ async function logout() {
     authRouteTimer = null;
   }
 
+  clearWorkspaceState();
   resetSessionState();
   showAuth();
 }
@@ -774,7 +788,8 @@ async function changeOwnPassword(password) {
   }
 }
 
-function showModule(name) {
+function showModule(name, options = {}) {
+  rememberCurrentModuleScroll();
   $$(".module").forEach(module => module.classList.remove("active"));
   $$(".nav-item").forEach(button => button.classList.remove("active"));
 
@@ -790,7 +805,10 @@ function showModule(name) {
   document.body.classList.toggle("admin-command-active", name.startsWith("admin-"));
   const yearAwareModules = ["admin-overview", "admin-portfolio", "admin-exceptions"];
   $("#admin-year-control").classList.toggle("hidden", !yearAwareModules.includes(name));
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  saveWorkspaceModule(name);
+  if (!options.preserveScroll) {
+    window.scrollTo({ top: 0, behavior: options.instant ? "auto" : "smooth" });
+  }
 
   if (name === "user-home") renderUserDashboard();
   if (name === "my-initiatives") renderUserInitiatives();
@@ -799,6 +817,7 @@ function showModule(name) {
   if (name === "admin-portfolio") renderAdminPortfolio();
   if (name === "admin-users") renderAdminUsers();
   if (name === "admin-exceptions") renderAdminExceptions();
+  if (name === "admin-overview") applyExecutiveTab(activeExecutiveTab, { focus: false, persist: false, preserveViewport: false });
   window.setTimeout(() => Object.values(charts).forEach(chart => chart?.resize?.()), 80);
 }
 
@@ -3881,4 +3900,176 @@ function updateChartReadability() {
     chart.resize();
     chart.update("none");
   });
+}
+
+
+/* ================================================================
+   V7.9.4 WORKSPACE STATE & EXECUTIVE TABS
+   ================================================================ */
+function workspaceUserKey() {
+  return currentUser?.id || "anonymous";
+}
+
+function readWorkspaceState() {
+  try {
+    const parsed = JSON.parse(sessionStorage.getItem(WORKSPACE_STATE_KEY) || "{}");
+    return parsed.userId === workspaceUserKey() ? parsed : { userId: workspaceUserKey(), scrollPositions: {} };
+  } catch (_error) {
+    return { userId: workspaceUserKey(), scrollPositions: {} };
+  }
+}
+
+function writeWorkspaceState(patch = {}) {
+  if (!currentUser?.id) return;
+  const current = readWorkspaceState();
+  const next = {
+    ...current,
+    ...patch,
+    userId: workspaceUserKey(),
+    scrollPositions: patch.scrollPositions || current.scrollPositions || {}
+  };
+  try {
+    sessionStorage.setItem(WORKSPACE_STATE_KEY, JSON.stringify(next));
+  } catch (_error) {
+    // Navigation remains functional when storage is unavailable.
+  }
+}
+
+function shouldRouteAuthEvent(event, session) {
+  if (event === "SIGNED_OUT" || !session?.user) return true;
+  const sameUser = Boolean(currentUser?.id && currentUser.id === session.user.id);
+  const platformOpen = Boolean(currentProfile && !$("#platform")?.classList.contains("hidden"));
+  if (sameUser && platformOpen && ["TOKEN_REFRESHED", "SIGNED_IN", "USER_UPDATED"].includes(event)) {
+    return false;
+  }
+  return true;
+}
+
+function resolveRestoredModule(defaultModule, isSuperAdmin) {
+  const state = readWorkspaceState();
+  const requested = state.activeModule;
+  if (!requested || !$(`#module-${requested}`)) return defaultModule;
+  if (!isSuperAdmin && requested.startsWith("admin-")) return defaultModule;
+  return requested;
+}
+
+function currentModuleName() {
+  return $(".module.active")?.id?.replace(/^module-/, "") || "";
+}
+
+function rememberCurrentModuleScroll() {
+  if (!currentUser?.id) return;
+  const name = currentModuleName();
+  if (!name) return;
+  const state = readWorkspaceState();
+  writeWorkspaceState({
+    scrollPositions: { ...(state.scrollPositions || {}), [name]: Math.max(0, Math.round(window.scrollY)) }
+  });
+}
+
+function saveWorkspaceModule(name) {
+  writeWorkspaceState({ activeModule: name, executiveTab: activeExecutiveTab });
+}
+
+function restoreWorkspaceScroll(name) {
+  const state = readWorkspaceState();
+  const top = Number(state.scrollPositions?.[name] || 0);
+  window.setTimeout(() => window.scrollTo({ top, behavior: "auto" }), 90);
+}
+
+function clearWorkspaceState() {
+  try {
+    sessionStorage.removeItem(WORKSPACE_STATE_KEY);
+  } catch (_error) {
+    // Nothing else is required.
+  }
+  activeExecutiveTab = "summary";
+}
+
+function initialiseWorkspacePersistence() {
+  const state = readWorkspaceState();
+  try {
+    activeExecutiveTab = state.executiveTab || localStorage.getItem(EXECUTIVE_TAB_STATE_KEY) || "summary";
+  } catch (_error) {
+    activeExecutiveTab = state.executiveTab || "summary";
+  }
+  window.addEventListener("scroll", () => {
+    if (workspaceScrollTimer) window.clearTimeout(workspaceScrollTimer);
+    workspaceScrollTimer = window.setTimeout(rememberCurrentModuleScroll, 140);
+  }, { passive: true });
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") rememberCurrentModuleScroll();
+  });
+}
+
+function initialiseExecutiveWorkspaceTabs() {
+  const overview = $("#module-admin-overview");
+  const hero = overview?.querySelector(":scope > .executive-hero");
+  if (!overview || !hero || overview.querySelector(".executive-workspace-tabs")) return;
+
+  const tabs = document.createElement("div");
+  tabs.className = "executive-workspace-tabs";
+  tabs.setAttribute("role", "tablist");
+  tabs.setAttribute("aria-label", "Executive Overview workspace");
+  tabs.innerHTML = `
+    <span class="executive-tab-summary-note">Choose a focused management view</span>
+    <button class="executive-workspace-tab" type="button" role="tab" data-executive-tab="summary" aria-selected="false">Management Summary</button>
+    <button class="executive-workspace-tab" type="button" role="tab" data-executive-tab="analytics" aria-selected="false">Visual Analytics</button>
+  `;
+  hero.insertAdjacentElement("afterend", tabs);
+
+  [...overview.children].forEach(child => {
+    if (child === hero || child === tabs) return;
+    const analytics = child.classList.contains("executive-dashboard-grid") || child.classList.contains("full-width-panel");
+    child.dataset.executiveTabSection = analytics ? "analytics" : "summary";
+  });
+
+  const tabButtons = [...tabs.querySelectorAll("[data-executive-tab]")];
+  tabButtons.forEach((button, index) => {
+    button.addEventListener("click", () => applyExecutiveTab(button.dataset.executiveTab));
+    button.addEventListener("keydown", event => {
+      let targetIndex = null;
+      if (event.key === "ArrowRight") targetIndex = (index + 1) % tabButtons.length;
+      if (event.key === "ArrowLeft") targetIndex = (index - 1 + tabButtons.length) % tabButtons.length;
+      if (event.key === "Home") targetIndex = 0;
+      if (event.key === "End") targetIndex = tabButtons.length - 1;
+      if (targetIndex === null) return;
+      event.preventDefault();
+      const target = tabButtons[targetIndex];
+      applyExecutiveTab(target.dataset.executiveTab);
+      target.focus();
+    });
+  });
+
+  applyExecutiveTab(activeExecutiveTab, { focus: false, persist: false, preserveViewport: false });
+}
+
+function applyExecutiveTab(tab, { focus = false, persist = true, preserveViewport = true } = {}) {
+  const overview = $("#module-admin-overview");
+  const tabBar = overview?.querySelector(".executive-workspace-tabs");
+  if (!overview || !tabBar) return;
+  const nextTab = tab === "analytics" ? "analytics" : "summary";
+  const anchorTop = preserveViewport ? tabBar.getBoundingClientRect().top : null;
+  activeExecutiveTab = nextTab;
+
+  overview.querySelectorAll("[data-executive-tab-section]").forEach(section => {
+    section.classList.toggle("executive-tab-hidden", section.dataset.executiveTabSection !== nextTab);
+  });
+  tabBar.querySelectorAll("[data-executive-tab]").forEach(button => {
+    const selected = button.dataset.executiveTab === nextTab;
+    button.setAttribute("aria-selected", String(selected));
+    button.tabIndex = selected ? 0 : -1;
+    if (selected && focus) button.focus();
+  });
+
+  if (persist) {
+    writeWorkspaceState({ executiveTab: nextTab });
+    try { localStorage.setItem(EXECUTIVE_TAB_STATE_KEY, nextTab); } catch (_error) {}
+  }
+
+  if (anchorTop !== null) {
+    const shift = tabBar.getBoundingClientRect().top - anchorTop;
+    if (Math.abs(shift) > 1) window.scrollBy({ top: shift, behavior: "auto" });
+  }
+  window.setTimeout(() => Object.values(charts).forEach(chart => chart?.resize?.()), 100);
 }
