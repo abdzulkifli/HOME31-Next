@@ -1,7 +1,7 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.8/+esm";
 
-const SUPABASE_URL = "https://ueuvavxdvclnfffujafz.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_AhkBD0Tcki8RECDar7_vkw_fsV_wxX0";
+const SUPABASE_URL = "https://YOUR-PROJECT.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = "YOUR-PUBLISHABLE-KEY";
 const AUTH_REDIRECT_URL = new URL(".", window.location.href).href;
 
 const configured =
@@ -39,9 +39,69 @@ const EXECUTIVE_COLORS = {
   slate: "#7892a6"
 };
 
+const EXECUTIVE_SERIES_COLORS = {
+  neutral: "#7f99af",
+  gold: "#d1ad63",
+  teal: "#57999b",
+  green: "#6ca69b",
+  red: "#d26066",
+  blue: "#78a8c4",
+  slate: "#7892a6"
+};
+
+const EXECUTIVE_PANEL_STATE_KEY = "home31-executive-panel-state-v1";
+
+const QUADRANT_GUIDE_PLUGIN = {
+  id: "quadrantGuide",
+  beforeDatasetsDraw(chart, _args, options = {}) {
+    const { ctx, chartArea, scales } = chart;
+    if (!chartArea || !scales?.x || !scales?.y) return;
+    const { left, right, top, bottom } = chartArea;
+    const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+    const xSplit = clamp(scales.x.getPixelForValue(options.xThreshold || 0), left, right);
+    const ySplit = clamp(scales.y.getPixelForValue(options.yThreshold || 1), top, bottom);
+
+    ctx.save();
+    ctx.fillStyle = "rgba(87,153,155,.055)";
+    ctx.fillRect(left, top, xSplit - left, ySplit - top);
+    ctx.fillStyle = "rgba(209,173,99,.055)";
+    ctx.fillRect(xSplit, top, right - xSplit, ySplit - top);
+    ctx.fillStyle = "rgba(127,153,175,.04)";
+    ctx.fillRect(left, ySplit, xSplit - left, bottom - ySplit);
+    ctx.fillStyle = "rgba(210,96,102,.045)";
+    ctx.fillRect(xSplit, ySplit, right - xSplit, bottom - ySplit);
+
+    ctx.strokeStyle = "rgba(180,198,210,.34)";
+    ctx.setLineDash([5, 5]);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(xSplit, top);
+    ctx.lineTo(xSplit, bottom);
+    ctx.moveTo(left, ySplit);
+    ctx.lineTo(right, ySplit);
+    ctx.stroke();
+    ctx.restore();
+  },
+  afterDraw(chart) {
+    const { ctx, chartArea } = chart;
+    if (!chartArea) return;
+    const { left, right, top, bottom } = chartArea;
+    ctx.save();
+    ctx.fillStyle = "rgba(214,226,234,.72)";
+    ctx.font = "600 10px IBM Plex Sans, sans-serif";
+    ctx.fillText("HIGH BENEFIT · LOWER COST", left + 8, top + 16);
+    const highCost = "HIGH BENEFIT · HIGHER COST";
+    ctx.fillText(highCost, right - ctx.measureText(highCost).width - 8, top + 16);
+    ctx.fillStyle = "rgba(169,189,204,.62)";
+    ctx.fillText("LOWER BENEFIT · LOWER COST", left + 8, bottom - 8);
+    const review = "LOWER BENEFIT · HIGHER COST";
+    ctx.fillText(review, right - ctx.measureText(review).width - 8, bottom - 8);
+    ctx.restore();
+  }
+};
+
 let pillarMetric = "count";
 let selectedAdminYear = DEFAULT_ADMIN_YEAR;
-let executivePortfolioFocus = "";
 
 const DISPLAY_SETTINGS_KEY = "home31-display-settings-v2";
 const DISPLAY_MODES = ["standard", "comfortable", "large"];
@@ -53,6 +113,7 @@ let tableEnhancementScheduled = false;
 let responsiveTableObserver = null;
 let sidebarMediaQuery = null;
 let sidebarCollapsed = false;
+let adminQuickFilter = "";
 
 
 let currentUser = null;
@@ -71,6 +132,7 @@ document.addEventListener("DOMContentLoaded", initialise);
 async function initialise() {
   initialiseDisplaySettings();
   initialiseNavigation();
+  initialiseExecutiveInteractions();
   bindEvents();
   populatePillars();
   handleResetLink();
@@ -266,10 +328,22 @@ function bindEvents() {
   $("#admin-year-select").addEventListener("change", handleAdminYearChange);
 
   $$(".nav-item").forEach(button =>
-    button.addEventListener("click", () => showModule(button.dataset.module))
+    button.addEventListener("click", () => {
+      if (button.dataset.module === "admin-portfolio") {
+        adminQuickFilter = "";
+        resetAdminFilterControls();
+      }
+      showModule(button.dataset.module);
+    })
   );
   $$("[data-jump]").forEach(button =>
-    button.addEventListener("click", () => showModule(button.dataset.jump))
+    button.addEventListener("click", () => {
+      if (button.dataset.jump === "admin-portfolio") {
+        adminQuickFilter = "";
+        resetAdminFilterControls();
+      }
+      showModule(button.dataset.jump);
+    })
   );
   $$("[data-open-initiative]").forEach(button =>
     button.addEventListener("click", () => openInitiativeModal())
@@ -286,9 +360,15 @@ function bindEvents() {
     renderUserInitiatives();
   });
 
-  $("#admin-search").addEventListener("input", renderAdminPortfolio);
+  $("#admin-search").addEventListener("input", () => {
+    adminQuickFilter = "";
+    renderAdminPortfolio();
+  });
   ["#admin-status-filter", "#admin-pillar-filter", "#admin-risk-filter"].forEach(selector =>
-    $(selector).addEventListener("change", renderAdminPortfolio)
+    $(selector).addEventListener("change", () => {
+      adminQuickFilter = "";
+      renderAdminPortfolio();
+    })
   );
   $("#admin-clear-filters").addEventListener("click", clearAdminFilters);
 
@@ -831,6 +911,136 @@ function bindExecutiveRecordButtons() {
   );
 }
 
+function initialiseExecutiveInteractions() {
+  $$('[data-kpi-action]').forEach(card => {
+    const activate = () => handleExecutiveNavigation(card.dataset.kpiAction);
+    card.addEventListener('click', activate);
+    card.addEventListener('keydown', event => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        activate();
+      }
+    });
+  });
+
+  $$('[data-executive-route]').forEach(button =>
+    button.addEventListener('click', () => handleExecutiveNavigation(button.dataset.executiveRoute))
+  );
+
+  let stored = [];
+  try {
+    stored = JSON.parse(localStorage.getItem(EXECUTIVE_PANEL_STATE_KEY) || '[]');
+  } catch (_error) {
+    stored = [];
+  }
+  const collapsed = new Set(Array.isArray(stored) ? stored : []);
+
+  $$('#module-admin-overview .chart-panel').forEach((panel, index) => {
+    const key = panel.id || panel.querySelector('canvas')?.id || `executive-panel-${index + 1}`;
+    panel.dataset.panelKey = key;
+    const heading = panel.querySelector('.executive-panel-heading');
+    if (!heading || heading.querySelector('.executive-panel-collapse')) return;
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'executive-panel-collapse';
+    button.setAttribute('aria-controls', key);
+    if (collapsed.has(key)) panel.classList.add('panel-collapsed');
+    updateExecutivePanelButton(panel, button);
+    button.addEventListener('click', () => {
+      panel.classList.toggle('panel-collapsed');
+      const active = new Set();
+      $$('#module-admin-overview .chart-panel.panel-collapsed').forEach(item => active.add(item.dataset.panelKey));
+      try {
+        localStorage.setItem(EXECUTIVE_PANEL_STATE_KEY, JSON.stringify([...active]));
+      } catch (_error) {
+        // The interaction still works when storage is unavailable.
+      }
+      updateExecutivePanelButton(panel, button);
+      if (!panel.classList.contains('panel-collapsed')) {
+        window.setTimeout(() => Object.values(charts).forEach(chart => chart?.resize?.()), 80);
+      }
+    });
+    heading.appendChild(button);
+  });
+}
+
+function updateExecutivePanelButton(panel, button) {
+  const collapsed = panel.classList.contains('panel-collapsed');
+  button.textContent = collapsed ? 'Show chart' : 'Hide chart';
+  button.setAttribute('aria-expanded', String(!collapsed));
+}
+
+function resetAdminFilterControls() {
+  $('#admin-search').value = '';
+  $('#admin-status-filter').value = '';
+  $('#admin-pillar-filter').value = '';
+  $('#admin-risk-filter').value = '';
+}
+
+function handleExecutiveNavigation(action) {
+  if (currentProfile?.role !== 'super_admin') return;
+
+  if (action === 'scroll-budget') {
+    $('#executive-budget-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    return;
+  }
+
+  const map = {
+    all: '',
+    budget: 'cost-populated',
+    readiness: 'readiness-followup',
+    delivery: 'active',
+    matrix: 'cost-benefit',
+    'readiness-followup': 'readiness-followup',
+    'cost-populated': 'cost-populated',
+    priority: 'priority',
+    risk: 'risk',
+    'approved-populated': 'approved-populated',
+    'budget-gaps': 'budget-gaps'
+  };
+
+  adminQuickFilter = map[action] ?? '';
+  resetAdminFilterControls();
+  showModule('admin-portfolio');
+}
+
+function matchesAdminQuickFilter(project) {
+  switch (adminQuickFilter) {
+    case 'readiness-followup':
+      return calculateProjectReadiness(project).score < 100;
+    case 'cost-populated':
+      return hasPortfolioCost(project);
+    case 'priority':
+      return normalizePriorityGroup(project) === 'Strategic Priority';
+    case 'risk':
+      return project.status === 'At Risk' || ['High', 'Extreme'].includes(project.risk_level);
+    case 'approved-populated':
+      return financialFieldConfirmed(project, 'approved_budget');
+    case 'budget-gaps':
+      return !financialFieldConfirmed(project, 'approved_budget');
+    case 'active':
+      return project.status !== 'Completed';
+    case 'cost-benefit':
+      return hasPortfolioCost(project) && numericValue(project.cba_ratio) !== null;
+    default:
+      return true;
+  }
+}
+
+function adminQuickFilterLabel() {
+  return {
+    'readiness-followup': 'Readiness follow-up',
+    'cost-populated': 'Cost populated',
+    priority: 'Strategic priority',
+    risk: 'Risk attention',
+    'approved-populated': 'Approved budget populated',
+    'budget-gaps': 'Approved budget gaps',
+    active: 'Active delivery',
+    'cost-benefit': 'Cost-benefit assessed'
+  }[adminQuickFilter] || '';
+}
+
+
 
 
 function executiveChartOptions() {
@@ -986,7 +1196,7 @@ function aggregateFiltered(records, labelFn, valueFn) {
 }
 
 function clearAdminFilters() {
-  executivePortfolioFocus = "";
+  adminQuickFilter = "";
   $("#admin-search").value = "";
   $("#admin-status-filter").value = "";
   $("#admin-pillar-filter").value = "";
@@ -1936,21 +2146,20 @@ function projectsForYear(year=selectedAdminYear) {
   return adminProjects.filter(project => projectImplementationYear(project)===Number(year));
 }
 function selectedYearLabel(year=selectedAdminYear) { return String(year)==="all" ? "All Years" : `AMP${year}`; }
-function costBasisLabel(year=selectedAdminYear) {
-  if (String(year)==="all") return "Year-specific portfolio cost";
-  return Number(year)<=2026 ? "Approved budget" : "Effective post-challenge cost";
+function costBasisLabel() {
+  return "Approved budget";
 }
 function numericValue(value) {
   if (value===null || value===undefined || value==="") return null;
   const n=Number(value); return Number.isFinite(n) ? n : null;
 }
 function projectPortfolioCost(project) {
-  const field = projectImplementationYear(project) <= 2026 ? "approved_budget" : "estimated_cost_post_challenge";
-  return financialFieldConfirmed(project, field) ? (numericValue(project[field]) || 0) : 0;
+  return financialFieldConfirmed(project, "approved_budget")
+    ? (numericValue(project.approved_budget) || 0)
+    : 0;
 }
 function hasPortfolioCost(project) {
-  const field = projectImplementationYear(project) <= 2026 ? "approved_budget" : "estimated_cost_post_challenge";
-  return financialFieldConfirmed(project, field);
+  return financialFieldConfirmed(project, "approved_budget");
 }
 function calculateProjectReadiness(project) {
   const checks=[
@@ -1967,9 +2176,15 @@ function calculateProjectReadiness(project) {
 }
 function calculateExecutiveMetrics(records=projectsForYear()) {
   const today=new Date().toISOString().slice(0,10), total=records.length;
-  const sum=field=>records.reduce((s,p)=>s+(numericValue(p[field])||0),0);
-  const originalCost=sum("estimated_cost"), effectiveCost=sum("estimated_cost_post_challenge"), proposedBudget=sum("proposed_budget_post_retreat"), approvedBudget=records.reduce((total,project)=>total+(financialFieldConfirmed(project,"approved_budget")?(numericValue(project.approved_budget)||0):0),0);
-  const portfolioCost=records.reduce((s,p)=>s+projectPortfolioCost(p),0);
+  const confirmedSum=field=>records.reduce((sum,project)=>
+    sum + (financialFieldConfirmed(project, field) ? (numericValue(project[field]) || 0) : 0), 0);
+  const originalCost=confirmedSum("estimated_cost");
+  const effectiveCost=confirmedSum("estimated_cost_post_challenge");
+  const proposedBudget=confirmedSum("proposed_budget_post_retreat");
+  const approvedBudget=confirmedSum("approved_budget");
+  const portfolioCost=approvedBudget;
+  const originalCostCount=records.filter(p=>financialFieldConfirmed(p,"estimated_cost")).length;
+  const effectiveCostCount=records.filter(p=>financialFieldConfirmed(p,"estimated_cost_post_challenge")).length;
   const proposedBudgetCount=records.filter(p=>financialFieldConfirmed(p,"proposed_budget_post_retreat")).length;
   const approvedBudgetCount=records.filter(p=>financialFieldConfirmed(p,"approved_budget")).length;
   const readinessScores=records.map(calculateProjectReadiness);
@@ -1978,8 +2193,8 @@ function calculateExecutiveMetrics(records=projectsForYear()) {
   const critical=records.filter(p=>p.risk_level==="Extreme"||p.status==="At Risk"||(p.target_date&&p.target_date<today&&p.status!=="Completed")||!p.accountable_owner);
   const watch=records.filter(p=>!critical.includes(p)&&(p.risk_level==="High"||Number(p.readiness_score||0)<70||Number(p.evidence_completeness||0)<70||p.ict_classification==="New - Pending ICT review"||(["Required","To be confirmed"].includes(p.hr_collaboration_status)&&!["Supported","Not required"].includes(p.hr_review_status))));
   const decisionCounts={
-    selectedCost:records.filter(p=>!hasPortfolioCost(p)).length,
     approvedBudget:records.filter(p=>!financialFieldConfirmed(p,"approved_budget")).length,
+    postChallengeCost:records.filter(p=>!financialFieldConfirmed(p,"estimated_cost_post_challenge")).length,
     ict:records.filter(p=>p.ict_classification==="New - Pending ICT review"||((p.system_type&&p.system_type!=="Non System")&&!p.ict_classification)).length,
     hr:records.filter(p=>["Required","To be confirmed"].includes(p.hr_collaboration_status)&&!["Supported","Not required"].includes(p.hr_review_status)).length,
     evidence:records.filter(p=>Number(p.evidence_completeness||0)<70).length,
@@ -1987,7 +2202,7 @@ function calculateExecutiveMetrics(records=projectsForYear()) {
   };
   return {
     records,total,originalCost,effectiveCost,proposedBudget,approvedBudget,portfolioCost,challengeReduction:originalCost-effectiveCost,
-    portfolioCostCount:records.filter(hasPortfolioCost).length,proposedBudgetCount,approvedBudgetCount,
+    originalCostCount,effectiveCostCount,portfolioCostCount:approvedBudgetCount,proposedBudgetCount,approvedBudgetCount,
     strategicPriority:records.filter(p=>["Strategic Priority","Corporate Priority"].includes(p.priority_status)||p.priority==="Strategic").length,
     watchlist:records.filter(p=>["Watchlist / Under Review","Not Assessed"].includes(p.priority_status)).length,
     atRisk:records.filter(p=>p.status==="At Risk"||["High","Extreme"].includes(p.risk_level)).length,
@@ -2006,17 +2221,23 @@ function renderAdminOverview() {
   $("#admin-kpi-total-note").textContent=`${selectedYearLabel()} · ${metrics.departments.length} departments`;
   $("#admin-kpi-health").textContent=`${metrics.strategicReadiness}%`;
   $("#admin-kpi-health-note").textContent=`${metrics.fullyReady} initiatives meet all seven checks`;
-  $("#admin-kpi-cost-label").textContent=costBasisLabel();
-  $("#admin-kpi-effective-cost").textContent=compactRinggit(metrics.portfolioCost);
-  $("#admin-kpi-effective-note").textContent=`${metrics.portfolioCostCount}/${metrics.total||0} records populated · ${selectedYearLabel()}`;
-  $("#admin-kpi-reduction").textContent=compactRinggit(metrics.challengeReduction);
-  $("#admin-kpi-reduction-note").textContent=metrics.originalCost?`${formatPercent(metrics.challengeReduction/metrics.originalCost*100)} challenge movement`:"Original estimate not yet populated";
+  $("#admin-kpi-cost-label").textContent="Portfolio cost basis";
+  $("#admin-kpi-effective-cost").textContent=compactRinggit(metrics.approvedBudget);
+  $("#admin-kpi-effective-note").textContent=`Approved Budget · ${metrics.approvedBudgetCount}/${metrics.total||0} records populated`;
+  const challengeMovement=metrics.challengeReduction;
+  $("#admin-kpi-reduction").textContent=compactRinggit(Math.abs(challengeMovement));
+  $("#admin-kpi-reduction-note").textContent=metrics.originalCost
+    ? `${formatPercent(Math.abs(challengeMovement)/metrics.originalCost*100)} ${challengeMovement>=0?"reduction":"increase"} versus original estimate`
+    : "Original estimate not yet populated";
+  const challengeCard=$("#admin-kpi-reduction").closest(".executive-kpi-card");
+  challengeCard?.classList.toggle("positive", challengeMovement>=0);
+  challengeCard?.classList.toggle("danger", challengeMovement<0);
   $("#admin-kpi-priority").textContent=metrics.strategicPriority;
   $("#admin-kpi-risk").textContent=metrics.atRisk;
-  $("#admin-kpi-approved-budget").textContent=compactRinggit(metrics.approvedBudget);
-  $("#admin-kpi-approved-budget-note").textContent=metrics.approvedBudgetCount
-    ? `${metrics.approvedBudgetCount}/${metrics.total || 0} records with approved allocation`
-    : "Approved allocation not yet populated";
+  $("#admin-kpi-approved-budget").textContent=compactRinggit(metrics.effectiveCost);
+  $("#admin-kpi-approved-budget-note").textContent=metrics.effectiveCostCount
+    ? `${metrics.effectiveCostCount}/${metrics.total || 0} records with confirmed post-challenge cost`
+    : "Post-challenge cost not yet populated";
   $("#admin-kpi-approved-coverage").textContent=`${metrics.approvedBudgetCoverage}%`;
   $("#admin-kpi-approved-coverage-note").textContent=`${metrics.approvedBudgetCount}/${metrics.total || 0} records populated`;
   $("#admin-kpi-users").textContent=adminProfiles.length;
@@ -2024,7 +2245,7 @@ function renderAdminOverview() {
   $("#admin-assurance-evidence").textContent=`${metrics.evidenceAverage}%`;
   $("#admin-assurance-budget").textContent=`${metrics.approvedBudgetCoverage}%`;
   $("#admin-assurance-overdue").textContent=metrics.overdue;
-  renderExecutiveNarrative(metrics); renderExecutiveAttention(metrics); renderExecutiveBudget(metrics); renderExecutiveReadiness(metrics); renderExecutiveComparison(); renderExecutiveLists(metrics); renderAdminCharts(metrics); bindExecutiveRecordButtons(); bindExecutiveKpiActions();
+  renderExecutiveNarrative(metrics); renderExecutiveAttention(metrics); renderExecutiveBudget(metrics); renderExecutiveReadiness(metrics); renderExecutiveComparison(); renderExecutiveLists(metrics); renderAdminCharts(metrics); bindExecutiveRecordButtons();
 }
 function renderExecutiveNarrative(metrics) {
   const topDepartment=departmentCostData(metrics.records)[0], topPillar=pillarData("count",metrics.records)[0];
@@ -2035,7 +2256,7 @@ function renderExecutiveNarrative(metrics) {
 }
 function renderExecutiveAttention(metrics) {
   $("#admin-attention-critical").textContent=metrics.critical.length; $("#admin-attention-watch").textContent=metrics.watch.length; $("#admin-attention-stable").textContent=metrics.stable;
-  const rows=[[`${costBasisLabel()} still blank`,metrics.decisionCounts.selectedCost],["Approved budget still blank",metrics.decisionCounts.approvedBudget],["ICT review / classification pending",metrics.decisionCounts.ict],["HR review or collaboration pending",metrics.decisionCounts.hr],["Evidence completeness below 70%",metrics.decisionCounts.evidence],["Priority decision outstanding",metrics.decisionCounts.priority]];
+  const rows=[["Approved budget still blank",metrics.decisionCounts.approvedBudget],["Post-challenge cost still blank",metrics.decisionCounts.postChallengeCost],["ICT review / classification pending",metrics.decisionCounts.ict],["HR review or collaboration pending",metrics.decisionCounts.hr],["Evidence completeness below 70%",metrics.decisionCounts.evidence],["Priority decision outstanding",metrics.decisionCounts.priority]];
   $("#admin-attention-summary").innerHTML=rows.map(([l,v])=>`<div class="attention-row"><span>${escapeHtml(l)}</span><strong>${v}</strong></div>`).join("");
 }
 function renderExecutiveBudget(metrics) {
@@ -2043,11 +2264,27 @@ function renderExecutiveBudget(metrics) {
   $("#admin-budget-footnote").textContent=`${selectedYearLabel()} contains ${metrics.total} records. The headline KPI uses ${costBasisLabel().toLowerCase()}; the chart displays all four financial stages where populated.`;
 }
 function renderExecutiveReadiness(metrics) {
-  $("#admin-readiness-gauge-value").textContent=`${metrics.strategicReadiness}%`;
-  $("#admin-readiness-score-bar").style.width=`${metrics.strategicReadiness}%`;
-  const departments=departmentReadinessData(metrics.records).slice(0,10);
-  $("#admin-department-readiness-bars").innerHTML=departments.length?departments.map(i=>`<div class="department-readiness-row"><span>${escapeHtml(i.label)}</span><div class="department-readiness-track"><i style="width:${i.value}%"></i></div><strong>${i.value}%</strong></div>`).join(""):'<div class="executive-empty">No departmental readiness data for this year.</div>';
-  $("#admin-readiness-footnote").innerHTML=`<strong>${metrics.fullyReady}</strong> ${selectedYearLabel()} initiatives meet all seven checks; <strong>${metrics.followUp}</strong> have at least one follow-up.`;
+  const score = metrics.strategicReadiness;
+  $("#admin-readiness-gauge-value").textContent = `${score}%`;
+  $("#admin-readiness-progress").style.width = `${score}%`;
+  const track = $("#admin-readiness-progress").closest('[role="progressbar"]');
+  track?.setAttribute("aria-valuenow", String(score));
+  const status = score >= 85 ? "Strong register readiness" : score >= 70 ? "Readiness follow-up required" : "Management intervention required";
+  $("#admin-readiness-status").textContent = `${status} · ${metrics.fullyReady}/${metrics.total || 0} records meet all checks`;
+
+  const departments = departmentReadinessData(metrics.records).slice(0, 10);
+  $("#admin-department-readiness-bars").innerHTML = departments.length
+    ? departments.map(item => `<button class="department-readiness-row" type="button" data-readiness-department="${escapeHtml(item.label)}"><span>${escapeHtml(item.label)}</span><div class="department-readiness-track"><i style="width:${item.value}%"></i></div><strong>${item.value}%</strong></button>`).join("")
+    : '<div class="executive-empty">No departmental readiness data for this year.</div>';
+
+  $$('[data-readiness-department]').forEach(button => button.addEventListener('click', () => {
+    adminQuickFilter = 'readiness-followup';
+    resetAdminFilterControls();
+    $("#admin-search").value = button.dataset.readinessDepartment;
+    showModule('admin-portfolio');
+  }));
+
+  $("#admin-readiness-footnote").innerHTML = `<strong>${metrics.fullyReady}</strong> ${selectedYearLabel()} initiatives meet all seven checks; <strong>${metrics.followUp}</strong> have at least one follow-up.`;
 }
 function comparisonMetricsForYear(year) {
   const records=projectsForYear(String(year));
@@ -2055,94 +2292,265 @@ function comparisonMetricsForYear(year) {
 }
 function renderExecutiveComparison() {
   const a=comparisonMetricsForYear(2026), b=comparisonMetricsForYear(2027);
-  const cards=[["Portfolio items","portfolioItems",String],["Portfolio cost basis","portfolioCost",compactRinggit],["Priority / corporate priority","strategicPriority",String],["Watchlist / under review","watchlist",String],["Zero / unconfirmed cost","zeroBudgetOrConfirmedCost",String],["Departments represented","departments",String]];
+  const cards=[["Portfolio items","portfolioItems",String],["Portfolio cost basis","portfolioCost",compactRinggit],["Priority / corporate priority","strategicPriority",String],["Watchlist / under review","watchlist",String],["Zero / unconfirmed approved budget","zeroBudgetOrConfirmedCost",String],["Departments represented","departments",String]];
   $("#admin-comparison-grid").innerHTML=cards.map(([label,key,fmt])=>{const old=a[key],now=b[key],d=now-old,p=old?d/old*100:0;return `<article class="comparison-card"><span>${escapeHtml(label)}</span><div class="comparison-values"><div><span>AMP2026</span><strong>${fmt(old)}</strong></div><div><span>AMP2027</span><strong>${fmt(now)}</strong></div></div><div class="comparison-delta ${d>0?"negative":""}">${d>=0?"+":""}${key==="portfolioCost"?compactRinggit(d):d.toLocaleString("en-MY")} (${d>=0?"+":""}${p.toFixed(1)}%)</div></article>`;}).join("");
   const badge=$("#admin-comparison-source-status");
   if(!a.records.length&&!b.records.length){badge.textContent="No live year data";badge.className="executive-status-chip critical";}else if(!a.records.length){badge.textContent="AMP2026 data pending";badge.className="executive-status-chip watch";}else if(!b.records.length){badge.textContent="AMP2027 data pending";badge.className="executive-status-chip watch";}else{badge.textContent="Live Supabase comparison";badge.className="executive-status-chip good";}
-  $("#admin-comparison-notes").innerHTML=`<div class="comparison-note"><strong>AMP2026 source:</strong> ${a.records.length} live records. Portfolio cost uses Approved Budget.</div><div class="comparison-note"><strong>AMP2027 source:</strong> ${b.records.length} live records. Portfolio cost uses Estimated Cost Post Challenge.</div><div class="comparison-note"><strong>No fixed baseline:</strong> Adding, editing or deleting year records updates this comparison automatically.</div>`;
+  $("#admin-comparison-notes").innerHTML=`<div class="comparison-note"><strong>AMP2026 source:</strong> ${a.records.length} live records. Portfolio cost uses Approved Budget.</div><div class="comparison-note"><strong>AMP2027 source:</strong> ${b.records.length} live records. Portfolio cost also uses Approved Budget.</div><div class="comparison-note"><strong>Consistent basis:</strong> Both years use confirmed Approved Budget values; adding, editing or deleting records updates the comparison automatically.</div>`;
 }
 function renderExecutiveLists(metrics) {
   const records=metrics.records;
-  const decisions=[[`${costBasisLabel()} coverage`,metrics.decisionCounts.selectedCost],["Budget approval coverage",metrics.decisionCounts.approvedBudget],["ICT assessment",metrics.decisionCounts.ict],["HR and workforce review",metrics.decisionCounts.hr],["Evidence closure",metrics.decisionCounts.evidence],["Priority determination",metrics.decisionCounts.priority]].filter(x=>x[1]>0);
+  const decisions=[["Approved budget coverage",metrics.decisionCounts.approvedBudget],["Post-challenge cost confirmation",metrics.decisionCounts.postChallengeCost],["ICT assessment",metrics.decisionCounts.ict],["HR and workforce review",metrics.decisionCounts.hr],["Evidence closure",metrics.decisionCounts.evidence],["Priority determination",metrics.decisionCounts.priority]].filter(x=>x[1]>0);
   $("#admin-decision-queue").innerHTML=decisions.length?decisions.map(([t,c])=>`<div class="executive-list-item"><div><strong>${escapeHtml(t)}</strong><span>${c} initiatives require follow-up in ${selectedYearLabel()}.</span></div><em>${c}</em></div>`).join(""):'<div class="executive-empty">No executive decision queue is currently outstanding.</div>';
   const top=records.slice().sort((a,b)=>projectPortfolioCost(b)-projectPortfolioCost(a)).filter(p=>projectPortfolioCost(p)>0).slice(0,5);
   $("#admin-top-cost-list").innerHTML=top.length?top.map(p=>`<div class="executive-list-item"><div><strong>${escapeHtml(p.initiative_name)}</strong><span>AMP${projectImplementationYear(p)} · ${escapeHtml(p.department||"No department")}</span></div><button data-executive-open="${p.id}" type="button">${compactRinggit(projectPortfolioCost(p))}</button></div>`).join(""):'<div class="executive-empty">No selected-year cost records are available.</div>';
   const order={Extreme:4,High:3,Medium:2,Low:1}, risk=records.slice().sort((a,b)=>(order[b.risk_level]||0)-(order[a.risk_level]||0)||Number(a.readiness_score||0)-Number(b.readiness_score||0)).slice(0,5);
   $("#admin-top-risk-list").innerHTML=risk.length?risk.map(p=>`<div class="executive-list-item"><div><strong>${escapeHtml(p.initiative_name)}</strong><span>AMP${projectImplementationYear(p)} · ${escapeHtml(p.department||"No department")} · ${Number(p.readiness_score||0)}% readiness</span></div><button data-executive-open="${p.id}" type="button">${escapeHtml(p.risk_level||"Not rated")}</button></div>`).join(""):'<div class="executive-empty">No risk records are available.</div>';
 }
-function renderAdminCharts(metrics=calculateExecutiveMetrics()) {
-  ["adminBudgetJourney","adminReadinessGauge","adminDeliveryLoad","adminCostBenefit","adminPillar","adminHome31Fit","adminDepartmentCost"].forEach(k=>charts[k]?.destroy());
-  if(typeof Chart==="undefined") return;
-  const records=metrics.records, common=executiveChartOptions();
-  const challengeStart=Math.min(metrics.originalCost,metrics.effectiveCost),challengeEnd=Math.max(metrics.originalCost,metrics.effectiveCost);
-  charts.adminBudgetJourney=new Chart($("#admin-budget-journey-chart"),{
-    type:"bar",
-    data:{
-      labels:["Original Estimate","Challenge Movement","Post-Challenge Cost","Proposed Budget","Approved Budget"],
-      datasets:[{
-        data:[[0,metrics.originalCost],[challengeStart,challengeEnd],[0,metrics.effectiveCost],[0,metrics.proposedBudget],[0,metrics.approvedBudget]],
-        backgroundColor:[EXECUTIVE_COLORS.blue,metrics.challengeReduction>=0?EXECUTIVE_COLORS.teal:EXECUTIVE_COLORS.red,EXECUTIVE_COLORS.gold,EXECUTIVE_COLORS.lightBlue,EXECUTIVE_COLORS.green],
-        borderRadius:7,
-        maxBarThickness:72
-      }]
+function renderAdminCharts(metrics = calculateExecutiveMetrics()) {
+  ["adminBudgetJourney", "adminDeliveryLoad", "adminCostBenefit", "adminPillar", "adminHome31Fit", "adminDepartmentCost"].forEach(key => charts[key]?.destroy());
+  if (typeof Chart === "undefined") return;
+
+  const records = metrics.records;
+  const common = executiveChartOptions();
+  const reduction = metrics.challengeReduction;
+  const reductionRange = [Math.min(metrics.originalCost, metrics.effectiveCost), Math.max(metrics.originalCost, metrics.effectiveCost)];
+
+  charts.adminBudgetJourney = new Chart($("#admin-budget-journey-chart"), {
+    type: "bar",
+    data: {
+      labels: ["Original estimate", "Challenge movement", "Post-challenge", "Proposed budget", "Approved budget"],
+      datasets: [
+        {
+          label: "Financial stage",
+          data: [metrics.originalCost, null, metrics.effectiveCost, metrics.proposedBudget, metrics.approvedBudget],
+          backgroundColor: [EXECUTIVE_SERIES_COLORS.blue, null, EXECUTIVE_SERIES_COLORS.gold, EXECUTIVE_SERIES_COLORS.teal, EXECUTIVE_SERIES_COLORS.green],
+          borderRadius: 8,
+          borderSkipped: false,
+          maxBarThickness: 72
+        },
+        {
+          label: reduction >= 0 ? "Challenge reduction" : "Challenge increase",
+          data: [null, reductionRange, null, null, null],
+          backgroundColor: reduction >= 0 ? EXECUTIVE_SERIES_COLORS.green : EXECUTIVE_SERIES_COLORS.red,
+          borderRadius: 8,
+          borderSkipped: false,
+          maxBarThickness: 72
+        }
+      ]
     },
-    options:{...common,plugins:{...common.plugins,legend:{display:false},tooltip:{callbacks:{label:c=>{const raw=c.raw;return Array.isArray(raw)?formatRinggit(Math.abs(raw[1]-raw[0])):formatRinggit(raw);}}}},scales:executiveMoneyScales()}
+    options: {
+      ...common,
+      interaction: { mode: "index", intersect: false },
+      plugins: {
+        ...common.plugins,
+        legend: { display: false },
+        tooltip: {
+          ...common.plugins.tooltip,
+          callbacks: {
+            label: context => context.dataIndex === 1
+              ? `${reduction >= 0 ? "Reduction" : "Increase"}: ${formatRinggit(Math.abs(reduction))}`
+              : formatRinggit(context.parsed.y)
+          }
+        }
+      },
+      scales: {
+        x: { grid: { display: false }, ticks: { color: EXECUTIVE_COLORS.text, maxRotation: 0, minRotation: 0 } },
+        y: { beginAtZero: true, grid: { color: EXECUTIVE_COLORS.grid }, ticks: { color: EXECUTIVE_COLORS.text, callback: value => compactRinggit(value) } }
+      }
+    }
   });
-  const delivery=quarterlyDeliveryData(records);
-  charts.adminDeliveryLoad=new Chart($("#admin-delivery-load-chart"),{data:{labels:delivery.labels,datasets:[{type:"bar",label:"All Active",data:delivery.active,backgroundColor:"rgba(87,153,155,.85)",borderRadius:5},{type:"line",label:"Strategic Priority",data:delivery.priority,borderColor:EXECUTIVE_COLORS.gold,backgroundColor:EXECUTIVE_COLORS.gold,pointRadius:4,borderWidth:2,tension:.25}]},options:{...common,scales:executiveCountScales()}});
-  const groups=["Strategic Priority","Watchlist / Under Review","Recommended","Not Classified"],colors={"Strategic Priority":"#d1ad63","Watchlist / Under Review":"#7f99af",Recommended:EXECUTIVE_COLORS.teal,"Not Classified":EXECUTIVE_COLORS.red};
-  const matrixRecords=records.filter(p=>projectPortfolioCost(p)>0&&Number(p.cba_ratio||0)>0);
-  const sortedCosts=matrixRecords.map(projectPortfolioCost).sort((a,b)=>a-b),sortedBenefits=matrixRecords.map(p=>Number(p.cba_ratio||0)).sort((a,b)=>a-b);
-  const median=value=>value.length?value[Math.floor(value.length/2)]:0, costMid=median(sortedCosts), benefitMid=median(sortedBenefits);
-  const quadrantPlugin={id:"home31Quadrants",afterDraw(chart){const {ctx,chartArea:{left,right,top,bottom},scales:{x,y}}=chart;if(!costMid||!benefitMid)return;ctx.save();ctx.setLineDash([5,5]);ctx.strokeStyle="rgba(180,198,210,.5)";ctx.lineWidth=1;const xp=x.getPixelForValue(costMid),yp=y.getPixelForValue(benefitMid);ctx.beginPath();ctx.moveTo(xp,top);ctx.lineTo(xp,bottom);ctx.moveTo(left,yp);ctx.lineTo(right,yp);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle="rgba(205,220,230,.72)";ctx.font="600 11px IBM Plex Sans";ctx.fillText("High benefit / lower cost",left+10,top+18);ctx.fillText("High benefit / higher cost",Math.max(left+10,xp+10),top+18);ctx.fillText("Lower benefit / lower cost",left+10,bottom-10);ctx.fillText("Lower benefit / higher cost",Math.max(left+10,xp+10),bottom-10);ctx.restore();}};
-  charts.adminCostBenefit=new Chart($("#admin-cost-benefit-chart"),{type:"bubble",plugins:[quadrantPlugin],data:{datasets:groups.map(g=>({label:g,data:matrixRecords.filter(p=>normalizePriorityGroup(p)===g).map(p=>({x:projectPortfolioCost(p),y:Number(p.cba_ratio||0),r:10,project:p})),backgroundColor:colors[g]+"cc",borderColor:colors[g],borderWidth:2}))},options:{...common,onClick:(_e,elements,chart)=>{if(elements.length){const point=chart.data.datasets[elements[0].datasetIndex].data[elements[0].index];if(point?.project?.id)openInitiativeModal(point.project.id);}},scales:{x:{beginAtZero:true,grid:{color:EXECUTIVE_COLORS.grid},ticks:{color:EXECUTIVE_COLORS.text,callback:v=>compactRinggit(v)},title:{display:true,text:`${selectedYearLabel()} portfolio cost basis`,color:EXECUTIVE_COLORS.text}},y:{beginAtZero:true,grid:{color:EXECUTIVE_COLORS.grid},ticks:{color:EXECUTIVE_COLORS.text},title:{display:true,text:"CBA ratio",color:EXECUTIVE_COLORS.text}}}}});
+
+  const delivery = quarterlyDeliveryData(records);
+  charts.adminDeliveryLoad = new Chart($("#admin-delivery-load-chart"), {
+    data: {
+      labels: delivery.labels,
+      datasets: [
+        { type: "bar", label: "Planning / On Hold", data: delivery.planning, backgroundColor: "rgba(127,153,175,.78)", borderRadius: 4, stack: "delivery" },
+        { type: "bar", label: "In Progress", data: delivery.inProgress, backgroundColor: "rgba(87,153,155,.88)", borderRadius: 4, stack: "delivery" },
+        { type: "bar", label: "At Risk", data: delivery.atRisk, backgroundColor: "rgba(210,96,102,.9)", borderRadius: 4, stack: "delivery" },
+        { type: "bar", label: "Completed", data: delivery.completed, backgroundColor: "rgba(108,166,155,.78)", borderRadius: 4, stack: "delivery" },
+        { type: "line", label: "Strategic Priority", data: delivery.priority, borderColor: EXECUTIVE_SERIES_COLORS.gold, backgroundColor: EXECUTIVE_SERIES_COLORS.gold, pointRadius: 3, pointHoverRadius: 5, borderWidth: 2, tension: .28, yAxisID: "y" }
+      ]
+    },
+    options: {
+      ...common,
+      plugins: { ...common.plugins, legend: { ...common.plugins.legend, position: "bottom" } },
+      scales: {
+        x: { stacked: true, grid: { display: false }, ticks: { color: EXECUTIVE_COLORS.text } },
+        y: { stacked: true, beginAtZero: true, grid: { color: EXECUTIVE_COLORS.grid }, ticks: { color: EXECUTIVE_COLORS.text, precision: 0 } }
+      }
+    }
+  });
+
+  const matrixRecords = records.filter(project => hasPortfolioCost(project) && numericValue(project.cba_ratio) !== null);
+  const costs = matrixRecords.map(projectPortfolioCost).filter(value => value > 0).sort((a, b) => a - b);
+  const medianCost = costs.length ? costs[Math.floor(costs.length / 2)] : 0;
+  const groups = ["Strategic Priority", "Watchlist / Under Review", "Recommended", "Not Classified"];
+  const colors = {
+    "Strategic Priority": EXECUTIVE_SERIES_COLORS.gold,
+    "Watchlist / Under Review": EXECUTIVE_SERIES_COLORS.blue,
+    Recommended: EXECUTIVE_SERIES_COLORS.teal,
+    "Not Classified": EXECUTIVE_SERIES_COLORS.red
+  };
+
+  charts.adminCostBenefit = new Chart($("#admin-cost-benefit-chart"), {
+    type: "bubble",
+    plugins: [QUADRANT_GUIDE_PLUGIN],
+    data: {
+      datasets: groups.map(group => ({
+        label: group,
+        data: matrixRecords.filter(project => normalizePriorityGroup(project) === group).map(project => ({
+          x: projectPortfolioCost(project),
+          y: Number(project.cba_ratio || 0),
+          r: project.people_impact_level === "Enterprise-wide" ? 14 : project.people_impact_level === "High" ? 11 : 8,
+          project
+        })),
+        backgroundColor: `${colors[group]}cc`,
+        borderColor: colors[group],
+        borderWidth: 1.5
+      }))
+    },
+    options: {
+      ...common,
+      onClick: (_event, elements, chart) => {
+        if (!elements.length) return;
+        const point = chart.data.datasets[elements[0].datasetIndex].data[elements[0].index];
+        if (point?.project?.id) openInitiativeModal(point.project.id);
+      },
+      plugins: {
+        ...common.plugins,
+        legend: { ...common.plugins.legend, position: "bottom" },
+        quadrantGuide: { xThreshold: medianCost, yThreshold: 1 },
+        tooltip: {
+          ...common.plugins.tooltip,
+          callbacks: {
+            title: items => items[0]?.raw?.project?.initiative_name || "Initiative",
+            label: context => [
+              `Approved budget: ${formatRinggit(context.raw.x)}`,
+              `CBA ratio: ${Number(context.raw.y).toFixed(2)}`,
+              `Priority: ${normalizePriorityGroup(context.raw.project)}`
+            ]
+          }
+        }
+      },
+      scales: {
+        x: { beginAtZero: true, grid: { color: EXECUTIVE_COLORS.grid }, ticks: { color: EXECUTIVE_COLORS.text, callback: value => compactRinggit(value) }, title: { display: true, text: `${selectedYearLabel()} approved budget`, color: EXECUTIVE_COLORS.text } },
+        y: { beginAtZero: true, grid: { color: EXECUTIVE_COLORS.grid }, ticks: { color: EXECUTIVE_COLORS.text }, title: { display: true, text: "CBA ratio", color: EXECUTIVE_COLORS.text } }
+      }
+    }
+  });
+
   renderExecutivePillarChart(records);
-  const fits=["Enabler","Supporting Activity","Core Initiative","Duplicate / Consolidate","Needs Validation","BAU · Supporting Enhancement","Policy Review"];
-  charts.adminHome31Fit=new Chart($("#admin-home31-fit-chart"),{type:"doughnut",data:{labels:fits,datasets:[{data:fits.map(f=>records.filter(p=>deriveHome31Fit(p)===f).length),backgroundColor:["#d1ad63","#7f99af","#57999b","#6f86a0","#d9b769","#a76a6f","#8aa1b1"],borderColor:"#102f49",borderWidth:4,cutout:"62%"}]},options:common});
+
+  const fitOrder = ["Core Initiative", "Enabler", "Supporting Activity", "BAU · Supporting Enhancement", "Policy Review", "Duplicate / Consolidate", "Needs Validation"];
+  const fitPalette = [EXECUTIVE_SERIES_COLORS.gold, EXECUTIVE_SERIES_COLORS.teal, EXECUTIVE_SERIES_COLORS.blue, EXECUTIVE_SERIES_COLORS.slate, EXECUTIVE_SERIES_COLORS.green, "#9a7c6f", EXECUTIVE_SERIES_COLORS.red];
+  const fitData = fitOrder.map((label, index) => ({ label, value: records.filter(project => deriveHome31Fit(project) === label).length, color: fitPalette[index] })).filter(item => item.value > 0);
+  const safeFitData = fitData.length ? fitData : [{ label: "No classified records", value: 1, color: "#47667c" }];
+
+  charts.adminHome31Fit = new Chart($("#admin-home31-fit-chart"), {
+    type: "doughnut",
+    data: {
+      labels: safeFitData.map(item => item.label),
+      datasets: [{ data: safeFitData.map(item => item.value), backgroundColor: safeFitData.map(item => item.color), borderColor: "#102f49", borderWidth: 3, cutout: "66%" }]
+    },
+    options: { ...common, plugins: { ...common.plugins, legend: { ...common.plugins.legend, position: "bottom" } } }
+  });
+
   renderLiveDepartmentComparison();
-  $("#admin-delivery-footnote").textContent=`${selectedYearLabel()} quarter load uses action-plan, start and target dates. Undated initiatives are excluded.`;
-  $("#admin-matrix-footnote").textContent=`Click a bubble to open its record. Cost follows ${costBasisLabel().toLowerCase()}.`;
+  $("#admin-delivery-footnote").textContent = `${selectedYearLabel()} quarter load uses action-plan, start and target dates. Undated initiatives are excluded.`;
+  $("#admin-matrix-footnote").textContent = matrixRecords.length
+    ? `Quadrants use median approved budget ${compactRinggit(medianCost)} and CBA ratio 1.00 as decision guides. Click a bubble to open its record.`
+    : `Add both ${costBasisLabel().toLowerCase()} and CBA ratio to display initiatives in the matrix.`;
 }
 function renderLiveDepartmentComparison() {
   charts.adminDepartmentCost?.destroy(); if(typeof Chart==="undefined") return;
   const d26=departmentCostData(projectsForYear("2026")),d27=departmentCostData(projectsForYear("2027")),m26=new Map(d26.map(i=>[i.label,i.value])),m27=new Map(d27.map(i=>[i.label,i.value]));
   const labels=[...new Set([...m26.keys(),...m27.keys()])].map(label=>({label,total:(m26.get(label)||0)+(m27.get(label)||0)})).sort((a,b)=>b.total-a.total).slice(0,12).map(i=>i.label);
-  charts.adminDepartmentCost=new Chart($("#admin-department-cost-chart"),{type:"bar",data:{labels,datasets:[{label:"AMP2026 Approved Budget",data:labels.map(l=>m26.get(l)||0),backgroundColor:EXECUTIVE_COLORS.blue,borderRadius:6},{label:"AMP2027 Post-Challenge Cost",data:labels.map(l=>m27.get(l)||0),backgroundColor:EXECUTIVE_COLORS.gold,borderRadius:6}]},options:{...executiveChartOptions(),indexAxis:"y",onClick:(_e,elements)=>{if(!elements.length)return;selectedAdminYear=elements[0].datasetIndex===0?"2026":"2027";$("#admin-year-select").value=selectedAdminYear;updateAdminYearBadge();$("#admin-search").value=labels[elements[0].index];showModule("admin-portfolio");renderAdminPortfolio();},scales:executiveMoneyScales()}});
+  charts.adminDepartmentCost=new Chart($("#admin-department-cost-chart"),{type:"bar",data:{labels,datasets:[{label:"AMP2026 Approved Budget",data:labels.map(l=>m26.get(l)||0),backgroundColor:EXECUTIVE_COLORS.blue,borderRadius:6},{label:"AMP2027 Approved Budget",data:labels.map(l=>m27.get(l)||0),backgroundColor:EXECUTIVE_COLORS.gold,borderRadius:6}]},options:{...executiveChartOptions(),indexAxis:"y",onClick:(_e,elements)=>{if(!elements.length)return;selectedAdminYear=elements[0].datasetIndex===0?"2026":"2027";$("#admin-year-select").value=selectedAdminYear;updateAdminYearBadge();$("#admin-search").value=labels[elements[0].index];showModule("admin-portfolio");renderAdminPortfolio();},scales:executiveMoneyScales()}});
   const t26=projectsForYear("2026").reduce((s,p)=>s+projectPortfolioCost(p),0),t27=projectsForYear("2027").reduce((s,p)=>s+projectPortfolioCost(p),0);
-  $("#admin-cost-concentration-footnote").textContent=`Live sources: AMP2026 approved budget ${formatRinggit(t26)}; AMP2027 post-challenge cost ${formatRinggit(t27)}. Click a bar to open that year and department.`;
+  $("#admin-cost-concentration-footnote").textContent=`Live sources: AMP2026 approved budget ${formatRinggit(t26)}; AMP2027 approved budget ${formatRinggit(t27)}. Click a bar to open that year and department.`;
 }
-function renderExecutivePillarChart(records=projectsForYear()) {
-  charts.adminPillar?.destroy(); if(typeof Chart==="undefined")return;
-  const data=pillarData(pillarMetric,records);
-  charts.adminPillar=new Chart($("#admin-pillar-chart"),{type:"bar",data:{labels:data.map(i=>shortPillar(i.label)),datasets:[{label:pillarMetric==="count"?"Initiatives":"Portfolio cost",data:data.map(i=>i.value),backgroundColor:EXECUTIVE_COLORS.gold,borderRadius:7}]},options:{...executiveChartOptions(),indexAxis:"y",onClick:(_e,elements)=>{if(!elements.length)return;$("#admin-pillar-filter").value=data[elements[0].index].label;showModule("admin-portfolio");renderAdminPortfolio();},plugins:{...executiveChartOptions().plugins,legend:{display:false}},scales:pillarMetric==="cost"?executiveMoneyScales():executiveCountScales()}});
+function renderExecutivePillarChart(records = projectsForYear()) {
+  charts.adminPillar?.destroy();
+  if (typeof Chart === "undefined") return;
+  const data = pillarData(pillarMetric, records);
+  const palette = ["#d1ad63", "#57999b", "#78a8c4", "#6ca69b", "#7892a6"];
+  charts.adminPillar = new Chart($("#admin-pillar-chart"), {
+    type: "bar",
+    data: {
+      labels: data.map(item => shortPillar(item.label)),
+      datasets: [{
+        label: pillarMetric === "count" ? "Initiatives" : "Portfolio cost",
+        data: data.map(item => item.value),
+        backgroundColor: data.map((_item, index) => palette[index % palette.length]),
+        borderRadius: 7,
+        borderSkipped: false,
+        maxBarThickness: 34
+      }]
+    },
+    options: {
+      ...executiveChartOptions(),
+      indexAxis: "y",
+      onClick: (_event, elements) => {
+        if (!elements.length) return;
+        adminQuickFilter = "";
+        resetAdminFilterControls();
+        $("#admin-pillar-filter").value = data[elements[0].index].label;
+        showModule("admin-portfolio");
+      },
+      plugins: { ...executiveChartOptions().plugins, legend: { display: false } },
+      scales: pillarMetric === "cost" ? executiveMoneyScales() : executiveCountScales()
+    }
+  });
 }
 function pillarData(metric="count",records=projectsForYear()) {return pillars.map(p=>{const related=records.filter(r=>r.strategic_pillar===p);return{label:p,value:metric==="cost"?related.reduce((s,r)=>s+projectPortfolioCost(r),0):related.length};}).sort((a,b)=>b.value-a.value);}
 function departmentCostData(records=projectsForYear()) {const map=new Map();records.forEach(p=>{const d=p.department||"Not recorded";map.set(d,(map.get(d)||0)+projectPortfolioCost(p));});return[...map.entries()].map(([label,value])=>({label,value})).sort((a,b)=>b.value-a.value);}
 function departmentReadinessData(records=projectsForYear()) {const map=new Map();records.forEach(p=>{const d=p.department||"Not recorded",c=map.get(d)||{total:0,count:0};c.total+=calculateProjectReadiness(p).score;c.count++;map.set(d,c);});return[...map.entries()].map(([label,d])=>({label,value:Math.round(d.total/d.count)})).sort((a,b)=>a.value-b.value);}
-function quarterlyDeliveryData(records=projectsForYear()) {const ranges=records.map(project=>({project,range:extractProjectDateRange(project)})).filter(i=>i.range);const fallback=selectedAdminYear==="all"?new Date().getFullYear():Number(selectedAdminYear);const min=ranges.length?Math.min(...ranges.map(i=>i.range.start.getFullYear())):fallback,max=ranges.length?Math.max(...ranges.map(i=>i.range.end.getFullYear())):fallback,quarters=[];for(let year=min;year<=Math.min(min+4,Math.max(min,max));year++)for(let q=1;q<=4;q++){const sm=(q-1)*3;quarters.push({label:`${year} Q${q}`,start:new Date(year,sm,1),end:new Date(year,sm+3,0,23,59,59)});}return{labels:quarters.map(q=>q.label),active:quarters.map(q=>ranges.filter(i=>i.range.start<=q.end&&i.range.end>=q.start).length),priority:quarters.map(q=>ranges.filter(i=>i.range.start<=q.end&&i.range.end>=q.start&&normalizePriorityGroup(i.project)==="Strategic Priority").length)};}
-function bindExecutiveKpiActions() {
-  $$('[data-executive-action]').forEach(card=>{
-    if(card.dataset.actionBound==="true") return;
-    card.dataset.actionBound="true";
-    const activate=()=>{
-      const action=card.dataset.executiveAction;
-      executivePortfolioFocus=["risk","priority","approved","budget-gap","readiness"].includes(action)?action:"";
-      $("#admin-search").value="";$("#admin-status-filter").value="";$("#admin-pillar-filter").value="";$("#admin-risk-filter").value="";
-      showModule("admin-portfolio");renderAdminPortfolio();
-    };
-    card.addEventListener("click",activate);
-    card.addEventListener("keydown",event=>{if(event.key==="Enter"||event.key===" "){event.preventDefault();activate();}});
+function quarterlyDeliveryData(records = projectsForYear()) {
+  const ranges = records.map(project => ({ project, range: extractProjectDateRange(project) })).filter(item => item.range);
+  const fallback = selectedAdminYear === "all" ? new Date().getFullYear() : Number(selectedAdminYear);
+  const min = ranges.length ? Math.min(...ranges.map(item => item.range.start.getFullYear())) : fallback;
+  const max = ranges.length ? Math.max(...ranges.map(item => item.range.end.getFullYear())) : fallback;
+  const quarters = [];
+  for (let year = min; year <= Math.min(min + 4, Math.max(min, max)); year += 1) {
+    for (let quarter = 1; quarter <= 4; quarter += 1) {
+      const startMonth = (quarter - 1) * 3;
+      quarters.push({ label: `${year} Q${quarter}`, start: new Date(year, startMonth, 1), end: new Date(year, startMonth + 3, 0, 23, 59, 59) });
+    }
+  }
+  const activeInQuarter = quarter => ranges.filter(item => item.range.start <= quarter.end && item.range.end >= quarter.start);
+  return {
+    labels: quarters.map(quarter => quarter.label),
+    planning: quarters.map(quarter => activeInQuarter(quarter).filter(item => ["Planning", "On Hold"].includes(item.project.status)).length),
+    inProgress: quarters.map(quarter => activeInQuarter(quarter).filter(item => item.project.status === "In Progress").length),
+    atRisk: quarters.map(quarter => activeInQuarter(quarter).filter(item => item.project.status === "At Risk").length),
+    completed: quarters.map(quarter => activeInQuarter(quarter).filter(item => item.project.status === "Completed").length),
+    priority: quarters.map(quarter => activeInQuarter(quarter).filter(item => normalizePriorityGroup(item.project) === "Strategic Priority").length)
+  };
+}
+function getFilteredAdminPortfolioRecords() {
+  const query = ($("#admin-search").value || "").toLowerCase();
+  const status = $("#admin-status-filter").value || "";
+  const pillar = $("#admin-pillar-filter").value || "";
+  const risk = $("#admin-risk-filter").value || "";
+  return projectsForYear().filter(project => {
+    const haystack = [projectImplementationYear(project), project.initiative_name, project.accountable_owner, project.executive_sponsor, project.delivery_lead, project.department, project.initiative_category, project.system_type, project.priority_status].join(" ").toLowerCase();
+    return matchesAdminQuickFilter(project) &&
+      (!query || haystack.includes(query)) &&
+      (!status || project.status === status) &&
+      (!pillar || project.strategic_pillar === pillar) &&
+      (!risk || project.risk_level === risk);
   });
 }
-function getFilteredAdminPortfolioRecords() {const query=($("#admin-search").value||"").toLowerCase(),status=$("#admin-status-filter").value||"",pillar=$("#admin-pillar-filter").value||"",risk=$("#admin-risk-filter").value||"";return projectsForYear().filter(p=>{const profile=profileFor(p.created_by),hay=[projectImplementationYear(p),p.initiative_name,p.accountable_owner,p.executive_sponsor,p.delivery_lead,p.department,p.initiative_category,p.system_type,p.priority_status,profile?.full_name,profile?.email].join(" ").toLowerCase(),focusMatch=!executivePortfolioFocus||(executivePortfolioFocus==="risk"&&(p.status==="At Risk"||["High","Extreme"].includes(p.risk_level)))||(executivePortfolioFocus==="priority"&&(["Strategic Priority","Corporate Priority"].includes(p.priority_status)||p.priority==="Strategic"))||(executivePortfolioFocus==="approved"&&financialFieldConfirmed(p,"approved_budget"))||(executivePortfolioFocus==="budget-gap"&&!financialFieldConfirmed(p,"approved_budget"))||(executivePortfolioFocus==="readiness"&&calculateProjectReadiness(p).score<100);return focusMatch&&(!query||hay.includes(query))&&(!status||p.status===status)&&(!pillar||p.strategic_pillar===pillar)&&(!risk||p.risk_level===risk);});}
 function renderAdminPortfolio() {
   if(currentProfile?.role!=="super_admin")return;const yearRecords=projectsForYear(),filtered=getFilteredAdminPortfolioRecords(),cost=filtered.reduce((s,p)=>s+projectPortfolioCost(p),0),approved=filtered.filter(p=>financialFieldConfirmed(p,"approved_budget")).length,atRisk=filtered.filter(p=>p.status==="At Risk"||["High","Extreme"].includes(p.risk_level)).length,ready=filtered.filter(p=>Number(p.readiness_score||0)>=80&&!["High","Extreme"].includes(p.risk_level)&&p.status!=="At Risk").length,today=new Date().toISOString().slice(0,10),ownership=filtered.filter(p=>p.executive_sponsor&&p.accountable_owner&&p.delivery_lead).length,evidence=filtered.length?Math.round(filtered.reduce((s,p)=>s+Number(p.evidence_completeness||0),0)/filtered.length):0,ict=filtered.filter(p=>p.ict_classification==="New - Pending ICT review"||((p.system_type&&p.system_type!=="Non System")&&!p.ict_classification)).length,hr=filtered.filter(p=>["Required","To be confirmed"].includes(p.hr_collaboration_status)&&!["Supported","Not required"].includes(p.hr_review_status)).length,overdue=filtered.filter(p=>p.target_date&&p.target_date<today&&p.status!=="Completed").length;
   $("#portfolio-kpi-total").textContent=yearRecords.length;$("#portfolio-kpi-filtered").textContent=filtered.length;$("#portfolio-kpi-cost").textContent=compactRinggit(cost);$("#portfolio-kpi-budget").textContent=`${filtered.length?Math.round(approved/filtered.length*100):0}%`;$("#portfolio-kpi-risk").textContent=atRisk;$("#portfolio-kpi-ready").textContent=ready;$("#portfolio-table-count").textContent=`${selectedYearLabel()} · ${filtered.length} record${filtered.length===1?"":"s"}`;$("#portfolio-assurance-ownership").textContent=`${filtered.length?Math.round(ownership/filtered.length*100):0}%`;$("#portfolio-assurance-evidence").textContent=`${evidence}%`;$("#portfolio-assurance-ict").textContent=ict;$("#portfolio-assurance-hr").textContent=hr;$("#portfolio-assurance-overdue").textContent=overdue;
-  const filterCount=[$("#admin-search").value,$("#admin-status-filter").value,$("#admin-pillar-filter").value,$("#admin-risk-filter").value].filter(Boolean).length;$("#portfolio-selection-badge").textContent=filterCount?`${selectedYearLabel()} · ${filterCount} active filters`:selectedYearLabel();
+  const filterCount=[$("#admin-search").value,$("#admin-status-filter").value,$("#admin-pillar-filter").value,$("#admin-risk-filter").value].filter(Boolean).length+(adminQuickFilter?1:0);const quickLabel=adminQuickFilterLabel();$("#portfolio-selection-badge").textContent=quickLabel?`${selectedYearLabel()} · ${quickLabel}`:filterCount?`${selectedYearLabel()} · ${filterCount} active filters`:selectedYearLabel();
   const topD=aggregateFiltered(filtered,p=>p.department||"Not recorded",projectPortfolioCost)[0],topP=aggregateFiltered(filtered,p=>p.strategic_pillar||"Not recorded",()=>1)[0];
   $("#portfolio-selection-insight").textContent=filtered.length?`${selectedYearLabel()} selection contains ${filtered.length} initiatives with ${formatRinggit(cost)} under the ${costBasisLabel().toLowerCase()} rule. ${atRisk} require risk attention and ${ready} meet the delivery-ready rule.`:`No ${selectedYearLabel()} initiative matches the selected filters.`;
-  $("#portfolio-selection-facts").innerHTML=`<article><strong>${escapeHtml(topD?.label||"No data")}</strong><span>Highest selected cost: ${topD?compactRinggit(topD.value):"RM0"}</span></article><article><strong>${escapeHtml(shortPillar(topP?.label||"No data"))}</strong><span>Largest concentration: ${topP?.value||0} records</span></article><article><strong>${evidence}% evidence maturity</strong><span>${hr} HR and ${ict} ICT follow-ups remain.</span></article>`;
-  $("#admin-portfolio-table tbody").innerHTML=filtered.length?filtered.map(p=>{const profile=profileFor(p.created_by);return`<tr><td><span class="portfolio-year-pill">AMP${projectImplementationYear(p)}</span></td><td><strong>${escapeHtml(p.initiative_name)}</strong></td><td>${escapeHtml(profile?.full_name||profile?.email||"Unknown")}</td><td>${escapeHtml(p.department)}</td><td>${escapeHtml(p.initiative_category||"Not recorded")}</td><td>${escapeHtml(p.system_type||"Not recorded")}</td><td>${escapeHtml(p.priority_status||"Not assessed")}</td><td>${escapeHtml(p.strategic_pillar)}</td><td><span class="status-pill">${escapeHtml(p.status)}</span></td><td><span class="risk-pill">${escapeHtml(p.risk_level)}</span></td><td>${financialFieldConfirmed(p,"approved_budget") ? formatRinggit(p.approved_budget) : "Not recorded"}</td><td>${Number(p.readiness_score||0)}%</td><td>${progressBar(p.progress)}</td><td><button class="text-button" data-admin-edit="${p.id}" type="button">Edit</button></td></tr>`;}).join(""):'<tr><td colspan="14">No records match the active year and filters.</td></tr>';
+  $("#portfolio-selection-facts").innerHTML=`<article><strong>${escapeHtml(topD?.label||"No data")}</strong><span>Highest approved budget: ${topD?compactRinggit(topD.value):"RM0"}</span></article><article><strong>${escapeHtml(shortPillar(topP?.label||"No data"))}</strong><span>Largest concentration: ${topP?.value||0} records</span></article><article><strong>${evidence}% evidence maturity</strong><span>${hr} HR and ${ict} ICT follow-ups remain.</span></article>`;
+  $("#admin-portfolio-table tbody").innerHTML=filtered.length?filtered.map(p=>`<tr><td><span class="portfolio-year-pill">AMP${projectImplementationYear(p)}</span></td><td><strong>${escapeHtml(p.initiative_name)}</strong></td><td>${escapeHtml(p.accountable_owner||"Not recorded")}</td><td>${escapeHtml(p.department)}</td><td>${escapeHtml(p.initiative_category||"Not recorded")}</td><td>${escapeHtml(p.system_type||"Not recorded")}</td><td>${escapeHtml(p.priority_status||"Not assessed")}</td><td>${escapeHtml(p.strategic_pillar)}</td><td><span class="status-pill">${escapeHtml(p.status)}</span></td><td><span class="risk-pill">${escapeHtml(p.risk_level)}</span></td><td>${financialFieldConfirmed(p,"approved_budget") ? formatRinggit(p.approved_budget) : "Not recorded"}</td><td>${Number(p.readiness_score||0)}%</td><td>${progressBar(p.progress)}</td><td><button class="text-button" data-admin-edit="${p.id}" type="button">Edit</button></td></tr>`).join(""):'<tr><td colspan="14">No records match the active year and filters.</td></tr>';
   $$('[data-admin-edit]').forEach(b=>b.addEventListener('click',()=>openInitiativeModal(b.dataset.adminEdit)));
 }
 function safeCsvCell(value) {
@@ -2150,7 +2558,7 @@ function safeCsvCell(value) {
   if (/^[=+\-@]/.test(text)) text = `'${text}`;
   return `"${text.replaceAll('"', '""')}"`;
 }
-function exportAdminPortfolioCsv() {if(currentProfile?.role!=="super_admin")return;const records=getFilteredAdminPortfolioRecords(),headers=["Implementation Year","Initiative","Department","Executive Sponsor","Project Owner Name","Delivery Lead","Category","System Type","Priority Status","Strategic Pillar","Status","Risk","Year-Specific Portfolio Cost","Approved Budget","Readiness","Progress","Evidence Completeness"],rows=records.map(p=>[projectImplementationYear(p),p.initiative_name,p.department,p.executive_sponsor,p.accountable_owner,p.delivery_lead,p.initiative_category,p.system_type,p.priority_status,p.strategic_pillar,p.status,p.risk_level,projectPortfolioCost(p),financialFieldConfirmed(p,"approved_budget")?(p.approved_budget??0):"",p.readiness_score??0,p.progress??0,p.evidence_completeness??0]),csv="\uFEFF"+[headers,...rows].map(r=>r.map(safeCsvCell).join(',')).join('\n'),blob=new Blob([csv],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=`HOME31-${selectedYearLabel().replaceAll(' ','-')}-Portfolio-${new Date().toISOString().slice(0,10)}.csv`;link.click();URL.revokeObjectURL(url);}
+function exportAdminPortfolioCsv() {if(currentProfile?.role!=="super_admin")return;const records=getFilteredAdminPortfolioRecords(),headers=["Implementation Year","Initiative","Department","Executive Sponsor","Project Owner Name","Delivery Lead","Category","System Type","Priority Status","Strategic Pillar","Status","Risk","Approved Budget","Post-Challenge Cost","Readiness","Progress","Evidence Completeness"],rows=records.map(p=>[projectImplementationYear(p),p.initiative_name,p.department,p.executive_sponsor,p.accountable_owner,p.delivery_lead,p.initiative_category,p.system_type,p.priority_status,p.strategic_pillar,p.status,p.risk_level,financialFieldConfirmed(p,"approved_budget")?(p.approved_budget??0):"",financialFieldConfirmed(p,"estimated_cost_post_challenge")?(p.estimated_cost_post_challenge??0):"",p.readiness_score??0,p.progress??0,p.evidence_completeness??0]),csv="\uFEFF"+[headers,...rows].map(r=>r.map(safeCsvCell).join(',')).join('\n'),blob=new Blob([csv],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=`HOME31-${selectedYearLabel().replaceAll(' ','-')}-Portfolio-${new Date().toISOString().slice(0,10)}.csv`;link.click();URL.revokeObjectURL(url);}
 function renderAdminExceptions() {
   if(currentProfile?.role!=="super_admin")return;const records=projectsForYear(),today=new Date().toISOString().slice(0,10),risk=records.filter(p=>["High","Extreme"].includes(p.risk_level)),readiness=records.filter(p=>Number(p.readiness_score||0)<70),overdue=records.filter(p=>p.target_date&&p.target_date<today&&p.status!=="Completed"),hrPending=records.filter(p=>["Required","To be confirmed"].includes(p.hr_collaboration_status)&&!["Supported","Not required"].includes(p.hr_review_status)),ictPending=records.filter(p=>p.ict_classification==="New - Pending ICT review"||((p.system_type&&p.system_type!=="Non System")&&!p.ict_classification)),evidence=records.filter(p=>Number(p.evidence_completeness||0)<70);
   $("#admin-exception-risk-count").textContent=risk.length;$("#admin-exception-readiness-count").textContent=readiness.length;$("#admin-exception-overdue-count").textContent=overdue.length;$("#admin-exception-hr-count").textContent=hrPending.length;$("#admin-exception-ict-count").textContent=ictPending.length;$("#admin-exception-evidence-count").textContent=evidence.length;$("#admin-exception-risk-badge").textContent=risk.length;$("#admin-exception-readiness-badge").textContent=readiness.length;$("#admin-exception-overdue-badge").textContent=overdue.length;

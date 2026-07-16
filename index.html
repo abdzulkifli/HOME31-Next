@@ -4,13 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; form-action 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' https://*.supabase.co; img-src 'self' data:; upgrade-insecure-requests">
-  <meta name="description" content="HOME31 Enterprise Management Platform V7.7.9 — senior-friendly accessible edition">
+  <meta name="description" content="HOME31 Enterprise Management Platform V7.7.8 — senior-friendly accessible edition">
   <meta name="theme-color" content="#061b2b">
-  <title>HOME31 Enterprise Management Platform V7.7.9</title>
+  <title>HOME31 Enterprise Management Platform V7.7.8</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=7.7.9">
+  <link rel="stylesheet" href="styles.css?v=7.7.8">
 </head>
 <body>
 
@@ -207,7 +207,7 @@
           <span class="sidebar-logout-icon" aria-hidden="true">↪</span>
           <span class="sidebar-logout-label">Sign out</span>
         </button>
-        <span class="sidebar-version">HOME31 Platform V7.7.9</span>
+        <span class="sidebar-version">HOME31 Platform V7.7.8</span>
       </div>
     </aside>
 
@@ -341,7 +341,7 @@
             <div>
               <span class="executive-kicker">HOME31 • ENTERPRISE COMMAND CENTRE</span>
               <h2>Executive Portfolio Overview</h2>
-              <p>A calm management view of portfolio scale, approved budget, delivery readiness, risk and decisions requiring attention.</p>
+              <p>One management view of strategic readiness, delivery load, cost challenge, priority, risk, HR impact, ICT dependency and evidence certainty.</p>
             </div>
             <div class="executive-hero-actions">
               <button id="admin-overview-refresh" class="executive-button ghost" type="button">↻ Refresh</button>
@@ -350,49 +350,49 @@
           </div>
 
           <div class="executive-kpi-grid">
-            <article class="executive-kpi-card featured kpi-neutral" tabindex="0" role="button" data-executive-action="portfolio" aria-label="Open all portfolio items">
+            <article class="executive-kpi-card featured">
               <div class="kpi-icon">▦</div>
               <span>Portfolio items</span>
               <strong id="admin-kpi-total">0</strong>
               <small id="admin-kpi-total-note">Enterprise initiatives</small>
             </article>
-            <article class="executive-kpi-card kpi-ready" tabindex="0" role="button" data-executive-action="readiness" aria-label="Open initiatives requiring readiness follow-up">
+            <article class="executive-kpi-card">
               <div class="kpi-icon">✓</div>
               <span>Strategic readiness</span>
               <strong id="admin-kpi-health">0%</strong>
               <small id="admin-kpi-health-note">Completeness across seven checks</small>
             </article>
-            <article class="executive-kpi-card kpi-budget" tabindex="0" role="button" data-executive-action="portfolio" aria-label="Open portfolio cost records">
+            <article class="executive-kpi-card">
               <div class="kpi-icon">RM</div>
-              <span id="admin-kpi-cost-label">Selected portfolio cost</span>
+              <span id="admin-kpi-cost-label">Portfolio cost basis</span>
               <strong id="admin-kpi-effective-cost">RM0</strong>
-              <small id="admin-kpi-effective-note">Year-specific cost basis</small>
+              <small id="admin-kpi-effective-note">Approved Budget values</small>
             </article>
-            <article class="executive-kpi-card positive kpi-positive" tabindex="0" role="button" data-executive-action="portfolio" aria-label="Open portfolio challenge records">
+            <article class="executive-kpi-card positive">
               <div class="kpi-icon">↓</div>
-              <span>Challenge reduction</span>
+              <span>Challenge movement</span>
               <strong id="admin-kpi-reduction">RM0</strong>
-              <small id="admin-kpi-reduction-note">Versus original estimate</small>
+              <small id="admin-kpi-reduction-note">Original estimate versus post-challenge cost</small>
             </article>
-            <article class="executive-kpi-card priority kpi-priority" tabindex="0" role="button" data-executive-action="priority" aria-label="Open strategic priority initiatives">
+            <article class="executive-kpi-card priority">
               <div class="kpi-icon">★</div>
               <span>Strategic priority</span>
               <strong id="admin-kpi-priority">0</strong>
               <small>Corporate / strategic priority records</small>
             </article>
-            <article class="executive-kpi-card danger kpi-danger" tabindex="0" role="button" data-executive-action="risk" aria-label="Open initiatives at risk">
+            <article class="executive-kpi-card danger">
               <div class="kpi-icon">!</div>
               <span>At risk</span>
               <strong id="admin-kpi-risk">0</strong>
               <small>High, extreme or at-risk status</small>
             </article>
-            <article class="executive-kpi-card positive kpi-budget" tabindex="0" role="button" data-executive-action="approved" aria-label="Open approved budget records">
+            <article class="executive-kpi-card positive">
               <div class="kpi-icon">RM</div>
-              <span>Approved budget</span>
+              <span>Post-challenge cost</span>
               <strong id="admin-kpi-approved-budget">RM0</strong>
-              <small id="admin-kpi-approved-budget-note">Confirmed management allocation</small>
+              <small id="admin-kpi-approved-budget-note">Confirmed challenge-session position</small>
             </article>
-            <article class="executive-kpi-card kpi-coverage" tabindex="0" role="button" data-executive-action="budget-gap" aria-label="Open records missing approved budget">
+            <article class="executive-kpi-card">
               <div class="kpi-icon">%</div>
               <span>Budget coverage</span>
               <strong id="admin-kpi-approved-coverage">0%</strong>
@@ -443,12 +443,12 @@
           </div>
 
           <div class="executive-dashboard-grid">
-            <article class="executive-panel chart-panel">
+            <article id="executive-budget-panel" class="executive-panel chart-panel">
               <div class="executive-panel-heading">
                 <div>
                   <span class="executive-section-code">BUDGET 01</span>
-                  <h3>Budget Journey</h3>
-                  <p>Movement from original estimate through challenge, proposal and approved allocation.</p>
+                  <h3>Budget Journey & Challenge Impact</h3>
+                  <p>Original estimate, confirmed post-challenge position and downstream budget fields.</p>
                 </div>
               </div>
               <div class="executive-chart-shell large"><canvas id="admin-budget-journey-chart" role="img" tabindex="0" aria-label="Budget journey and challenge impact chart"></canvas></div>
@@ -461,20 +461,25 @@
                 <div>
                   <span class="executive-section-code teal">READINESS 02</span>
                   <h3>Strategic Register Readiness</h3>
-                  <p>Derived from description, dated plan, cost certainty, priority, ICT classification, pillar and HOME31 fit.</p>
+                  <p>Derived from description, dated plan, confirmed Approved Budget, priority, ICT classification, pillar and HOME31 fit.</p>
                 </div>
               </div>
-              <div class="readiness-composite">
-                <div class="readiness-summary-wrap">
-                  <div class="readiness-score-card" aria-label="Strategic register readiness percentage">
-                  <div class="readiness-gauge-label">
-                    <strong id="admin-readiness-gauge-value">0%</strong>
-                    <span>Strategic readiness</span>
+              <div class="readiness-composite readiness-composite-modern">
+                <div class="readiness-score-card">
+                  <span>Strategic readiness</span>
+                  <strong id="admin-readiness-gauge-value">0%</strong>
+                  <div class="readiness-score-track" role="progressbar" aria-label="Strategic readiness" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                    <i id="admin-readiness-progress"></i>
                   </div>
-                  <div class="readiness-score-track" aria-hidden="true"><i id="admin-readiness-score-bar"></i></div>
-                  </div>
+                  <small id="admin-readiness-status">Readiness status will appear after data is loaded.</small>
                 </div>
-                <div id="admin-department-readiness-bars" class="department-readiness-bars"></div>
+                <div>
+                  <div class="readiness-list-heading">
+                    <strong>Department readiness</strong>
+                    <span>Select a department to open its records</span>
+                  </div>
+                  <div id="admin-department-readiness-bars" class="department-readiness-bars"></div>
+                </div>
               </div>
               <div id="admin-readiness-footnote" class="executive-chart-note"></div>
             </article>
@@ -497,8 +502,8 @@
               <div class="executive-panel-heading">
                 <div>
                   <span class="executive-section-code">DECISION 04</span>
-                  <h3>Cost–Benefit Decision Matrix</h3>
-                  <p>Cost versus benefit, divided into clear decision quadrants. Select a point to open its initiative.</p>
+                  <h3>Cost–Benefit–Complexity Matrix</h3>
+                  <p>Approved budget versus CBA ratio. Bubble size reflects delivery complexity; colour represents priority status.</p>
                 </div>
               </div>
               <div class="executive-chart-shell"><canvas id="admin-cost-benefit-chart" role="img" tabindex="0" aria-label="Cost benefit and complexity matrix"></canvas></div>
@@ -511,7 +516,7 @@
               <div>
                 <span class="executive-section-code">COMPARISON SCOPE</span>
                 <h3>AMP2026 vs AMP2027 Live Management Comparison</h3>
-                <p>Both years are calculated from Supabase records using their respective management cost basis.</p>
+                <p>Both years are calculated from live Supabase records using the same Approved Budget basis.</p>
               </div>
               <span id="admin-comparison-source-status" class="executive-status-chip neutral">Live year records</span>
             </div>
@@ -524,7 +529,7 @@
               <div>
                 <span class="executive-section-code">COMPARISON 03</span>
                 <h3>Department Cost Concentration</h3>
-                <p>Live AMP2026 approved-budget concentration compared with AMP2027 effective post-challenge cost.</p>
+                <p>Live AMP2026 and AMP2027 approved-budget concentration by department.</p>
               </div>
             </div>
             <div class="executive-chart-shell wide"><canvas id="admin-department-cost-chart" role="img" tabindex="0" aria-label="Department cost concentration chart"></canvas></div>
@@ -616,9 +621,9 @@
               <small>After active filters</small>
             </article>
             <article class="admin-command-kpi">
-              <span>Effective cost</span>
+              <span>Approved budget</span>
               <strong id="portfolio-kpi-cost">RM0</strong>
-              <small>Post-challenge cost basis</small>
+              <small>Confirmed portfolio cost basis</small>
             </article>
             <article class="admin-command-kpi">
               <span>Approved coverage</span>
@@ -699,7 +704,7 @@
               <table id="admin-portfolio-table" class="admin-command-table">
                 <thead>
                   <tr>
-                    <th>Year</th><th>Initiative</th><th>Project Owner</th><th>Department</th><th>Category</th><th>System</th><th>Priority Status</th><th>Pillar</th><th>Status</th><th>Risk</th><th>Approved Budget</th><th>Readiness</th><th>Progress</th><th>Action</th>
+                    <th>Year</th><th>Initiative</th><th>Project Owner Name</th><th>Department</th><th>Category</th><th>System</th><th>Priority Status</th><th>Pillar</th><th>Status</th><th>Risk</th><th>Approved Budget</th><th>Readiness</th><th>Progress</th><th>Action</th>
                   </tr>
                 </thead>
                 <tbody></tbody>
@@ -999,7 +1004,7 @@
               <p>Translate the working prototype into a secure, integrated and governable enterprise platform roadmap.</p>
             </div>
             <div class="admin-command-actions">
-              <span class="admin-command-chip good">V7.7.9 foundation</span>
+              <span class="admin-command-chip good">V7.7.8 foundation</span>
             </div>
           </div>
 
@@ -1174,7 +1179,7 @@
           </article>
 
           <div class="admin-command-assurance-strip">
-            <article><strong>V7.7.9</strong><span>Security & accessibility edition</span></article>
+            <article><strong>V7.7.8</strong><span>Security & accessibility edition</span></article>
             <article><strong>Modular</strong><span>Expandable architecture</span></article>
             <article><strong>RBAC</strong><span>Controlled role model</span></article>
             <article><strong>RLS</strong><span>Database security</span></article>
@@ -1226,8 +1231,9 @@
 
           <div class="form-grid">
             <label id="initiative-owner-field" class="field full hidden">
-              <span>Record owner / submit on behalf of</span>
+              <span>Record account / submitter</span>
               <select id="initiative-created-by"></select>
+              <small>This controls which user account can access the record. It is separate from Project Owner Name.</small>
             </label>
 
             <label class="field">
@@ -1836,6 +1842,6 @@
   <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
-  <script type="module" src="app.js?v=7.7.9"></script>
+  <script type="module" src="app.js?v=7.7.8"></script>
 </body>
 </html>
