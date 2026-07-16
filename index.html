@@ -4,9 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; form-action 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' https://*.supabase.co; img-src 'self' data:; upgrade-insecure-requests">
-  <meta name="description" content="HOME31 Enterprise Management Platform V7.7.5 — senior-friendly accessible edition">
+  <meta name="description" content="HOME31 Enterprise Management Platform V7.7.6 — senior-friendly accessible edition">
   <meta name="theme-color" content="#061b2b">
-  <title>HOME31 Enterprise Management Platform V7.7.5</title>
+  <title>HOME31 Enterprise Management Platform V7.7.6</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
@@ -193,7 +193,7 @@
 
       <div class="sidebar-footer">
         <button id="logout-button" class="sidebar-logout" type="button">Sign out</button>
-        <span>HOME31 Platform V7.7.5</span>
+        <span>HOME31 Platform V7.7.6</span>
       </div>
     </aside>
 
@@ -321,11 +321,11 @@
         </section>
 
         <section id="module-admin-overview" class="module executive-command-centre">
-          <div class="executive-hero">
+          <div class="executive-hero executive-briefing-hero">
             <div>
               <span class="executive-kicker">HOME31 • ENTERPRISE COMMAND CENTRE</span>
               <h2>Executive Portfolio Overview</h2>
-              <p>One management view of strategic readiness, delivery load, cost challenge, priority, risk, HR impact, ICT dependency and evidence certainty.</p>
+              <p>A concise management briefing on portfolio scale, approved allocation, readiness, delivery exposure and decisions requiring attention.</p>
             </div>
             <div class="executive-hero-actions">
               <button id="admin-overview-refresh" class="executive-button ghost" type="button">↻ Refresh</button>
@@ -333,56 +333,77 @@
             </div>
           </div>
 
-          <div class="executive-kpi-grid">
-            <article class="executive-kpi-card featured">
-              <div class="kpi-icon">▦</div>
-              <span>Portfolio items</span>
-              <strong id="admin-kpi-total">0</strong>
-              <small id="admin-kpi-total-note">Enterprise initiatives</small>
-            </article>
-            <article class="executive-kpi-card">
-              <div class="kpi-icon">✓</div>
-              <span>Strategic readiness</span>
-              <strong id="admin-kpi-health">0%</strong>
-              <small id="admin-kpi-health-note">Completeness across seven checks</small>
-            </article>
-            <article class="executive-kpi-card">
-              <div class="kpi-icon">RM</div>
-              <span id="admin-kpi-cost-label">Selected portfolio cost</span>
-              <strong id="admin-kpi-effective-cost">RM0</strong>
-              <small id="admin-kpi-effective-note">Year-specific cost basis</small>
-            </article>
-            <article class="executive-kpi-card positive">
-              <div class="kpi-icon">↓</div>
-              <span>Challenge reduction</span>
-              <strong id="admin-kpi-reduction">RM0</strong>
-              <small id="admin-kpi-reduction-note">Versus original estimate</small>
-            </article>
-            <article class="executive-kpi-card priority">
-              <div class="kpi-icon">★</div>
-              <span>Strategic priority</span>
-              <strong id="admin-kpi-priority">0</strong>
-              <small>Corporate / strategic priority records</small>
-            </article>
-            <article class="executive-kpi-card danger">
-              <div class="kpi-icon">!</div>
-              <span>At risk</span>
-              <strong id="admin-kpi-risk">0</strong>
-              <small>High, extreme or at-risk status</small>
-            </article>
-            <article class="executive-kpi-card positive">
-              <div class="kpi-icon">RM</div>
-              <span>Approved budget</span>
-              <strong id="admin-kpi-approved-budget">RM0</strong>
-              <small id="admin-kpi-approved-budget-note">Confirmed management allocation</small>
-            </article>
-            <article class="executive-kpi-card">
-              <div class="kpi-icon">%</div>
-              <span>Budget coverage</span>
-              <strong id="admin-kpi-approved-coverage">0%</strong>
-              <small id="admin-kpi-approved-coverage-note">Approved budget fields populated</small>
-            </article>
-          </div>
+          <section class="executive-snapshot" aria-labelledby="executive-snapshot-title">
+            <div class="executive-snapshot-heading">
+              <div>
+                <span class="executive-section-code">EXECUTIVE SNAPSHOT</span>
+                <h3 id="executive-snapshot-title">What management needs to know first</h3>
+              </div>
+              <span class="executive-snapshot-note">Live portfolio data</span>
+            </div>
+
+            <div class="executive-kpi-primary-grid">
+              <article class="executive-kpi-card executive-kpi-primary featured">
+                <div class="kpi-icon">▦</div>
+                <span>Portfolio items</span>
+                <strong id="admin-kpi-total">0</strong>
+                <small id="admin-kpi-total-note">Enterprise initiatives</small>
+              </article>
+              <article class="executive-kpi-card executive-kpi-primary budget-primary">
+                <div class="kpi-icon">RM</div>
+                <span>Approved budget</span>
+                <strong id="admin-kpi-approved-budget">RM0</strong>
+                <small id="admin-kpi-approved-budget-note">Confirmed management allocation</small>
+              </article>
+              <article class="executive-kpi-card executive-kpi-primary readiness-primary">
+                <div class="kpi-icon">✓</div>
+                <span>Strategic readiness</span>
+                <strong id="admin-kpi-health">0%</strong>
+                <small id="admin-kpi-health-note">Completeness across seven checks</small>
+              </article>
+              <article class="executive-kpi-card executive-kpi-primary danger">
+                <div class="kpi-icon">!</div>
+                <span>At risk</span>
+                <strong id="admin-kpi-risk">0</strong>
+                <small>High, extreme or at-risk status</small>
+              </article>
+            </div>
+
+            <div class="executive-kpi-support-grid">
+              <article class="executive-support-card">
+                <div class="executive-support-icon">RM</div>
+                <div>
+                  <span id="admin-kpi-cost-label">Selected portfolio cost</span>
+                  <strong id="admin-kpi-effective-cost">RM0</strong>
+                  <small id="admin-kpi-effective-note">Year-specific cost basis</small>
+                </div>
+              </article>
+              <article class="executive-support-card positive">
+                <div class="executive-support-icon">↓</div>
+                <div>
+                  <span>Challenge reduction</span>
+                  <strong id="admin-kpi-reduction">RM0</strong>
+                  <small id="admin-kpi-reduction-note">Versus original estimate</small>
+                </div>
+              </article>
+              <article class="executive-support-card priority">
+                <div class="executive-support-icon">★</div>
+                <div>
+                  <span>Strategic priority</span>
+                  <strong id="admin-kpi-priority">0</strong>
+                  <small>Corporate / strategic priority records</small>
+                </div>
+              </article>
+              <article class="executive-support-card coverage">
+                <div class="executive-support-icon">%</div>
+                <div>
+                  <span>Budget coverage</span>
+                  <strong id="admin-kpi-approved-coverage">0%</strong>
+                  <small id="admin-kpi-approved-coverage-note">Approved budget fields populated</small>
+                </div>
+              </article>
+            </div>
+          </section>
 
           <div class="executive-story-grid">
             <article class="executive-panel insight-panel">
@@ -981,7 +1002,7 @@
               <p>Translate the working prototype into a secure, integrated and governable enterprise platform roadmap.</p>
             </div>
             <div class="admin-command-actions">
-              <span class="admin-command-chip good">V7.7.5 foundation</span>
+              <span class="admin-command-chip good">V7.7.6 foundation</span>
             </div>
           </div>
 
@@ -1156,7 +1177,7 @@
           </article>
 
           <div class="admin-command-assurance-strip">
-            <article><strong>V7.7.5</strong><span>Security & accessibility edition</span></article>
+            <article><strong>V7.7.6</strong><span>Security & accessibility edition</span></article>
             <article><strong>Modular</strong><span>Expandable architecture</span></article>
             <article><strong>RBAC</strong><span>Controlled role model</span></article>
             <article><strong>RLS</strong><span>Database security</span></article>
