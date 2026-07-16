@@ -1,7 +1,7 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.8/+esm";
 
-const SUPABASE_URL = "https://ueuvavxdvclnfffujafz.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_AhkBD0Tcki8RECDar7_vkw_fsV_wxX0";
+const SUPABASE_URL = "https://YOUR-PROJECT.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = "YOUR-PUBLISHABLE-KEY";
 const AUTH_REDIRECT_URL = new URL(".", window.location.href).href;
 
 const configured =
@@ -126,6 +126,18 @@ let currentInitiativeFormStep = 1;
 let lastModalTrigger = null;
 let authRouteTimer = null;
 let authRouteRevision = 0;
+
+const INITIATIVE_DRAFT_PREFIX = "home31-initiative-draft-v1";
+const INITIATIVE_DRAFT_DELAY = 800;
+let initiativeFormInitialising = false;
+let initiativeFormDirty = false;
+let initiativeDraftTimer = null;
+let activeInitiativeDraftKey = null;
+let pendingInitiativeDraft = null;
+
+let excelImportRawRows = [];
+let excelImportPreparedRows = [];
+let excelImportLastTrigger = null;
 
 document.addEventListener("DOMContentLoaded", initialise);
 
@@ -378,6 +390,7 @@ function bindEvents() {
   $("#admin-overview-refresh").addEventListener("click", loadAdminData);
   $("#admin-portfolio-refresh").addEventListener("click", loadAdminData);
   $("#admin-export-portfolio").addEventListener("click", exportAdminPortfolioCsv);
+  $("#admin-import-excel").addEventListener("click", openExcelImportModal);
   $("#admin-user-search").addEventListener("input", renderAdminUsers);
   $("#admin-user-role-filter").addEventListener("change", renderAdminUsers);
   $("#admin-user-password-filter").addEventListener("change", renderAdminUsers);
@@ -391,12 +404,35 @@ function bindEvents() {
   );
 
   $("#initiative-form").addEventListener("submit", saveInitiative);
-  $("#close-initiative-modal").addEventListener("click", closeInitiativeModal);
-  $("#cancel-initiative-modal").addEventListener("click", closeInitiativeModal);
+  $("#close-initiative-modal").addEventListener("click", () => requestCloseInitiativeModal());
+  $("#cancel-initiative-modal").addEventListener("click", saveDraftAndCloseInitiativeModal);
+  $("#initiative-save-draft").addEventListener("click", () => saveInitiativeDraft({ announce: true }));
+  $("#initiative-clear-draft").addEventListener("click", discardActiveInitiativeDraft);
+  $("#initiative-restore-draft").addEventListener("click", restorePendingInitiativeDraft);
+  $("#initiative-discard-recovery").addEventListener("click", discardPendingInitiativeDraft);
   $("#initiative-modal").addEventListener("mousedown", event => {
-    if (event.target === event.currentTarget) closeInitiativeModal();
+    if (event.target === event.currentTarget) {
+      setInitiativeDraftStatus("The form remains open. Use Save Draft & Close when you are finished.", "safe");
+    }
   });
   document.addEventListener("keydown", handleInitiativeModalKeydown);
+  window.addEventListener("beforeunload", handleInitiativeBeforeUnload);
+
+  $("#close-excel-import").addEventListener("click", closeExcelImportModal);
+  $("#cancel-excel-import").addEventListener("click", closeExcelImportModal);
+  $("#excel-import-modal").addEventListener("mousedown", event => {
+    if (event.target === event.currentTarget) closeExcelImportModal();
+  });
+  $("#excel-import-file").addEventListener("change", handleExcelImportFileSelection);
+  $("#excel-download-template").addEventListener("click", downloadExcelImportTemplate);
+  $("#excel-validate-file").addEventListener("click", reviewExcelImportFile);
+  $("#confirm-excel-import").addEventListener("click", importPreparedExcelRows);
+  ["#excel-import-created-by", "#excel-import-owner", "#excel-import-pillar", "#excel-import-year", "#excel-import-skip-duplicates"].forEach(selector =>
+    $(selector).addEventListener("change", () => {
+      if (excelImportRawRows.length) prepareExcelImportRows();
+    })
+  );
+  document.addEventListener("keydown", handleExcelImportKeydown);
   $("#initiative-next-step").addEventListener("click", nextInitiativeStep);
   $("#initiative-previous-step").addEventListener("click", previousInitiativeStep);
   $$(".initiative-step").forEach(button =>
@@ -406,10 +442,12 @@ function bindEvents() {
     element.addEventListener("input", () => {
       updateInitiativeFormMetrics();
       renderBudgetSummary();
+      markInitiativeFormChanged();
     });
     element.addEventListener("change", () => {
       updateInitiativeFormMetrics();
       renderBudgetSummary();
+      markInitiativeFormChanged();
     });
   });
   $$(".evidence-status").forEach(element =>
@@ -457,6 +495,14 @@ function resetSessionState() {
   document.body.classList.remove("super-admin-shell", "admin-command-active");
   closeSidebarDrawer();
   $("#initiative-modal")?.classList.add("hidden");
+  $("#excel-import-modal")?.classList.add("hidden");
+  if (initiativeDraftTimer) window.clearTimeout(initiativeDraftTimer);
+  initiativeDraftTimer = null;
+  initiativeFormDirty = false;
+  activeInitiativeDraftKey = null;
+  pendingInitiativeDraft = null;
+  excelImportRawRows = [];
+  excelImportPreparedRows = [];
 }
 
 async function routeSession(revision = authRouteRevision) {
@@ -1471,7 +1517,187 @@ function renderExceptionList(records, detailBuilder) {
 }
 
 
+
+function initiativeDraftStorageKey(recordId = "new") {
+  return `${INITIATIVE_DRAFT_PREFIX}:${currentUser?.id || "anonymous"}:${recordId || "new"}`;
+}
+
+function serializeInitiativeForm() {
+  const values = {};
+  const form = $("#initiative-form");
+  [...form.elements].forEach(element => {
+    if (!element.id || element.type === "submit" || element.type === "button") return;
+    if (element.type === "checkbox" || element.type === "radio") {
+      values[element.id] = Boolean(element.checked);
+    } else {
+      values[element.id] = element.value;
+    }
+  });
+  return values;
+}
+
+function applyInitiativeDraftValues(values = {}) {
+  initiativeFormInitialising = true;
+  Object.entries(values).forEach(([id, value]) => {
+    const element = document.getElementById(id);
+    if (!element) return;
+    if (element.type === "checkbox" || element.type === "radio") {
+      element.checked = Boolean(value);
+    } else {
+      element.value = value ?? "";
+    }
+  });
+  initiativeFormInitialising = false;
+  updateEvidencePresentation();
+  renderBudgetSummary();
+  updateInitiativeFormMetrics();
+}
+
+function markInitiativeFormChanged() {
+  if (initiativeFormInitialising || $("#initiative-modal").classList.contains("hidden")) return;
+  initiativeFormDirty = true;
+  setInitiativeDraftStatus("Unsaved changes — saving draft…", "saving");
+  if (initiativeDraftTimer) window.clearTimeout(initiativeDraftTimer);
+  initiativeDraftTimer = window.setTimeout(() => saveInitiativeDraft(), INITIATIVE_DRAFT_DELAY);
+}
+
+function saveInitiativeDraft({ announce = false } = {}) {
+  if (!activeInitiativeDraftKey || initiativeFormInitialising) return false;
+  if (initiativeDraftTimer) window.clearTimeout(initiativeDraftTimer);
+  initiativeDraftTimer = null;
+
+  const payload = {
+    version: 1,
+    savedAt: new Date().toISOString(),
+    recordId: $("#initiative-id").value || null,
+    step: currentInitiativeFormStep,
+    values: serializeInitiativeForm()
+  };
+
+  try {
+    localStorage.setItem(activeInitiativeDraftKey, JSON.stringify(payload));
+    $("#initiative-clear-draft").classList.remove("hidden");
+    setInitiativeDraftStatus(`Draft saved ${formatDraftTimestamp(payload.savedAt)}.`, "saved");
+    if (announce) showToast("Initiative draft saved on this device.");
+    return true;
+  } catch (error) {
+    console.error("Unable to save initiative draft", error);
+    setInitiativeDraftStatus("Draft could not be saved on this device.", "error");
+    if (announce) showToast("Unable to save the draft in this browser.", true);
+    return false;
+  }
+}
+
+function readInitiativeDraft(key = activeInitiativeDraftKey) {
+  if (!key) return null;
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const draft = JSON.parse(raw);
+    return draft?.values ? draft : null;
+  } catch (_error) {
+    return null;
+  }
+}
+
+function removeInitiativeDraft(key = activeInitiativeDraftKey) {
+  if (!key) return;
+  try {
+    localStorage.removeItem(key);
+  } catch (_error) {
+    // Browser storage can be unavailable in restricted environments.
+  }
+}
+
+function checkForInitiativeDraft(project = null) {
+  const draft = readInitiativeDraft();
+  if (!draft) {
+    $("#initiative-clear-draft").classList.add("hidden");
+    return;
+  }
+
+  if (project?.updated_at && new Date(draft.savedAt).getTime() <= new Date(project.updated_at).getTime()) {
+    removeInitiativeDraft();
+    $("#initiative-clear-draft").classList.add("hidden");
+    return;
+  }
+
+  pendingInitiativeDraft = draft;
+  $("#initiative-clear-draft").classList.remove("hidden");
+  $("#initiative-draft-recovery-copy").textContent =
+    `A draft saved ${formatDraftTimestamp(draft.savedAt)} is available. Restore it or continue with the current record.`;
+  $("#initiative-draft-recovery").classList.remove("hidden");
+  setInitiativeDraftStatus("Saved draft available for recovery.", "recovery");
+}
+
+function restorePendingInitiativeDraft() {
+  if (!pendingInitiativeDraft) return;
+  applyInitiativeDraftValues(pendingInitiativeDraft.values);
+  currentInitiativeFormStep = Math.max(1, Math.min(7, Number(pendingInitiativeDraft.step || 1)));
+  renderInitiativeFormStep();
+  initiativeFormDirty = true;
+  $("#initiative-draft-recovery").classList.add("hidden");
+  setInitiativeDraftStatus(`Draft restored from ${formatDraftTimestamp(pendingInitiativeDraft.savedAt)}.`, "saved");
+  pendingInitiativeDraft = null;
+  showToast("Your unfinished initiative draft has been restored.");
+}
+
+function discardPendingInitiativeDraft() {
+  removeInitiativeDraft();
+  pendingInitiativeDraft = null;
+  $("#initiative-draft-recovery").classList.add("hidden");
+  $("#initiative-clear-draft").classList.add("hidden");
+  setInitiativeDraftStatus("Previous draft discarded. New changes will continue to save automatically.", "safe");
+}
+
+function discardActiveInitiativeDraft() {
+  removeInitiativeDraft();
+  pendingInitiativeDraft = null;
+  $("#initiative-draft-recovery").classList.add("hidden");
+  $("#initiative-clear-draft").classList.add("hidden");
+  setInitiativeDraftStatus(
+    initiativeFormDirty
+      ? "Saved copy discarded. Current unsaved changes remain in the open form."
+      : "Saved draft discarded.",
+    "safe"
+  );
+}
+
+function setInitiativeDraftStatus(message, tone = "safe") {
+  const status = $("#initiative-draft-status");
+  if (!status) return;
+  status.textContent = message;
+  status.dataset.tone = tone;
+}
+
+function formatDraftTimestamp(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "recently";
+  return date.toLocaleString("en-MY", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+}
+
+function handleInitiativeBeforeUnload(event) {
+  if (!initiativeFormDirty || $("#initiative-modal")?.classList.contains("hidden")) return;
+  saveInitiativeDraft();
+  event.preventDefault();
+  event.returnValue = "";
+}
+
 function openInitiativeModal(projectId = null) {
+  initiativeFormInitialising = true;
+  initiativeFormDirty = false;
+  pendingInitiativeDraft = null;
+  if (initiativeDraftTimer) window.clearTimeout(initiativeDraftTimer);
+  initiativeDraftTimer = null;
+  $("#initiative-draft-recovery").classList.add("hidden");
+  $("#initiative-clear-draft").classList.add("hidden");
+  setInitiativeDraftStatus("Changes will be saved automatically on this device.", "safe");
   $("#initiative-form").reset();
   $("#initiative-id").value = "";
   $("#initiative-year").value = selectedAdminYear === "all" ? "2027" : String(selectedAdminYear);
@@ -1505,6 +1731,7 @@ function openInitiativeModal(projectId = null) {
 
   const source = currentProfile?.role === "super_admin" ? adminProjects : userProjects;
   const project = source.find(item => String(item.id) === String(projectId));
+  activeInitiativeDraftKey = initiativeDraftStorageKey(project?.id || projectId || "new");
 
   if (project) {
     $("#initiative-id").value = project.id;
@@ -1595,18 +1822,45 @@ function openInitiativeModal(projectId = null) {
   modal.classList.remove("hidden");
   modal.setAttribute("aria-hidden", "false");
   document.body.classList.add("modal-open");
+  initiativeFormInitialising = false;
+  checkForInitiativeDraft(project);
   window.setTimeout(() => $("#close-initiative-modal")?.focus(), 20);
 }
 
-function closeInitiativeModal() {
+function closeInitiativeModal({ clearDraft = false } = {}) {
   const modal = $("#initiative-modal");
   if (modal.classList.contains("hidden")) return;
+  if (initiativeDraftTimer) window.clearTimeout(initiativeDraftTimer);
+  initiativeDraftTimer = null;
+  if (clearDraft) removeInitiativeDraft(activeInitiativeDraftKey);
   modal.classList.add("hidden");
   modal.setAttribute("aria-hidden", "true");
   document.body.classList.remove("modal-open");
+  initiativeFormDirty = false;
+  initiativeFormInitialising = false;
+  pendingInitiativeDraft = null;
+  activeInitiativeDraftKey = null;
   const trigger = lastModalTrigger;
   lastModalTrigger = null;
   if (trigger instanceof HTMLElement && document.contains(trigger)) trigger.focus();
+}
+
+function requestCloseInitiativeModal() {
+  if (!initiativeFormDirty) {
+    closeInitiativeModal();
+    return;
+  }
+
+  saveInitiativeDraft();
+  const shouldClose = window.confirm(
+    "Your changes have been saved as a draft on this device. Close the form now? You can restore the draft when you reopen it."
+  );
+  if (shouldClose) closeInitiativeModal();
+}
+
+function saveDraftAndCloseInitiativeModal() {
+  if (initiativeFormDirty) saveInitiativeDraft({ announce: true });
+  closeInitiativeModal();
 }
 
 function handleInitiativeModalKeydown(event) {
@@ -1615,7 +1869,7 @@ function handleInitiativeModalKeydown(event) {
 
   if (event.key === "Escape") {
     event.preventDefault();
-    closeInitiativeModal();
+    requestCloseInitiativeModal();
     return;
   }
 
@@ -1667,6 +1921,7 @@ function renderInitiativeFormStep() {
   $("#initiative-previous-step").classList.toggle("hidden", currentInitiativeFormStep === 1);
   $("#initiative-next-step").classList.toggle("hidden", currentInitiativeFormStep === 7);
   $("#save-initiative-button").classList.toggle("hidden", currentInitiativeFormStep !== 7);
+  $("#initiative-current-step-label").textContent = `Step ${currentInitiativeFormStep} of 7`;
 
   if (currentInitiativeFormStep === 4) renderBudgetSummary();
   if (currentInitiativeFormStep === 7) renderInitiativeReviewSummary();
@@ -1961,8 +2216,10 @@ async function saveInitiative(event) {
 
   if (response.error) return showToast(response.error.message, true);
 
-  closeInitiativeModal();
-  showToast(id ? "Excel-aligned comprehensive initiative updated." : "Excel-aligned comprehensive initiative created.");
+  removeInitiativeDraft(activeInitiativeDraftKey);
+  initiativeFormDirty = false;
+  closeInitiativeModal({ clearDraft: true });
+  showToast(id ? "Comprehensive initiative updated." : "Comprehensive initiative created.");
 
   await loadUserProjects();
   if (currentProfile.role === "super_admin") await loadAdminData();
@@ -1980,13 +2237,534 @@ async function deleteInitiative(projectId) {
   await loadUserProjects();
 }
 
+
+const EXCEL_IMPORT_ALIASES = {
+  source_reference_no: ["No.", "No", "Source Reference", "Source Reference No", "Legacy Reference"],
+  implementation_year: ["YEAR", "Year", "Implementation Year"],
+  department: ["Departments", "Department", "Lead Department"],
+  initiative_name: ["Initiative", "Initiative Name", "Project Name"],
+  project_description: ["Project Description", "Description"],
+  accountable_owner: ["Project Owner Name", "Project Owner", "Accountable Owner", "Owner"],
+  executive_sponsor: ["Executive Sponsor", "Sponsor"],
+  delivery_lead: ["Delivery Lead", "Project Lead"],
+  action_plan: ["Action Plan Date", "Action Plan", "Milestones"],
+  start_date: ["Start Date"],
+  target_date: ["Target Date", "Target Completion Date"],
+  initiative_category: ["Category", "Initiative Category"],
+  system_type: ["System", "System Type"],
+  strategic_thrust: ["Strategic Thrust"],
+  strategic_priority_area: ["Strategic Priority Area"],
+  strategic_pillar: ["HOME31 Strategic Pillar", "Strategic Pillar", "HOME31 Pillar"],
+  estimated_cost: ["Estimated Cost", "Initial Estimated Cost"],
+  cba_ratio: ["CBA Ratio", "Cost Benefit Ratio"],
+  post_challenge_remarks: ["Remarks (Post Challenge Session)", "Post Challenge Remarks", "Challenge Session Remarks"],
+  estimated_cost_post_challenge: ["Estimated Cost (Post Challenge)", "Estimated Cost Post Challenge", "Post Challenge Cost"],
+  ict_classification: ["ICT Classification"],
+  ict_remarks: ["ICT Remarks", "Architecture Considerations"],
+  priority_status: ["Priority Status"],
+  proposed_budget_post_retreat: ["Proposed Budget (Post Retreat)", "Proposed Budget Post Retreat"],
+  approved_budget: ["Approved Budget"],
+  finance_remarks: ["Remarks from Finance (Approved Budget 2027)", "Finance Remarks"],
+  general_remarks: ["Remarks", "General Remarks"],
+  status: ["Status", "Delivery Status"],
+  risk_level: ["Risk Level", "Risk"],
+  progress: ["Progress", "Progress %"],
+  readiness_score: ["Readiness Score", "Readiness %"],
+  problem_opportunity: ["Problem / Opportunity", "Problem Opportunity"],
+  expected_outcome: ["Expected Outcome", "Outcome"],
+  value_measure: ["Value Measure"],
+  value_baseline: ["Value Baseline", "Baseline"],
+  value_target: ["Value Target", "Target"],
+  value_owner: ["Value Owner"],
+  next_action: ["Next Action"],
+  hr_collaboration_status: ["HR Collaboration Status", "HR Collaboration"],
+  people_impact_level: ["People Impact Level", "People Impact"]
+};
+
+function openExcelImportModal() {
+  if (currentProfile?.role !== "super_admin") return;
+  excelImportLastTrigger = document.activeElement;
+  excelImportRawRows = [];
+  excelImportPreparedRows = [];
+  $("#excel-import-file").value = "";
+  $("#excel-import-file-name").textContent = "No file selected.";
+  $("#excel-import-owner").value = "";
+  $("#excel-import-year").value = selectedAdminYear === "all" ? "2027" : String(selectedAdminYear || 2027);
+  $("#excel-import-skip-duplicates").checked = true;
+  $("#excel-import-summary").classList.add("hidden");
+  $("#excel-import-preview-wrap").classList.add("hidden");
+  $("#excel-import-preview-table tbody").innerHTML = "";
+  $("#confirm-excel-import").disabled = true;
+  $("#confirm-excel-import").textContent = "Import Valid Rows";
+
+  if ([...$("#excel-import-created-by").options].some(option => option.value === currentUser?.id)) {
+    $("#excel-import-created-by").value = currentUser.id;
+  }
+
+  const modal = $("#excel-import-modal");
+  modal.classList.remove("hidden");
+  modal.setAttribute("aria-hidden", "false");
+  document.body.classList.add("modal-open");
+  window.setTimeout(() => $("#close-excel-import")?.focus(), 20);
+}
+
+function closeExcelImportModal() {
+  const modal = $("#excel-import-modal");
+  if (!modal || modal.classList.contains("hidden")) return;
+  modal.classList.add("hidden");
+  modal.setAttribute("aria-hidden", "true");
+  if ($("#initiative-modal")?.classList.contains("hidden")) document.body.classList.remove("modal-open");
+  const trigger = excelImportLastTrigger;
+  excelImportLastTrigger = null;
+  if (trigger instanceof HTMLElement && document.contains(trigger)) trigger.focus();
+}
+
+function handleExcelImportKeydown(event) {
+  const modal = $("#excel-import-modal");
+  if (!modal || modal.classList.contains("hidden")) return;
+
+  if (event.key === "Escape") {
+    event.preventDefault();
+    closeExcelImportModal();
+    return;
+  }
+
+  if (event.key !== "Tab") return;
+  const focusable = [...modal.querySelectorAll(
+    'button:not([disabled]):not(.hidden), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'
+  )].filter(element => element.offsetParent !== null);
+  if (!focusable.length) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
+}
+
+function handleExcelImportFileSelection() {
+  const file = $("#excel-import-file").files?.[0];
+  excelImportRawRows = [];
+  excelImportPreparedRows = [];
+  $("#excel-import-file-name").textContent = file
+    ? `${file.name} · ${(file.size / 1024).toLocaleString("en-MY", { maximumFractionDigits: 1 })} KB`
+    : "No file selected.";
+  $("#excel-import-summary").classList.add("hidden");
+  $("#excel-import-preview-wrap").classList.add("hidden");
+  $("#confirm-excel-import").disabled = true;
+}
+
+async function reviewExcelImportFile() {
+  const file = $("#excel-import-file").files?.[0];
+  if (!file) return showToast("Select an Excel or CSV file first.", true);
+  if (!window.XLSX) return showToast("Excel processing library is unavailable. Refresh the page and try again.", true);
+
+  const button = $("#excel-validate-file");
+  button.disabled = true;
+  button.textContent = "Reading workbook…";
+
+  try {
+    const data = await file.arrayBuffer();
+    const workbook = window.XLSX.read(data, { cellDates: true });
+    const firstSheet = workbook.SheetNames[0];
+    if (!firstSheet) throw new Error("The workbook does not contain a worksheet.");
+    const worksheet = workbook.Sheets[firstSheet];
+    excelImportRawRows = window.XLSX.utils.sheet_to_json(worksheet, {
+      defval: "",
+      raw: false,
+      blankrows: false
+    });
+    if (!excelImportRawRows.length) throw new Error("No data rows were found in the first worksheet.");
+    prepareExcelImportRows();
+  } catch (error) {
+    console.error("Excel import review failed", error);
+    excelImportRawRows = [];
+    excelImportPreparedRows = [];
+    $("#excel-import-summary").classList.add("hidden");
+    $("#excel-import-preview-wrap").classList.add("hidden");
+    $("#confirm-excel-import").disabled = true;
+    showToast(error?.message || "Unable to read the selected workbook.", true);
+  } finally {
+    button.disabled = false;
+    button.textContent = "Review File";
+  }
+}
+
+function prepareExcelImportRows() {
+  if (!excelImportRawRows.length) return;
+  const settings = {
+    createdBy: $("#excel-import-created-by").value,
+    fallbackOwner: $("#excel-import-owner").value.trim(),
+    fallbackPillar: $("#excel-import-pillar").value,
+    fallbackYear: Number($("#excel-import-year").value || 2027),
+    skipDuplicates: $("#excel-import-skip-duplicates").checked
+  };
+
+  excelImportPreparedRows = excelImportRawRows.map((rawRow, index) =>
+    mapExcelImportRow(rawRow, index + 2, settings)
+  );
+  renderExcelImportPreview();
+}
+
+function mapExcelImportRow(rawRow, worksheetRow, settings) {
+  const row = normalizeExcelRow(rawRow);
+  const get = field => excelFieldValue(row, EXCEL_IMPORT_ALIASES[field] || []);
+  const warnings = [];
+  const errors = [];
+
+  const yearValue = parseExcelNumber(get("implementation_year"));
+  const implementationYear = Number.isInteger(yearValue) ? yearValue : settings.fallbackYear;
+  if (!yearValue) warnings.push(`Implementation year defaulted to ${settings.fallbackYear}.`);
+  if (!Number.isInteger(implementationYear) || implementationYear < 2026 || implementationYear > 2100) {
+    errors.push("Implementation year must be between 2026 and 2100.");
+  }
+
+  const initiativeName = cleanExcelText(get("initiative_name"));
+  const department = cleanExcelText(get("department"));
+  const rowOwner = cleanExcelText(get("accountable_owner"));
+  const accountableOwner = rowOwner || settings.fallbackOwner;
+  if (!rowOwner && accountableOwner) warnings.push("Fallback project owner used.");
+
+  const rowPillar = cleanExcelText(get("strategic_pillar"));
+  let strategicPillar = rowPillar || settings.fallbackPillar;
+  if (rowPillar && !pillars.includes(rowPillar)) {
+    warnings.push(`Unrecognised pillar “${rowPillar}”; fallback pillar used.`);
+    strategicPillar = settings.fallbackPillar;
+  } else if (!rowPillar && strategicPillar) {
+    warnings.push("Fallback strategic pillar used.");
+  }
+
+  if (!initiativeName) errors.push("Initiative name is required.");
+  if (initiativeName.length > 150) errors.push("Initiative name must not exceed 150 characters.");
+  if (!department) errors.push("Department is required.");
+  if (!accountableOwner) errors.push("Project owner name is required.");
+  if (!strategicPillar || !pillars.includes(strategicPillar)) errors.push("A valid HOME31 strategic pillar is required.");
+  if (!settings.createdBy) errors.push("Record account / submitter is required.");
+
+  const estimatedCost = parseExcelNumber(get("estimated_cost"));
+  const challengedCost = parseExcelNumber(get("estimated_cost_post_challenge"));
+  const proposedBudget = parseExcelNumber(get("proposed_budget_post_retreat"));
+  const approvedBudget = parseExcelNumber(get("approved_budget"));
+  const cbaRatio = parseExcelRatio(get("cba_ratio"));
+  if (!cleanExcelText(get("project_description"))) warnings.push("Project description is blank.");
+  if (approvedBudget === null) warnings.push("Approved Budget is blank; portfolio cost basis will remain unconfirmed.");
+  [
+    ["Estimated cost", estimatedCost],
+    ["Post-challenge cost", challengedCost],
+    ["Proposed budget", proposedBudget],
+    ["Approved budget", approvedBudget],
+    ["CBA ratio", cbaRatio]
+  ].forEach(([label, value]) => {
+    if (value !== null && (!Number.isFinite(value) || value < 0)) errors.push(`${label} must be zero or greater.`);
+  });
+
+  const status = normalizeExcelEnum(get("status"), ["Planning", "In Progress", "At Risk", "On Hold", "Completed"], "Planning", warnings, "status");
+  const riskLevel = normalizeExcelEnum(get("risk_level"), ["Low", "Medium", "High", "Extreme"], "Medium", warnings, "risk level");
+  const hrStatus = normalizeExcelEnum(get("hr_collaboration_status"), ["Not required", "Required", "To be confirmed"], "Not required", warnings, "HR collaboration status");
+  const progress = clampExcelPercent(parseExcelNumber(get("progress")), 0, warnings, "Progress");
+  const readiness = clampExcelPercent(parseExcelNumber(get("readiness_score")), 0, warnings, "Readiness");
+
+  const record = {
+    source_reference_no: cleanExcelText(get("source_reference_no")) || null,
+    implementation_year: implementationYear,
+    initiative_name: initiativeName,
+    project_description: cleanExcelText(get("project_description")) || null,
+    department,
+    initiative_category: cleanExcelText(get("initiative_category")) || "New Initiative",
+    priority: "High",
+    priority_status: cleanExcelText(get("priority_status")) || "Not Assessed",
+    executive_sponsor: cleanExcelText(get("executive_sponsor")) || null,
+    accountable_owner: accountableOwner,
+    delivery_lead: cleanExcelText(get("delivery_lead")) || null,
+    start_date: parseExcelDate(get("start_date")),
+    target_date: parseExcelDate(get("target_date")),
+    status,
+    risk_level: riskLevel,
+    strategic_pillar: strategicPillar,
+    strategic_thrust: cleanExcelText(get("strategic_thrust")) || null,
+    strategic_priority_area: cleanExcelText(get("strategic_priority_area")) || null,
+    system_type: cleanExcelText(get("system_type")) || "Non System",
+    ict_classification: cleanExcelText(get("ict_classification")) || "N/A",
+    ict_remarks: cleanExcelText(get("ict_remarks")) || null,
+    problem_opportunity: cleanExcelText(get("problem_opportunity")) || null,
+    expected_outcome: cleanExcelText(get("expected_outcome")) || null,
+    value_measure: cleanExcelText(get("value_measure")) || null,
+    value_baseline: cleanExcelText(get("value_baseline")) || null,
+    value_target: cleanExcelText(get("value_target")) || null,
+    value_frequency: "Quarterly",
+    value_owner: cleanExcelText(get("value_owner")) || null,
+    cba_ratio: cbaRatio,
+    progress,
+    readiness_score: readiness,
+    action_plan: cleanExcelText(get("action_plan")) || null,
+    next_action: cleanExcelText(get("next_action")) || null,
+    estimated_cost: estimatedCost,
+    estimated_cost_confirmed: estimatedCost !== null,
+    estimated_cost_post_challenge: challengedCost,
+    post_challenge_cost_confirmed: challengedCost !== null,
+    proposed_budget_post_retreat: proposedBudget,
+    proposed_budget_confirmed: proposedBudget !== null,
+    approved_budget: approvedBudget,
+    approved_budget_confirmed: approvedBudget !== null,
+    post_challenge_remarks: cleanExcelText(get("post_challenge_remarks")) || null,
+    finance_remarks: cleanExcelText(get("finance_remarks")) || null,
+    general_remarks: cleanExcelText(get("general_remarks")) || null,
+    hr_collaboration_status: hrStatus,
+    people_impact_level: cleanExcelText(get("people_impact_level")) || "Medium",
+    roles_affected_count: 0,
+    new_roles_required: false,
+    redeployment_required: false,
+    training_required: "To be assessed",
+    training_plan_status: "Not started",
+    change_management_required: "Yes",
+    change_plan_status: "Not started",
+    communication_plan_status: "Not started",
+    hr_review_status: "Not submitted",
+    evidence_problem_status: "Not available",
+    evidence_baseline_status: "Not available",
+    evidence_business_case_status: "Not available",
+    evidence_financial_status: "Not available",
+    evidence_risk_status: "Not available",
+    evidence_implementation_status: "Not available",
+    evidence_hr_status: "Not available",
+    evidence_ict_status: "Not available",
+    evidence_stakeholder_status: "Not available",
+    evidence_challenge_status: "Not available",
+    evidence_completeness: 0,
+    created_by: settings.createdBy,
+    updated_at: new Date().toISOString()
+  };
+
+  const duplicate = errors.length ? false : isLikelyExcelDuplicate(record);
+  if (duplicate) warnings.push(settings.skipDuplicates ? "Likely duplicate — excluded from import." : "Likely duplicate — will be imported because duplicate skipping is off.");
+
+  const importable = errors.length === 0 && !(duplicate && settings.skipDuplicates);
+  const statusType = errors.length ? "error" : (warnings.length ? "warning" : "valid");
+
+  return {
+    worksheetRow,
+    record,
+    errors,
+    warnings,
+    duplicate,
+    importable,
+    status: statusType
+  };
+}
+
+function normalizeExcelRow(rawRow) {
+  const normalized = {};
+  Object.entries(rawRow || {}).forEach(([key, value]) => {
+    normalized[normalizeExcelHeader(key)] = value;
+  });
+  return normalized;
+}
+
+function normalizeExcelHeader(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/[^a-z0-9]+/g, "");
+}
+
+function excelFieldValue(normalizedRow, aliases) {
+  for (const alias of aliases) {
+    const key = normalizeExcelHeader(alias);
+    if (Object.prototype.hasOwnProperty.call(normalizedRow, key)) return normalizedRow[key];
+  }
+  return "";
+}
+
+function cleanExcelText(value) {
+  if (value === null || value === undefined) return "";
+  return String(value).trim();
+}
+
+function parseExcelNumber(value) {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  const text = String(value).trim();
+  if (!text) return null;
+  const cleaned = text.replace(/\s/g, "").replace(/RM/gi, "").replace(/,/g, "").replace(/%$/, "");
+  const number = Number(cleaned);
+  return Number.isFinite(number) ? number : NaN;
+}
+
+function parseExcelRatio(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const text = String(value).trim();
+  const ratio = text.match(/^\s*([\d.]+)\s*:\s*([\d.]+)\s*$/);
+  if (ratio) {
+    const left = Number(ratio[1]);
+    const right = Number(ratio[2]);
+    return left > 0 && Number.isFinite(right / left) ? right / left : NaN;
+  }
+  return parseExcelNumber(value);
+}
+
+function parseExcelDate(value) {
+  if (!value) return null;
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value.toISOString().slice(0, 10);
+  const text = String(value).trim();
+  if (!text) return null;
+  const iso = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  const dmy = text.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
+  if (dmy) return `${dmy[3]}-${String(dmy[2]).padStart(2, "0")}-${String(dmy[1]).padStart(2, "0")}`;
+  const parsed = new Date(text);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString().slice(0, 10);
+}
+
+function normalizeExcelEnum(value, allowed, fallback, warnings, label) {
+  const text = cleanExcelText(value);
+  if (!text) return fallback;
+  const match = allowed.find(item => item.toLowerCase() === text.toLowerCase());
+  if (match) return match;
+  warnings.push(`Unrecognised ${label} “${text}”; ${fallback} used.`);
+  return fallback;
+}
+
+function clampExcelPercent(value, fallback, warnings, label) {
+  if (value === null) return fallback;
+  if (!Number.isFinite(value)) {
+    warnings.push(`${label} was invalid; ${fallback}% used.`);
+    return fallback;
+  }
+  if (value < 0 || value > 100) {
+    warnings.push(`${label} was limited to the 0–100 range.`);
+    return Math.max(0, Math.min(100, Math.round(value)));
+  }
+  return Math.round(value);
+}
+
+function isLikelyExcelDuplicate(record) {
+  return adminProjects.some(project => {
+    const sameYear = projectImplementationYear(project) === Number(record.implementation_year);
+    if (!sameYear) return false;
+    const sourceReference = String(record.source_reference_no || "").trim().toLowerCase();
+    if (sourceReference && String(project.source_reference_no || "").trim().toLowerCase() === sourceReference) return true;
+    return String(project.initiative_name || "").trim().toLowerCase() === String(record.initiative_name || "").trim().toLowerCase() &&
+      String(project.department || "").trim().toLowerCase() === String(record.department || "").trim().toLowerCase();
+  });
+}
+
+function renderExcelImportPreview() {
+  const ready = excelImportPreparedRows.filter(row => row.importable);
+  const warnings = excelImportPreparedRows.filter(row => row.warnings.length).length;
+  const blocked = excelImportPreparedRows.filter(row => !row.importable).length;
+
+  $("#excel-summary-total").textContent = excelImportPreparedRows.length;
+  $("#excel-summary-valid").textContent = ready.length;
+  $("#excel-summary-warning").textContent = warnings;
+  $("#excel-summary-error").textContent = blocked;
+  $("#excel-import-summary").classList.remove("hidden");
+  $("#excel-import-preview-wrap").classList.remove("hidden");
+
+  $("#excel-import-preview-table tbody").innerHTML = excelImportPreparedRows.slice(0, 25).map(row => {
+    const notes = [...row.errors, ...row.warnings].join(" ") || "Ready to import.";
+    const label = row.status === "valid" ? "Ready" : (row.status === "warning" ? (row.importable ? "Review" : "Skipped") : "Blocked");
+    return `
+      <tr>
+        <td>${row.worksheetRow}</td>
+        <td><span class="excel-row-status ${row.status}">${label}</span></td>
+        <td>${escapeHtml(String(row.record.implementation_year || ""))}</td>
+        <td><strong>${escapeHtml(row.record.initiative_name || "Not provided")}</strong></td>
+        <td>${escapeHtml(row.record.accountable_owner || "Not provided")}</td>
+        <td>${escapeHtml(row.record.department || "Not provided")}</td>
+        <td>${row.record.approved_budget_confirmed ? escapeHtml(compactRinggit(row.record.approved_budget)) : "Not recorded"}</td>
+        <td>${escapeHtml(notes)}</td>
+      </tr>`;
+  }).join("");
+
+  const previewStatus = $("#excel-import-preview-status");
+  previewStatus.textContent = ready.length ? `${ready.length} ready` : "No valid rows";
+  previewStatus.classList.toggle("good", ready.length > 0);
+  $("#confirm-excel-import").disabled = ready.length === 0;
+  $("#confirm-excel-import").textContent = ready.length ? `Import ${ready.length} Valid Row${ready.length === 1 ? "" : "s"}` : "Import Valid Rows";
+}
+
+async function importPreparedExcelRows() {
+  if (currentProfile?.role !== "super_admin") return;
+  const records = excelImportPreparedRows.filter(row => row.importable).map(row => row.record);
+  if (!records.length) return showToast("There are no validated rows to import.", true);
+
+  const button = $("#confirm-excel-import");
+  button.disabled = true;
+  button.textContent = `Importing 0 of ${records.length}…`;
+  let imported = 0;
+
+  try {
+    for (let index = 0; index < records.length; index += 100) {
+      const batch = records.slice(index, index + 100);
+      const { error } = await supabase.from("initiatives").insert(batch);
+      if (error) throw error;
+      imported += batch.length;
+      button.textContent = `Importing ${imported} of ${records.length}…`;
+    }
+
+    showToast(`${imported} initiative${imported === 1 ? "" : "s"} imported successfully.`);
+    closeExcelImportModal();
+    await loadAdminData();
+  } catch (error) {
+    console.error("Excel import failed", error);
+    if (imported) {
+      showToast(
+        `${imported} row${imported === 1 ? " was" : "s were"} imported before the error. Reopen Excel Import to review the remaining rows: ${error.message}`,
+        true
+      );
+      closeExcelImportModal();
+      await loadAdminData();
+      return;
+    }
+
+    showToast(error.message || "Excel import failed.", true);
+    button.disabled = false;
+    button.textContent = `Retry ${records.length} Row${records.length === 1 ? "" : "s"}`;
+  }
+}
+
+function downloadExcelImportTemplate() {
+  if (!window.XLSX) return showToast("Excel processing library is unavailable. Refresh the page and try again.", true);
+  const headers = [
+    "No.", "YEAR", "Departments", "Initiative", "Project Description", "Project Owner Name",
+    "Executive Sponsor", "Delivery Lead", "Action Plan Date", "Category", "System",
+    "Strategic Thrust", "Strategic Priority Area", "HOME31 Strategic Pillar", "Estimated Cost",
+    "CBA Ratio", "Remarks (Post Challenge Session)", "Estimated Cost (Post Challenge)",
+    "ICT Classification", "ICT Remarks", "Priority Status", "Proposed Budget (Post Retreat)",
+    "Approved Budget", "Remarks from Finance (Approved Budget 2027)", "Remarks", "Status",
+    "Risk Level", "Progress %", "Readiness %"
+  ];
+  const example = [
+    "AMP-001", 2027, "Corporate Planning", "Example HOME31 Initiative",
+    "Replace this example row with the initiative description.", "Project Owner Full Name",
+    "Executive Sponsor Full Name", "Delivery Lead Full Name", "2027-01-15 to 2027-12-15",
+    "New Initiative", "Non System", "Operational Excellence",
+    "Improving Productivity, Efficiency and Delivery of Service (PEDS)", pillars[0],
+    0, 1.5, "", 0, "N/A", "", "Not Assessed", "", "", "", "",
+    "Planning", "Medium", 0, 0
+  ];
+  const worksheet = window.XLSX.utils.aoa_to_sheet([headers, example]);
+  worksheet["!cols"] = headers.map((header, index) => ({ wch: Math.min(42, Math.max(14, header.length + (index < 5 ? 4 : 2))) }));
+  const workbook = window.XLSX.utils.book_new();
+  window.XLSX.utils.book_append_sheet(workbook, worksheet, "HOME31 Import");
+  window.XLSX.writeFile(workbook, "HOME31-Initiative-Import-Template.xlsx");
+}
+
 function populatePillars() {
-  ["#initiative-pillar", "#admin-pillar-filter"].forEach(selector => {
+  ["#initiative-pillar", "#admin-pillar-filter", "#excel-import-pillar"].forEach(selector => {
     const element = $(selector);
     if (!element) return;
 
     if (selector === "#admin-pillar-filter") {
       element.innerHTML = '<option value="">All pillars</option>';
+    } else if (selector === "#excel-import-pillar") {
+      element.innerHTML = '<option value="">Select fallback pillar</option>';
+    } else {
+      element.innerHTML = "";
     }
 
     element.insertAdjacentHTML(
@@ -1999,11 +2777,15 @@ function populatePillars() {
 function populateOwnerOptions() {
   if (currentProfile?.role !== "super_admin") return;
 
-  $("#initiative-created-by").innerHTML = adminProfiles.map(profile => `
+  const activeProfiles = adminProfiles.filter(profile => profile.account_status === "active");
+  const options = activeProfiles.map(profile => `
     <option value="${profile.id}">
       ${escapeHtml(profile.full_name || profile.email)} — ${escapeHtml(profile.department || "No department")}
     </option>
   `).join("");
+
+  $("#initiative-created-by").innerHTML = options;
+  $("#excel-import-created-by").innerHTML = options;
 }
 
 function profileFor(userId) {
