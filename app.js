@@ -392,7 +392,7 @@ function bindEvents() {
   $("#admin-export-portfolio").addEventListener("click", exportAdminPortfolioCsv);
   $("#admin-download-template").addEventListener("click", downloadExcelImportTemplate);
   $("#admin-import-excel").addEventListener("click", openExcelImportModal);
-  $('[data-management-view]').forEach(button =>
+  $$('[data-management-view]').forEach(button =>
     button.addEventListener('click', () => applyManagementView(button.dataset.managementView))
   );
   $("#admin-user-search").addEventListener("input", renderAdminUsers);
@@ -1165,7 +1165,7 @@ function renderPortfolioActiveFilters() {
     return;
   }
   container.innerHTML = chips.map(chip => `<button class="portfolio-filter-chip" type="button" data-clear-portfolio-filter="${chip.key}"><span>${escapeHtml(chip.label)}</span><b aria-hidden="true">×</b><span class="sr-only">Remove filter</span></button>`).join('');
-  $('[data-clear-portfolio-filter]').forEach(button => button.addEventListener('click', () => {
+  $$('[data-clear-portfolio-filter]').forEach(button => button.addEventListener('click', () => {
     const key = button.dataset.clearPortfolioFilter;
     if (key === 'quick') adminQuickFilter = '';
     if (key === 'search') $('#admin-search').value = '';
@@ -3406,7 +3406,7 @@ function renderAdminPortfolio() {
   $("#portfolio-selection-facts").innerHTML=`<article><strong>${escapeHtml(topD?.label||"No data")}</strong><span>Highest approved budget: ${topD?compactRinggit(topD.value):"RM0"}</span></article><article><strong>${escapeHtml(shortPillar(topP?.label||"No data"))}</strong><span>Largest concentration: ${topP?.value||0} records</span></article><article><strong>${evidence}% evidence maturity</strong><span>${hr} HR and ${ict} ICT follow-ups remain.</span></article>`;
   $("#admin-portfolio-table tbody").innerHTML=filtered.length?filtered.map(p=>`<tr><td><span class="portfolio-year-pill">AMP${projectImplementationYear(p)}</span></td><td><strong>${escapeHtml(p.initiative_name)}</strong></td><td>${escapeHtml(p.accountable_owner||"Not recorded")}</td><td>${escapeHtml(p.department)}</td><td>${escapeHtml(p.initiative_category||"Not recorded")}</td><td>${escapeHtml(p.system_type||"Not recorded")}</td><td>${escapeHtml(p.priority_status||"Not assessed")}</td><td>${escapeHtml(p.strategic_pillar)}</td><td><span class="status-pill">${escapeHtml(p.status)}</span></td><td><span class="risk-pill">${escapeHtml(p.risk_level)}</span></td><td>${financialFieldConfirmed(p,"approved_budget") ? formatRinggit(p.approved_budget) : "Not recorded"}</td><td>${Number(p.readiness_score||0)}%</td><td>${progressBar(p.progress)}</td><td><button class="text-button" data-admin-edit="${p.id}" type="button">Edit</button></td></tr>`).join(""):'<tr><td colspan="14">No records match the active year and filters.</td></tr>';
   renderPortfolioActiveFilters();
-  $('[data-admin-edit]').forEach(b=>b.addEventListener('click',()=>openInitiativeModal(b.dataset.adminEdit)));
+  $$('[data-admin-edit]').forEach(b=>b.addEventListener('click',()=>openInitiativeModal(b.dataset.adminEdit)));
 }
 function safeCsvCell(value) {
   let text = String(value ?? "");
