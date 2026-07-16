@@ -4,13 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; form-action 'self'; script-src 'self' https://cdn.jsdelivr.net https://cdn.sheetjs.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' https://*.supabase.co; img-src 'self' data:; upgrade-insecure-requests">
-  <meta name="description" content="HOME31 Enterprise Management Platform V7.9.0 — senior-friendly accessible edition">
+  <meta name="description" content="HOME31 Enterprise Management Platform V7.9.2 — portfolio continuity edition">
   <meta name="theme-color" content="#061b2b">
-  <title>HOME31 Enterprise Management Platform V7.9.0</title>
+  <title>HOME31 Enterprise Management Platform V7.9.2</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=7.9.1">
+  <link rel="stylesheet" href="styles.css?v=7.9.2">
 </head>
 <body>
 
@@ -207,7 +207,7 @@
           <span class="sidebar-logout-icon" aria-hidden="true">↪</span>
           <span class="sidebar-logout-label">Sign out</span>
         </button>
-        <span class="sidebar-version">HOME31 Platform V7.9.0</span>
+        <span class="sidebar-version">HOME31 Platform V7.9.2</span>
       </div>
     </aside>
 
@@ -721,6 +721,12 @@
                   <input id="admin-search" type="search" placeholder="Initiative, owner or department">
                 </label>
                 <label>
+                  <span>Department</span>
+                  <select id="admin-department-filter">
+                    <option value="">All departments</option>
+                  </select>
+                </label>
+                <label>
                   <span>Status</span>
                   <select id="admin-status-filter">
                     <option value="">All status</option>
@@ -763,6 +769,65 @@
                 </thead>
                 <tbody></tbody>
               </table>
+            </div>
+          </article>
+
+          <article id="portfolio-continuity-register" class="admin-command-panel continuity-register-panel">
+            <div class="continuity-heading-row">
+              <div>
+                <span class="admin-command-section-code">CONTINUITY 04</span>
+                <h3>Carry-Forward, Repeat and Evolution Register</h3>
+                <p>AMP2026 and AMP2027 initiatives are matched using source references, normalised titles, department, strategic pillar and description similarity. Approved Budget is the only cost-movement basis.</p>
+              </div>
+              <div class="continuity-controls" aria-label="Continuity register filters">
+                <label>
+                  <span class="sr-only">Continuity type</span>
+                  <select id="continuity-type-filter">
+                    <option value="">All continuity types</option>
+                    <option>Recurring annual activity</option>
+                    <option>Direct carry-forward</option>
+                    <option>Expanded continuation</option>
+                    <option>Evolved / reframed</option>
+                    <option>New / unmatched</option>
+                    <option>No identified continuation</option>
+                  </select>
+                </label>
+                <label>
+                  <span class="sr-only">Search continuity register</span>
+                  <input id="continuity-search" type="search" placeholder="Search theme or initiative">
+                </label>
+                <button id="continuity-clear-filters" class="admin-command-text-button" type="button">Clear</button>
+              </div>
+            </div>
+
+            <div class="continuity-kpi-grid">
+              <article><strong id="continuity-kpi-identified">0</strong><span>AMP2027 initiatives with identified continuity</span></article>
+              <article><strong id="continuity-kpi-new">0</strong><span>AMP2027 initiatives appearing new or unmatched</span></article>
+              <article><strong id="continuity-kpi-carried">0</strong><span>AMP2026 references carried or evolved</span></article>
+              <article><strong id="continuity-kpi-ended">0</strong><span>AMP2026 items without identified 2027 continuation</span></article>
+            </div>
+
+            <div class="continuity-method-note" role="note">
+              <strong>Management review required.</strong> Exact source-reference or title matches receive the highest confidence. Suggested similarity matches remain visible with a confidence percentage and should be confirmed by the portfolio owner.
+            </div>
+
+            <div class="admin-command-table-wrap continuity-table-wrap">
+              <table id="portfolio-continuity-table" class="admin-command-table continuity-table">
+                <thead>
+                  <tr>
+                    <th>Theme / Treatment</th>
+                    <th>AMP2026</th>
+                    <th>AMP2027</th>
+                    <th>Approved Budget Movement</th>
+                    <th>Continuity Type</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+            <div class="continuity-footer">
+              <span id="continuity-table-count">0 continuity rows</span>
+              <span>Department and CONTROL 02 filters also apply to this register.</span>
             </div>
           </article>
 
@@ -2008,6 +2073,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-  <script type="module" src="app.js?v=7.9.1"></script>
+  <script type="module" src="app.js?v=7.9.2"></script>
 </body>
 </html>

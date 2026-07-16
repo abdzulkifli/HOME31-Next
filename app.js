@@ -115,6 +115,10 @@ let sidebarMediaQuery = null;
 let sidebarCollapsed = false;
 let adminQuickFilter = "";
 
+const CONTINUITY_STOP_WORDS = new Set([
+  "a","an","and","annual","amp","for","from","in","of","on","project","programme",
+  "the","to","with","implementation","initiative","initiatives","phase","year"
+]);
 
 let currentUser = null;
 let currentProfile = null;
@@ -376,13 +380,20 @@ function bindEvents() {
     adminQuickFilter = "";
     renderAdminPortfolio();
   });
-  ["#admin-status-filter", "#admin-pillar-filter", "#admin-risk-filter"].forEach(selector =>
+  ["#admin-department-filter", "#admin-status-filter", "#admin-pillar-filter", "#admin-risk-filter"].forEach(selector =>
     $(selector).addEventListener("change", () => {
       adminQuickFilter = "";
       renderAdminPortfolio();
     })
   );
   $("#admin-clear-filters").addEventListener("click", clearAdminFilters);
+  $("#continuity-type-filter").addEventListener("change", renderContinuityRegister);
+  $("#continuity-search").addEventListener("input", renderContinuityRegister);
+  $("#continuity-clear-filters").addEventListener("click", () => {
+    $("#continuity-type-filter").value = "";
+    $("#continuity-search").value = "";
+    renderContinuityRegister();
+  });
 
   $("#admin-create-user-form").addEventListener("submit", createUserAsAdmin);
   $("#generate-password-button").addEventListener("click", generateTemporaryPassword);
@@ -923,6 +934,7 @@ async function loadAdminData() {
   adminProfiles = profilesResponse.data || [];
   populateAdminYearOptions();
   populateOwnerOptions();
+  populateAdminDepartmentOptions();
   renderAdminOverview();
   renderAdminPortfolio();
   renderAdminUsers();
@@ -931,6 +943,20 @@ async function loadAdminData() {
 
 
 
+function populateAdminDepartmentOptions() {
+  const select = $("#admin-department-filter");
+  if (!select) return;
+  const current = select.value;
+  const departments = [...new Set(adminProjects
+    .map(project => String(project.department || "").trim())
+    .filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, "en", { sensitivity: "base" }));
+  select.innerHTML = [
+    '<option value="">All departments</option>',
+    ...departments.map(department => `<option value="${escapeHtml(department)}">${escapeHtml(department)}</option>`)
+  ].join("");
+  if (departments.includes(current)) select.value = current;
+}
 
 function deriveHome31Fit(project) {
   if (!project.strategic_pillar || !project.project_description) return "Needs Validation";
@@ -1022,6 +1048,7 @@ function updateExecutivePanelButton(panel, button) {
 
 function resetAdminFilterControls() {
   $('#admin-search').value = '';
+  $('#admin-department-filter').value = '';
   $('#admin-status-filter').value = '';
   $('#admin-pillar-filter').value = '';
   $('#admin-risk-filter').value = '';
@@ -1157,6 +1184,7 @@ function renderPortfolioActiveFilters() {
   if (adminQuickFilter) chips.push({ key: 'quick', label: adminQuickFilterLabel() });
   const query = $('#admin-search').value.trim();
   if (query) chips.push({ key: 'search', label: `Search: ${query}` });
+  if ($('#admin-department-filter').value) chips.push({ key: 'department', label: `Department: ${$('#admin-department-filter').value}` });
   if ($('#admin-status-filter').value) chips.push({ key: 'status', label: `Status: ${$('#admin-status-filter').value}` });
   if ($('#admin-pillar-filter').value) chips.push({ key: 'pillar', label: `Pillar: ${shortPillar($('#admin-pillar-filter').value)}` });
   if ($('#admin-risk-filter').value) chips.push({ key: 'risk', label: `Risk: ${$('#admin-risk-filter').value}` });
@@ -1169,6 +1197,7 @@ function renderPortfolioActiveFilters() {
     const key = button.dataset.clearPortfolioFilter;
     if (key === 'quick') adminQuickFilter = '';
     if (key === 'search') $('#admin-search').value = '';
+    if (key === 'department') $('#admin-department-filter').value = '';
     if (key === 'status') $('#admin-status-filter').value = '';
     if (key === 'pillar') $('#admin-pillar-filter').value = '';
     if (key === 'risk') $('#admin-risk-filter').value = '';
@@ -3385,6 +3414,7 @@ function quarterlyDeliveryData(records = projectsForYear()) {
 }
 function getFilteredAdminPortfolioRecords() {
   const query = ($("#admin-search").value || "").toLowerCase();
+  const department = $("#admin-department-filter").value || "";
   const status = $("#admin-status-filter").value || "";
   const pillar = $("#admin-pillar-filter").value || "";
   const risk = $("#admin-risk-filter").value || "";
@@ -3392,6 +3422,7 @@ function getFilteredAdminPortfolioRecords() {
     const haystack = [projectImplementationYear(project), project.initiative_name, project.accountable_owner, project.executive_sponsor, project.delivery_lead, project.department, project.initiative_category, project.system_type, project.priority_status].join(" ").toLowerCase();
     return matchesAdminQuickFilter(project) &&
       (!query || haystack.includes(query)) &&
+      (!department || project.department === department) &&
       (!status || project.status === status) &&
       (!pillar || project.strategic_pillar === pillar) &&
       (!risk || project.risk_level === risk);
@@ -3400,14 +3431,216 @@ function getFilteredAdminPortfolioRecords() {
 function renderAdminPortfolio() {
   if(currentProfile?.role!=="super_admin")return;const yearRecords=projectsForYear(),filtered=getFilteredAdminPortfolioRecords(),cost=filtered.reduce((s,p)=>s+projectPortfolioCost(p),0),approved=filtered.filter(p=>financialFieldConfirmed(p,"approved_budget")).length,atRisk=filtered.filter(p=>p.status==="At Risk"||["High","Extreme"].includes(p.risk_level)).length,ready=filtered.filter(p=>Number(p.readiness_score||0)>=80&&!["High","Extreme"].includes(p.risk_level)&&p.status!=="At Risk").length,today=new Date().toISOString().slice(0,10),ownership=filtered.filter(p=>p.executive_sponsor&&p.accountable_owner&&p.delivery_lead).length,evidence=filtered.length?Math.round(filtered.reduce((s,p)=>s+Number(p.evidence_completeness||0),0)/filtered.length):0,ict=filtered.filter(p=>p.ict_classification==="New - Pending ICT review"||((p.system_type&&p.system_type!=="Non System")&&!p.ict_classification)).length,hr=filtered.filter(p=>["Required","To be confirmed"].includes(p.hr_collaboration_status)&&!["Supported","Not required"].includes(p.hr_review_status)).length,overdue=filtered.filter(p=>p.target_date&&p.target_date<today&&p.status!=="Completed").length;
   $("#portfolio-kpi-total").textContent=yearRecords.length;$("#portfolio-kpi-filtered").textContent=filtered.length;$("#portfolio-kpi-cost").textContent=compactRinggit(cost);$("#portfolio-kpi-budget").textContent=`${filtered.length?Math.round(approved/filtered.length*100):0}%`;$("#portfolio-kpi-risk").textContent=atRisk;$("#portfolio-kpi-ready").textContent=ready;$("#portfolio-table-count").textContent=`${selectedYearLabel()} · ${filtered.length} record${filtered.length===1?"":"s"}`;$("#portfolio-assurance-ownership").textContent=`${filtered.length?Math.round(ownership/filtered.length*100):0}%`;$("#portfolio-assurance-evidence").textContent=`${evidence}%`;$("#portfolio-assurance-ict").textContent=ict;$("#portfolio-assurance-hr").textContent=hr;$("#portfolio-assurance-overdue").textContent=overdue;
-  const filterCount=[$("#admin-search").value,$("#admin-status-filter").value,$("#admin-pillar-filter").value,$("#admin-risk-filter").value].filter(Boolean).length+(adminQuickFilter?1:0);const quickLabel=adminQuickFilterLabel();$("#portfolio-selection-badge").textContent=quickLabel?`${selectedYearLabel()} · ${quickLabel}`:filterCount?`${selectedYearLabel()} · ${filterCount} active filters`:selectedYearLabel();
+  const filterCount=[$("#admin-search").value,$("#admin-department-filter").value,$("#admin-status-filter").value,$("#admin-pillar-filter").value,$("#admin-risk-filter").value].filter(Boolean).length+(adminQuickFilter?1:0);const quickLabel=adminQuickFilterLabel();$("#portfolio-selection-badge").textContent=quickLabel?`${selectedYearLabel()} · ${quickLabel}`:filterCount?`${selectedYearLabel()} · ${filterCount} active filters`:selectedYearLabel();
   const topD=aggregateFiltered(filtered,p=>p.department||"Not recorded",projectPortfolioCost)[0],topP=aggregateFiltered(filtered,p=>p.strategic_pillar||"Not recorded",()=>1)[0];
   $("#portfolio-selection-insight").textContent=filtered.length?`${selectedYearLabel()} selection contains ${filtered.length} initiatives with ${formatRinggit(cost)} under the ${costBasisLabel().toLowerCase()} rule. ${atRisk} require risk attention and ${ready} meet the delivery-ready rule.`:`No ${selectedYearLabel()} initiative matches the selected filters.`;
   $("#portfolio-selection-facts").innerHTML=`<article><strong>${escapeHtml(topD?.label||"No data")}</strong><span>Highest approved budget: ${topD?compactRinggit(topD.value):"RM0"}</span></article><article><strong>${escapeHtml(shortPillar(topP?.label||"No data"))}</strong><span>Largest concentration: ${topP?.value||0} records</span></article><article><strong>${evidence}% evidence maturity</strong><span>${hr} HR and ${ict} ICT follow-ups remain.</span></article>`;
   $("#admin-portfolio-table tbody").innerHTML=filtered.length?filtered.map(p=>`<tr><td><span class="portfolio-year-pill">AMP${projectImplementationYear(p)}</span></td><td><strong>${escapeHtml(p.initiative_name)}</strong></td><td>${escapeHtml(p.accountable_owner||"Not recorded")}</td><td>${escapeHtml(p.department)}</td><td>${escapeHtml(p.initiative_category||"Not recorded")}</td><td>${escapeHtml(p.system_type||"Not recorded")}</td><td>${escapeHtml(p.priority_status||"Not assessed")}</td><td>${escapeHtml(p.strategic_pillar)}</td><td><span class="status-pill">${escapeHtml(p.status)}</span></td><td><span class="risk-pill">${escapeHtml(p.risk_level)}</span></td><td>${financialFieldConfirmed(p,"approved_budget") ? formatRinggit(p.approved_budget) : "Not recorded"}</td><td>${Number(p.readiness_score||0)}%</td><td>${progressBar(p.progress)}</td><td><button class="text-button" data-admin-edit="${p.id}" type="button">Edit</button></td></tr>`).join(""):'<tr><td colspan="14">No records match the active year and filters.</td></tr>';
   renderPortfolioActiveFilters();
+  renderContinuityRegister();
   $$('[data-admin-edit]').forEach(b=>b.addEventListener('click',()=>openInitiativeModal(b.dataset.adminEdit)));
 }
+
+function continuityNormalisedTitle(project) {
+  return String(project?.initiative_name || "")
+    .toLowerCase()
+    .replace(/\b(?:amp)?20(?:26|27)\b/g, " ")
+    .replace(/\bno\.?\s*\d+[a-z]?\b/g, " ")
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function continuityTokens(value) {
+  return new Set(String(value || "")
+    .toLowerCase()
+    .replace(/\b(?:amp)?20(?:26|27)\b/g, " ")
+    .replace(/\bno\.?\s*\d+[a-z]?\b/g, " ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .split(/\s+/)
+    .filter(token => token.length > 2 && !CONTINUITY_STOP_WORDS.has(token)));
+}
+
+function continuitySetScores(left, right) {
+  const a = continuityTokens(left);
+  const b = continuityTokens(right);
+  if (!a.size || !b.size) return { jaccard: 0, containment: 0, shared: 0 };
+  const shared = [...a].filter(token => b.has(token)).length;
+  const union = new Set([...a, ...b]).size;
+  return {
+    jaccard: union ? shared / union : 0,
+    containment: Math.min(a.size, b.size) ? shared / Math.min(a.size, b.size) : 0,
+    shared
+  };
+}
+
+function continuityCandidateScore(previous, current) {
+  const previousTitle = continuityNormalisedTitle(previous);
+  const currentTitle = continuityNormalisedTitle(current);
+  const title = continuitySetScores(previousTitle, currentTitle);
+  const previousRef = String(previous.source_reference_no || "").trim().toLowerCase();
+  const currentRef = String(current.source_reference_no || "").trim().toLowerCase();
+  const exactReference = Boolean(previousRef && currentRef && previousRef === currentRef);
+  const exactTitle = Boolean(previousTitle && previousTitle === currentTitle);
+  const departmentMatch = Boolean(previous.department && current.department && previous.department === current.department);
+  const pillarMatch = Boolean(previous.strategic_pillar && current.strategic_pillar && previous.strategic_pillar === current.strategic_pillar);
+  const description = continuitySetScores(previous.project_description || previous.problem_opportunity, current.project_description || current.problem_opportunity);
+  const meaningfulTitle = title.shared >= 2 || (title.shared >= 1 && title.containment >= .66);
+  if (!exactReference && !exactTitle && !meaningfulTitle) return null;
+  let score = exactReference ? 1 : exactTitle ? .97 : (title.jaccard * .38 + title.containment * .37);
+  if (!exactReference && !exactTitle) {
+    if (departmentMatch) score += .11;
+    if (pillarMatch) score += .08;
+    score += Math.min(.06, description.containment * .06);
+  }
+  score = Math.max(0, Math.min(1, score));
+  if (!exactReference && !exactTitle && score < .50) return null;
+  return { score, exactReference, exactTitle, title };
+}
+
+function buildContinuityRegister() {
+  const previous = adminProjects.filter(project => projectImplementationYear(project) === 2026);
+  const current = adminProjects.filter(project => projectImplementationYear(project) === 2027);
+  const candidates = [];
+  previous.forEach(previousProject => {
+    current.forEach(currentProject => {
+      const result = continuityCandidateScore(previousProject, currentProject);
+      if (result) candidates.push({ previous: previousProject, current: currentProject, ...result });
+    });
+  });
+  candidates.sort((a, b) => b.score - a.score);
+  const usedPrevious = new Set();
+  const usedCurrent = new Set();
+  const pairs = [];
+  candidates.forEach(candidate => {
+    if (usedPrevious.has(candidate.previous.id) || usedCurrent.has(candidate.current.id)) return;
+    usedPrevious.add(candidate.previous.id);
+    usedCurrent.add(candidate.current.id);
+    pairs.push({ ...candidate, continuityType: classifyContinuityPair(candidate) });
+  });
+  current.filter(project => !usedCurrent.has(project.id)).forEach(project => pairs.push({
+    previous: null, current: project, score: 0, continuityType: "New / unmatched"
+  }));
+  previous.filter(project => !usedPrevious.has(project.id)).forEach(project => pairs.push({
+    previous: project, current: null, score: 0, continuityType: "No identified continuation"
+  }));
+  return pairs;
+}
+
+function classifyContinuityPair(pair) {
+  const previous = pair.previous;
+  const current = pair.current;
+  if (!previous) return "New / unmatched";
+  if (!current) return "No identified continuation";
+  const title = `${continuityNormalisedTitle(previous)} ${continuityNormalisedTitle(current)}`;
+  const recurringTerms = /\b(annual|annually|yearly|renewal|maintenance|audit|write off|writeoff)\b/i.test(`${previous.initiative_name || ""} ${current.initiative_name || ""}`);
+  const currentTokens = continuityTokens(current.initiative_name);
+  const previousTokens = continuityTokens(previous.initiative_name);
+  const addedTokens = [...currentTokens].filter(token => !previousTokens.has(token)).length;
+  const previousCost = financialFieldConfirmed(previous, "approved_budget") ? projectPortfolioCost(previous) : null;
+  const currentCost = financialFieldConfirmed(current, "approved_budget") ? projectPortfolioCost(current) : null;
+  const materialIncrease = previousCost !== null && currentCost !== null && previousCost > 0 && (currentCost - previousCost) / previousCost >= .20;
+  if (recurringTerms && (pair.exactTitle || pair.score >= .78)) return "Recurring annual activity";
+  if (addedTokens >= 2 || materialIncrease) return "Expanded continuation";
+  if (pair.exactReference || pair.exactTitle || pair.score >= .72 || current.initiative_category === "Carry Forward Initiative") return "Direct carry-forward";
+  return "Evolved / reframed";
+}
+
+function continuityTheme(pair) {
+  const project = pair.current || pair.previous;
+  return String(project?.initiative_name || "Unclassified initiative")
+    .replace(/\b(?:AMP)?20(?:26|27)\b/gi, "")
+    .replace(/\bNo\.?\s*\d+[A-Za-z]?\b/gi, "")
+    .replace(/\s+/g, " ")
+    .replace(/^[\s,:;–—-]+|[\s,:;–—-]+$/g, "") || project?.initiative_name || "Unclassified initiative";
+}
+
+function continuityTreatment(type) {
+  return {
+    "Recurring annual activity": "Track annual approval, delivery and year-on-year outcome consistently.",
+    "Direct carry-forward": "Manage as one continuing programme with a shared benefits baseline.",
+    "Expanded continuation": "Confirm expanded scope, incremental budget and accountable ownership.",
+    "Evolved / reframed": "Validate the changed scope and document the transition from AMP2026.",
+    "New / unmatched": "Confirm that this is genuinely new and not a renamed prior-year initiative.",
+    "No identified continuation": "Confirm closure, completion, deferral or omission from AMP2027."
+  }[type] || "Management review required.";
+}
+
+function continuityPairMatchesControlFilters(pair) {
+  const projects = [pair.previous, pair.current].filter(Boolean);
+  const query = ($("#admin-search").value || "").trim().toLowerCase();
+  const department = $("#admin-department-filter").value || "";
+  const status = $("#admin-status-filter").value || "";
+  const pillar = $("#admin-pillar-filter").value || "";
+  const risk = $("#admin-risk-filter").value || "";
+  const haystack = projects.map(project => [
+    project.initiative_name, project.accountable_owner, project.department,
+    project.source_reference_no, project.strategic_pillar
+  ].join(" ")).join(" ").toLowerCase();
+  return (!adminQuickFilter || projects.some(project => matchesAdminQuickFilter(project))) &&
+    (!query || haystack.includes(query)) &&
+    (!department || projects.some(project => project.department === department)) &&
+    (!status || projects.some(project => project.status === status)) &&
+    (!pillar || projects.some(project => project.strategic_pillar === pillar)) &&
+    (!risk || projects.some(project => project.risk_level === risk));
+}
+
+function continuityBudgetMovement(pair) {
+  const previousConfirmed = pair.previous && financialFieldConfirmed(pair.previous, "approved_budget");
+  const currentConfirmed = pair.current && financialFieldConfirmed(pair.current, "approved_budget");
+  if (!previousConfirmed || !currentConfirmed) return { text: "Not comparable", percent: "Approved Budget missing", className: "neutral" };
+  const previousCost = projectPortfolioCost(pair.previous);
+  const currentCost = projectPortfolioCost(pair.current);
+  const movement = currentCost - previousCost;
+  const percent = previousCost ? movement / previousCost * 100 : (currentCost ? 100 : 0);
+  return {
+    text: `${movement > 0 ? "+" : ""}${formatRinggit(movement)}`,
+    percent: `${percent > 0 ? "+" : ""}${percent.toFixed(1)}%`,
+    className: movement > 0 ? "increase" : movement < 0 ? "reduction" : "neutral"
+  };
+}
+
+function continuityProjectCell(project, year) {
+  if (!project) return `<span class="continuity-empty">No identified ${year === 2026 ? "source" : "continuation"}</span>`;
+  const budget = financialFieldConfirmed(project, "approved_budget") ? `${formatRinggit(project.approved_budget)} approved` : "Approved Budget not confirmed";
+  return `<button class="continuity-project-button" type="button" data-continuity-open="${project.id}"><strong>${escapeHtml(project.source_reference_no ? `${project.source_reference_no} · ` : "")}${escapeHtml(project.initiative_name)}</strong></button><span>${escapeHtml(project.department || "Department not recorded")}</span><em>${escapeHtml(budget)}</em>`;
+}
+
+function renderContinuityRegister() {
+  if (currentProfile?.role !== "super_admin" || !$("#portfolio-continuity-table")) return;
+  const allPairs = buildContinuityRegister();
+  const identified = allPairs.filter(pair => pair.previous && pair.current).length;
+  const newCount = allPairs.filter(pair => !pair.previous && pair.current).length;
+  const endedCount = allPairs.filter(pair => pair.previous && !pair.current).length;
+  $("#continuity-kpi-identified").textContent = identified;
+  $("#continuity-kpi-new").textContent = newCount;
+  $("#continuity-kpi-carried").textContent = identified;
+  $("#continuity-kpi-ended").textContent = endedCount;
+
+  const type = $("#continuity-type-filter").value || "";
+  const search = ($("#continuity-search").value || "").trim().toLowerCase();
+  const filtered = allPairs.filter(pair => {
+    const text = `${continuityTheme(pair)} ${pair.previous?.initiative_name || ""} ${pair.current?.initiative_name || ""}`.toLowerCase();
+    return continuityPairMatchesControlFilters(pair) && (!type || pair.continuityType === type) && (!search || text.includes(search));
+  });
+
+  $("#continuity-table-count").textContent = `${filtered.length} continuity row${filtered.length === 1 ? "" : "s"}`;
+  $("#portfolio-continuity-table tbody").innerHTML = filtered.length ? filtered.map(pair => {
+    const movement = continuityBudgetMovement(pair);
+    const confidence = pair.previous && pair.current ? `${Math.round(pair.score * 100)}% match confidence` : "Unmatched record";
+    return `<tr>
+      <td><strong>${escapeHtml(continuityTheme(pair))}</strong><span>${escapeHtml(continuityTreatment(pair.continuityType))}</span></td>
+      <td>${continuityProjectCell(pair.previous, 2026)}</td>
+      <td>${continuityProjectCell(pair.current, 2027)}</td>
+      <td><strong class="continuity-movement ${movement.className}">${escapeHtml(movement.text)}</strong><span>${escapeHtml(movement.percent)}</span></td>
+      <td><span class="continuity-type-badge">${escapeHtml(pair.continuityType)}</span><small>${escapeHtml(confidence)}</small></td>
+    </tr>`;
+  }).join("") : '<tr><td colspan="5">No AMP2026–AMP2027 continuity rows match the selected filters.</td></tr>';
+
+  $$('[data-continuity-open]').forEach(button => button.addEventListener('click', () => openInitiativeModal(button.dataset.continuityOpen)));
+}
+
 function safeCsvCell(value) {
   let text = String(value ?? "");
   if (/^[=+\-@]/.test(text)) text = `'${text}`;
