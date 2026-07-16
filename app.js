@@ -1,7 +1,7 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.8/+esm";
 
-const SUPABASE_URL = "https://ueuvavxdvclnfffujafz.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_AhkBD0Tcki8RECDar7_vkw_fsV_wxX0";
+const SUPABASE_URL = "https://YOUR-PROJECT.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = "YOUR-PUBLISHABLE-KEY";
 const AUTH_REDIRECT_URL = new URL(".", window.location.href).href;
 
 const configured =
@@ -42,9 +42,9 @@ const EXECUTIVE_COLORS = {
 let pillarMetric = "count";
 let selectedAdminYear = DEFAULT_ADMIN_YEAR;
 
-const DISPLAY_SETTINGS_KEY = "home31-display-settings-v1";
+const DISPLAY_SETTINGS_KEY = "home31-display-settings-v2";
 const DISPLAY_MODES = ["standard", "comfortable", "large"];
-let currentDisplaySize = "comfortable";
+let currentDisplaySize = "standard";
 let highContrastEnabled = false;
 let tableEnhancementScheduled = false;
 let responsiveTableObserver = null;
@@ -1991,7 +1991,7 @@ function initialiseDisplaySettings() {
     if (DISPLAY_MODES.includes(saved.size)) currentDisplaySize = saved.size;
     highContrastEnabled = Boolean(saved.highContrast);
   } catch (_error) {
-    currentDisplaySize = "comfortable";
+    currentDisplaySize = "standard";
     highContrastEnabled = false;
   }
 
@@ -2070,7 +2070,7 @@ function applyDisplaySettings(announce = true) {
 }
 
 function resetDisplaySettings() {
-  currentDisplaySize = "comfortable";
+  currentDisplaySize = "standard";
   highContrastEnabled = false;
   applyDisplaySettings();
 }
