@@ -1,7 +1,7 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.8/+esm";
 
-const SUPABASE_URL = "https://YOUR-PROJECT.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY = "YOUR-PUBLISHABLE-KEY";
+const SUPABASE_URL = "https://ueuvavxdvclnfffujafz.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_AhkBD0Tcki8RECDar7_vkw_fsV_wxX0";
 const AUTH_REDIRECT_URL = new URL(".", window.location.href).href;
 
 const configured =
