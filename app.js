@@ -1,7 +1,7 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.8/+esm";
 
-const SUPABASE_URL = "https://ueuvavxdvclnfffujafz.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_AhkBD0Tcki8RECDar7_vkw_fsV_wxX0";
+const SUPABASE_URL = "https://YOUR-PROJECT.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = "YOUR-PUBLISHABLE-KEY";
 const AUTH_REDIRECT_URL = new URL(".", window.location.href).href;
 
 const configured =
@@ -58,6 +58,8 @@ let adminProfiles = [];
 let charts = {};
 let currentInitiativeFormStep = 1;
 let lastModalTrigger = null;
+let authRouteTimer = null;
+let authRouteRevision = 0;
 
 document.addEventListener("DOMContentLoaded", initialise);
 
@@ -73,14 +75,19 @@ async function initialise() {
     return;
   }
 
-  supabase.auth.onAuthStateChange(async (_event, session) => {
-    currentUser = session?.user ?? null;
-    await routeSession();
+  // Keep the auth callback synchronous. Supabase can deadlock when another
+  // Supabase API call is awaited directly inside onAuthStateChange.
+  supabase.auth.onAuthStateChange((_event, session) => {
+    scheduleAuthRoute(session);
   });
 
-  const { data } = await supabase.auth.getSession();
-  currentUser = data.session?.user ?? null;
-  await routeSession();
+  const { data, error } = await supabase.auth.getSession();
+  if (error) {
+    showToast(error.message || "Unable to restore your session.", true);
+    showAuth();
+    return;
+  }
+  scheduleAuthRoute(data.session);
 }
 
 function bindEvents() {
@@ -176,8 +183,54 @@ function bindEvents() {
   );
 }
 
-async function routeSession() {
-  if (!currentUser) {
+function scheduleAuthRoute(session) {
+  const revision = ++authRouteRevision;
+  const user = session?.user ?? null;
+
+  if (authRouteTimer) window.clearTimeout(authRouteTimer);
+
+  // Defer database work until the auth state-change callback has fully returned.
+  authRouteTimer = window.setTimeout(async () => {
+    authRouteTimer = null;
+    if (revision !== authRouteRevision) return;
+
+    currentUser = user;
+
+    try {
+      await routeSession(revision);
+    } catch (error) {
+      console.error("HOME31 session routing failed", error);
+      if (revision !== authRouteRevision) return;
+      resetSessionState();
+      showAuth();
+      showToast(error?.message || "Unable to open your HOME31 workspace. Please sign in again.", true);
+    }
+  }, 0);
+}
+
+function isCurrentAuthRoute(revision, userId = null) {
+  return revision === authRouteRevision &&
+    (!userId || currentUser?.id === userId);
+}
+
+function resetSessionState() {
+  currentUser = null;
+  currentProfile = null;
+  userProjects = [];
+  adminProjects = [];
+  adminProfiles = [];
+  destroyCharts();
+  document.body.classList.remove("super-admin-shell", "admin-command-active");
+  $("#sidebar")?.classList.remove("open");
+  $("#menu-toggle")?.setAttribute("aria-expanded", "false");
+  $("#initiative-modal")?.classList.add("hidden");
+}
+
+async function routeSession(revision = authRouteRevision) {
+  const routeUser = currentUser;
+
+  if (!routeUser) {
+    resetSessionState();
     showAuth();
     return;
   }
@@ -185,8 +238,10 @@ async function routeSession() {
   const { data: profile, error } = await supabase
     .from("profiles")
     .select("*")
-    .eq("id", currentUser.id)
+    .eq("id", routeUser.id)
     .maybeSingle();
+
+  if (!isCurrentAuthRoute(revision, routeUser.id)) return;
 
   if (error || !profile) {
     showToast(error?.message || "Unable to load your user profile.", true);
@@ -207,13 +262,14 @@ async function routeSession() {
     return;
   }
 
-  await openPlatform();
+  await openPlatform(revision, routeUser.id);
 }
 
 function showAuth() {
   $("#auth-screen").classList.remove("hidden");
   $("#force-password-screen").classList.add("hidden");
   $("#platform").classList.add("hidden");
+  toggleAuthCard("login");
 }
 
 function showForcedPassword() {
@@ -222,24 +278,32 @@ function showForcedPassword() {
   $("#platform").classList.add("hidden");
 }
 
-async function openPlatform() {
-  $("#auth-screen").classList.add("hidden");
-  $("#force-password-screen").classList.add("hidden");
-  $("#platform").classList.remove("hidden");
+async function openPlatform(revision = authRouteRevision, userId = currentUser?.id) {
+  if (!isCurrentAuthRoute(revision, userId) || !currentProfile) return;
 
   renderIdentity();
   await loadUserProjects();
+  if (!isCurrentAuthRoute(revision, userId)) return;
 
-  if (currentProfile.role === "super_admin") {
+  const isSuperAdmin = currentProfile.role === "super_admin";
+  document.body.classList.toggle("super-admin-shell", isSuperAdmin);
+
+  if (isSuperAdmin) {
+    $("#user-nav").classList.add("hidden");
     $("#admin-nav").classList.remove("hidden");
     $("#initiative-owner-field").classList.remove("hidden");
     await loadAdminData();
-    showModule("admin-overview");
+    if (!isCurrentAuthRoute(revision, userId)) return;
   } else {
+    $("#user-nav").classList.remove("hidden");
     $("#admin-nav").classList.add("hidden");
     $("#initiative-owner-field").classList.add("hidden");
-    showModule("user-home");
   }
+
+  $("#auth-screen").classList.add("hidden");
+  $("#force-password-screen").classList.add("hidden");
+  $("#platform").classList.remove("hidden");
+  showModule(isSuperAdmin ? "admin-overview" : "user-home");
 }
 
 function renderIdentity() {
@@ -262,7 +326,7 @@ async function login(event) {
   button.disabled = true;
   button.textContent = "Signing in...";
 
-  const { error } = await supabase.auth.signInWithPassword({
+  const { data, error } = await supabase.auth.signInWithPassword({
     email: $("#login-email").value.trim(),
     password: $("#login-password").value
   });
@@ -272,16 +336,20 @@ async function login(event) {
 
   if (error) return showToast(error.message, true);
   $("#login-form").reset();
+  scheduleAuthRoute(data.session);
 }
 
 async function logout() {
-  await supabase.auth.signOut();
-  currentUser = null;
-  currentProfile = null;
-  userProjects = [];
-  adminProjects = [];
-  adminProfiles = [];
-  destroyCharts();
+  const { error } = await supabase.auth.signOut();
+  if (error) return showToast(error.message || "Unable to sign out.", true);
+
+  authRouteRevision += 1;
+  if (authRouteTimer) {
+    window.clearTimeout(authRouteTimer);
+    authRouteTimer = null;
+  }
+
+  resetSessionState();
   showAuth();
 }
 
