@@ -155,6 +155,7 @@ async function initialise() {
   initialiseExecutiveInteractions();
   initialiseExecutiveWorkspaceTabs();
   initialiseWorkspacePersistence();
+  initialiseDepartmentUserControls();
   bindEvents();
   populatePillars();
   handleResetLink();
@@ -586,6 +587,7 @@ async function openPlatform(revision = authRouteRevision, userId = currentUser?.
   if (!isCurrentAuthRoute(revision, userId) || !currentProfile) return;
 
   renderIdentity();
+  applyDepartmentProfileControl();
   await loadUserProjects();
   if (!isCurrentAuthRoute(revision, userId)) return;
 
@@ -733,15 +735,20 @@ async function updateProfile(event) {
   event.preventDefault();
   const updates = {
     full_name: $("#account-full-name").value.trim(),
-    department: $("#account-department").value.trim(),
     updated_at: new Date().toISOString()
   };
+
+  if (currentProfile?.role === "super_admin") {
+    updates.department = $("#account-department").value.trim();
+  }
 
   const { error } = await supabase.from("profiles").update(updates).eq("id", currentUser.id);
   if (error) return showToast(error.message, true);
 
   Object.assign(currentProfile, updates);
   renderIdentity();
+  applyDepartmentProfileControl();
+  await loadUserProjects();
   showToast("Profile updated.");
 }
 
@@ -821,96 +828,294 @@ function showModule(name, options = {}) {
   window.setTimeout(() => Object.values(charts).forEach(chart => chart?.resize?.()), 80);
 }
 
+/* ================================================================
+   V7.9.5 DEPARTMENT END-USER WORKSPACE
+   ================================================================ */
+function normaliseDepartmentValue(value) {
+  return String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function departmentProjectIsOwn(project) {
+  return Boolean(project && currentUser?.id && project.created_by === currentUser.id);
+}
+
+function departmentBudgetConfirmed(project) {
+  return project?.approved_budget !== null && project?.approved_budget !== undefined && project?.approved_budget !== "";
+}
+
+function departmentApprovedBudget(project) {
+  return departmentBudgetConfirmed(project) ? Number(project.approved_budget || 0) : 0;
+}
+
+function departmentProjectIsOverdue(project) {
+  if (!project?.target_date || project.status === "Completed") return false;
+  const target = new Date(`${project.target_date}T23:59:59`);
+  return !Number.isNaN(target.getTime()) && target.getTime() < Date.now();
+}
+
+function departmentRiskRank(project) {
+  const map = { Extreme: 4, High: 3, Medium: 2, Low: 1 };
+  return (map[project?.risk_level] || 0) + (project?.status === "At Risk" ? 2 : 0) + (departmentProjectIsOverdue(project) ? 1 : 0);
+}
+
+function departmentProjectSearchText(project) {
+  return [
+    project.initiative_name,
+    project.project_description,
+    project.accountable_owner,
+    project.executive_sponsor,
+    project.delivery_lead,
+    project.strategic_pillar,
+    project.status,
+    project.risk_level
+  ].join(" ").toLowerCase();
+}
+
 async function loadUserProjects() {
+  if (currentProfile?.role === "super_admin") {
+    userProjects = [];
+    return;
+  }
+
+  const department = String(currentProfile?.department || "").trim();
+  if (!department) {
+    userProjects = [];
+    renderUserDashboard();
+    renderUserInitiatives();
+    renderReadiness();
+    return;
+  }
+
   const { data, error } = await supabase
     .from("initiatives")
     .select("*")
-    .eq("created_by", currentUser.id)
     .order("updated_at", { ascending: false });
 
   if (error) return showToast(error.message, true);
-  userProjects = data || [];
+
+  const departmentKey = normaliseDepartmentValue(department);
+  userProjects = (data || []).filter(project => normaliseDepartmentValue(project.department) === departmentKey);
   renderUserDashboard();
   renderUserInitiatives();
   renderReadiness();
 }
 
 function renderUserDashboard() {
+  if (currentProfile?.role === "super_admin") return;
+
+  const department = String(currentProfile?.department || "").trim();
   const total = userProjects.length;
   const inProgress = userProjects.filter(project => project.status === "In Progress").length;
-  const atRisk = userProjects.filter(project =>
-    project.status === "At Risk" || ["High", "Extreme"].includes(project.risk_level)
-  ).length;
-  const average = total
-    ? Math.round(userProjects.reduce((sum, project) => sum + Number(project.progress || 0), 0) / total)
-    : 0;
+  const atRisk = userProjects.filter(project => project.status === "At Risk" || ["High", "Extreme"].includes(project.risk_level)).length;
+  const averageProgress = total ? Math.round(userProjects.reduce((sum, project) => sum + Number(project.progress || 0), 0) / total) : 0;
+  const averageReadiness = total ? Math.round(userProjects.reduce((sum, project) => sum + Number(project.readiness_score || 0), 0) / total) : 0;
+  const budgetConfirmed = userProjects.filter(departmentBudgetConfirmed);
+  const approvedBudget = budgetConfirmed.reduce((sum, project) => sum + departmentApprovedBudget(project), 0);
+  const budgetCoverage = total ? Math.round(budgetConfirmed.length / total * 100) : 0;
+  const overdue = userProjects.filter(departmentProjectIsOverdue).length;
+  const ownCount = userProjects.filter(departmentProjectIsOwn).length;
+  const ownerCount = new Set(userProjects.map(project => String(project.accountable_owner || "").trim()).filter(Boolean)).size;
+
+  $("#user-department-name").textContent = department || "Department not assigned";
+  $("#welcome-copy").textContent = department
+    ? `Live department view for ${department}. All initiatives in this department are visible; you may edit only records you created.`
+    : "Your profile does not have a department. Ask a HOME31 administrator to assign one before using the portfolio.";
+
+  const note = $("#user-department-access-note");
+  note.classList.toggle("warning", !department);
+  note.innerHTML = department
+    ? `<strong>Department-level access:</strong> showing ${total} initiative${total === 1 ? "" : "s"} assigned to <strong>${escapeHtml(department)}</strong>. Shared records are view-only; your own records remain editable.`
+    : "<strong>Department assignment required.</strong> No portfolio data is shown until an administrator assigns your account to a department.";
 
   $("#user-kpi-total").textContent = total;
   $("#user-kpi-progress").textContent = inProgress;
   $("#user-kpi-risk").textContent = atRisk;
-  $("#user-kpi-average").textContent = `${average}%`;
+  $("#user-kpi-average").textContent = `${averageProgress}%`;
+  $("#user-kpi-readiness").textContent = `${averageReadiness}%`;
+  $("#user-kpi-budget").textContent = compactRinggit(approvedBudget);
+  $("#user-kpi-budget-coverage").textContent = `${budgetCoverage}%`;
+  $("#user-kpi-overdue").textContent = overdue;
+  $("#user-contribution-count").textContent = ownCount;
+  $("#user-shared-count").textContent = Math.max(0, total - ownCount);
+  $("#user-budget-confirmed-count").textContent = budgetConfirmed.length;
+  $("#user-department-owner-count").textContent = ownerCount;
 
-  $("#user-recent-table tbody").innerHTML = userProjects.slice(0, 6).map(project => `
-    <tr>
-      <td><strong>${escapeHtml(project.initiative_name)}</strong></td>
-      <td>${escapeHtml(project.strategic_pillar)}</td>
-      <td><span class="status-pill">${escapeHtml(project.status)}</span></td>
-      <td>${Number(project.readiness_score || 0)}%</td>
-      <td>${progressBar(project.progress)}</td>
-    </tr>
-  `).join("");
+  $("#user-recent-table tbody").innerHTML = total
+    ? userProjects.slice(0, 8).map(project => `
+      <tr>
+        <td><strong>${escapeHtml(project.initiative_name)}</strong><small>${escapeHtml(project.strategic_pillar || "Pillar not recorded")}</small></td>
+        <td>${escapeHtml(project.accountable_owner || "Not recorded")}</td>
+        <td><span class="status-pill">${escapeHtml(project.status || "Not recorded")}</span></td>
+        <td><span class="risk-pill">${escapeHtml(project.risk_level || "Not recorded")}</span></td>
+        <td>${departmentBudgetConfirmed(project) ? formatRinggit(project.approved_budget) : "Not confirmed"}</td>
+        <td>${Number(project.readiness_score || 0)}%</td>
+        <td>${progressBar(project.progress)}</td>
+      </tr>
+    `).join("")
+    : '<tr><td colspan="7">No initiatives are currently assigned to this department.</td></tr>';
 
-  const gaps = userProjects.filter(project => Number(project.readiness_score || 0) < 70);
+  const gaps = userProjects
+    .filter(project => Number(project.readiness_score || 0) < 70)
+    .sort((a, b) => Number(a.readiness_score || 0) - Number(b.readiness_score || 0));
   $("#user-gap-list").innerHTML = gaps.length
-    ? gaps.slice(0, 6).map(project => futureItem(project, `${project.readiness_score}% readiness`)).join("")
-    : '<div class="notice blue">No initiatives below 70% readiness.</div>';
+    ? gaps.slice(0, 6).map(project => futureItem(project, `${Number(project.readiness_score || 0)}% readiness · ${project.accountable_owner || "Owner not recorded"}`)).join("")
+    : '<div class="notice blue">No department initiatives are below 70% readiness.</div>';
+
+  const attention = userProjects
+    .filter(project => departmentRiskRank(project) >= 3 || Number(project.readiness_score || 0) < 70)
+    .sort((a, b) => departmentRiskRank(b) - departmentRiskRank(a) || Number(a.readiness_score || 0) - Number(b.readiness_score || 0));
+  $("#user-attention-list").innerHTML = attention.length
+    ? attention.slice(0, 7).map(project => {
+        const reasons = [
+          project.status === "At Risk" ? "At-risk status" : "",
+          ["High", "Extreme"].includes(project.risk_level) ? `${project.risk_level} risk` : "",
+          departmentProjectIsOverdue(project) ? "Overdue" : "",
+          Number(project.readiness_score || 0) < 70 ? `${Number(project.readiness_score || 0)}% ready` : ""
+        ].filter(Boolean);
+        return `<article class="department-attention-item"><div><strong>${escapeHtml(project.initiative_name)}</strong><span>${escapeHtml(project.accountable_owner || "Owner not recorded")} · ${escapeHtml(reasons.join(" · "))}</span></div><em>${escapeHtml(project.next_action || "Review required")}</em></article>`;
+      }).join("")
+    : '<div class="notice blue">No current risk, overdue or low-readiness exception requires attention.</div>';
 
   renderUserStatusChart();
+  renderUserRiskChart();
+  renderUserPillarChart();
 }
 
 function renderUserStatusChart() {
   charts.userStatus?.destroy();
-  if (typeof Chart === "undefined") return;
-
+  const canvas = $("#user-status-chart");
+  if (!canvas || typeof Chart === "undefined") return;
   const statuses = ["Planning", "In Progress", "At Risk", "On Hold", "Completed"];
-  charts.userStatus = new Chart($("#user-status-chart"), {
+  charts.userStatus = new Chart(canvas, {
     type: "doughnut",
     data: {
       labels: statuses,
       datasets: [{
-        data: statuses.map(status => userProjects.filter(project => project.status === status).length)
+        data: statuses.map(status => userProjects.filter(project => project.status === status).length),
+        backgroundColor: [EXECUTIVE_COLORS.blue, EXECUTIVE_COLORS.teal, EXECUTIVE_COLORS.red, EXECUTIVE_COLORS.amber, EXECUTIVE_COLORS.green],
+        borderWidth: 0
       }]
     },
-    options: baseChartOptions()
+    options: { ...baseChartOptions(), cutout: "62%" }
   });
+}
+
+function renderUserRiskChart() {
+  charts.userRisk?.destroy();
+  const canvas = $("#user-risk-chart");
+  if (!canvas || typeof Chart === "undefined") return;
+  const levels = ["Low", "Medium", "High", "Extreme"];
+  charts.userRisk = new Chart(canvas, {
+    type: "bar",
+    data: {
+      labels: levels,
+      datasets: [{
+        label: "Initiatives",
+        data: levels.map(level => userProjects.filter(project => project.risk_level === level).length),
+        backgroundColor: [EXECUTIVE_COLORS.green, EXECUTIVE_COLORS.blue, EXECUTIVE_COLORS.amber, EXECUTIVE_COLORS.red],
+        borderRadius: 7
+      }]
+    },
+    options: {
+      ...baseChartOptions(),
+      plugins: { ...baseChartOptions().plugins, legend: { display: false } },
+      scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+    }
+  });
+}
+
+function renderUserPillarChart() {
+  charts.userPillar?.destroy();
+  const canvas = $("#user-pillar-chart");
+  if (!canvas || typeof Chart === "undefined") return;
+  const values = pillars.map(pillar => ({
+    pillar,
+    count: userProjects.filter(project => project.strategic_pillar === pillar).length
+  }));
+  charts.userPillar = new Chart(canvas, {
+    type: "bar",
+    data: {
+      labels: values.map(item => shortPillar(item.pillar)),
+      datasets: [{ label: "Initiatives", data: values.map(item => item.count), backgroundColor: EXECUTIVE_COLORS.teal, borderRadius: 7 }]
+    },
+    options: {
+      ...baseChartOptions(),
+      indexAxis: "y",
+      plugins: { ...baseChartOptions().plugins, legend: { display: false } },
+      scales: { x: { beginAtZero: true, ticks: { precision: 0 } } }
+    }
+  });
+}
+
+function departmentInitiativeCard(project) {
+  const own = departmentProjectIsOwn(project);
+  const dates = [project.start_date, project.target_date].filter(Boolean).join(" → ") || "Dates not recorded";
+  return `
+    <article class="initiative-card department-initiative-card ${own ? "own-record" : "shared-record"}">
+      <div class="initiative-card-head">
+        <div>
+          <strong>${escapeHtml(project.initiative_name)}</strong>
+          <span>${escapeHtml(project.strategic_pillar || "Pillar not recorded")} · ${escapeHtml(project.accountable_owner || "Project owner not recorded")}</span>
+        </div>
+        <span class="status-pill">${escapeHtml(project.status || "Not recorded")}</span>
+      </div>
+      <span>${escapeHtml(project.initiative_category || "Category not recorded")} · ${escapeHtml(project.system_type || "System not recorded")} · ${escapeHtml(project.priority_status || "Priority not assessed")}</span>
+      <span>Risk: ${escapeHtml(project.risk_level || "Not recorded")} · Department: ${escapeHtml(project.department || "Not recorded")}</span>
+      <div class="department-card-metrics">
+        <article><span>Approved Budget</span><strong>${departmentBudgetConfirmed(project) ? formatRinggit(project.approved_budget) : "Not confirmed"}</strong></article>
+        <article><span>Readiness</span><strong>${Number(project.readiness_score || 0)}%</strong></article>
+        <article><span>Progress</span><strong>${Number(project.progress || 0)}%</strong></article>
+        <article><span>Evidence</span><strong>${Number(project.evidence_completeness || 0)}%</strong></article>
+      </div>
+      <details class="department-record-details">
+        <summary>View comprehensive record summary</summary>
+        <div class="department-record-details-grid">
+          <article><span>Description</span><strong>${escapeHtml(project.project_description || project.problem_opportunity || "Not recorded")}</strong></article>
+          <article><span>Executive sponsor</span><strong>${escapeHtml(project.executive_sponsor || "Not recorded")}</strong></article>
+          <article><span>Delivery lead</span><strong>${escapeHtml(project.delivery_lead || "Not recorded")}</strong></article>
+          <article><span>Delivery dates</span><strong>${escapeHtml(dates)}</strong></article>
+          <article><span>Strategic priority area</span><strong>${escapeHtml(project.strategic_priority_area || "Not recorded")}</strong></article>
+          <article><span>ICT classification</span><strong>${escapeHtml(project.ict_classification || "Not recorded")}</strong></article>
+          <article><span>CBA ratio</span><strong>${project.cba_ratio ?? "Not recorded"}</strong></article>
+          <article><span>Next action</span><strong>${escapeHtml(project.next_action || "Not recorded")}</strong></article>
+        </div>
+      </details>
+      ${own ? `
+        <div class="initiative-actions">
+          <button class="button secondary small" data-edit-project="${project.id}" type="button">Edit My Record</button>
+          <button class="button light small" data-delete-project="${project.id}" type="button">Delete</button>
+        </div>
+      ` : '<span class="department-record-access">Shared department record · view only</span>'}
+    </article>
+  `;
 }
 
 function renderUserInitiatives() {
   const query = ($("#user-search").value || "").toLowerCase();
   const status = $("#user-status-filter").value || "";
-
   const filtered = userProjects.filter(project =>
-    (!query || project.initiative_name.toLowerCase().includes(query)) &&
+    (!query || departmentProjectSearchText(project).includes(query)) &&
     (!status || project.status === status)
   );
 
+  if ($("#department-initiative-count")) {
+    $("#department-initiative-count").textContent = `${filtered.length} record${filtered.length === 1 ? "" : "s"}`;
+  }
   $("#user-initiative-list").innerHTML = filtered.length
-    ? filtered.map(project => initiativeCard(project, false)).join("")
-    : '<div class="notice blue">No matching initiatives.</div>';
+    ? filtered.map(departmentInitiativeCard).join("")
+    : '<div class="notice blue">No department initiatives match the selected filters.</div>';
 
-  $$("[data-edit-project]").forEach(button =>
+  $('[data-edit-project]').forEach(button =>
     button.addEventListener("click", () => openInitiativeModal(button.dataset.editProject))
   );
-  $$("[data-delete-project]").forEach(button =>
+  $('[data-delete-project]').forEach(button =>
     button.addEventListener("click", () => deleteInitiative(button.dataset.deleteProject))
   );
 }
 
 function renderReadiness() {
   const total = userProjects.length;
-  const average = total
-    ? Math.round(userProjects.reduce((sum, project) => sum + Number(project.readiness_score || 0), 0) / total)
-    : 0;
+  const average = total ? Math.round(userProjects.reduce((sum, project) => sum + Number(project.readiness_score || 0), 0) / total) : 0;
   const low = userProjects.filter(project => Number(project.readiness_score || 0) < 70).length;
   const hr = userProjects.filter(project => ["Required", "To be confirmed"].includes(project.hr_collaboration_status)).length;
   const risk = userProjects.filter(project => ["High", "Extreme"].includes(project.risk_level)).length;
@@ -921,21 +1126,21 @@ function renderReadiness() {
   $("#readiness-risk").textContent = risk;
 
   $("#readiness-list").innerHTML = userProjects.length
-    ? userProjects.map(project => `
+    ? [...userProjects].sort((a, b) => Number(a.readiness_score || 0) - Number(b.readiness_score || 0)).map(project => `
       <article class="readiness-card">
         <div class="initiative-card-head">
           <div>
             <strong>${escapeHtml(project.initiative_name)}</strong>
-            <span>${escapeHtml(project.strategic_pillar)} · ${escapeHtml(project.risk_level)} risk</span>
+            <span>${escapeHtml(project.accountable_owner || "Project owner not recorded")} · ${escapeHtml(project.strategic_pillar || "Pillar not recorded")} · ${escapeHtml(project.risk_level || "Not recorded")} risk</span>
           </div>
           <span class="status-pill">${Number(project.readiness_score || 0)}% ready</span>
         </div>
         <div class="progress-track"><span style="width:${Number(project.readiness_score || 0)}%"></span></div>
         <span>HR collaboration: ${escapeHtml(project.hr_collaboration_status || "Not required")} · People impact: ${escapeHtml(project.people_impact_level || "Not assessed")}</span>
-        <span>Training plan: ${escapeHtml(project.training_plan_status || "Not assessed")} · Change plan: ${escapeHtml(project.change_plan_status || "Not assessed")}</span>
+        <span>Training plan: ${escapeHtml(project.training_plan_status || "Not assessed")} · Change plan: ${escapeHtml(project.change_plan_status || "Not assessed")} · Evidence: ${Number(project.evidence_completeness || 0)}%</span>
       </article>
     `).join("")
-    : '<div class="notice blue">No initiatives available.</div>';
+    : '<div class="notice blue">No department initiatives are available.</div>';
 }
 
 async function loadAdminData() {
@@ -4072,4 +4277,38 @@ function applyExecutiveTab(tab, { focus = false, persist = true, preserveViewpor
     if (Math.abs(shift) > 1) window.scrollBy({ top: shift, behavior: "auto" });
   }
   window.setTimeout(() => Object.values(charts).forEach(chart => chart?.resize?.()), 100);
+}
+
+
+function applyDepartmentProfileControl() {
+  const field = $("#account-department");
+  const note = $("#account-department-note");
+  if (!field) return;
+  const managed = currentProfile?.role !== "super_admin";
+  field.readOnly = managed;
+  field.classList.toggle("account-department-managed", managed);
+  field.title = managed ? "Department assignment is managed by a HOME31 administrator." : "";
+  if (note) note.textContent = managed
+    ? "Department assignment controls portfolio access and can only be changed by a HOME31 administrator."
+    : "Super admins may maintain their own profile department.";
+}
+
+function applyDepartmentInitiativeControl() {
+  if (currentProfile?.role === "super_admin") return;
+  const field = $("#initiative-department");
+  if (!field) return;
+  field.value = String(currentProfile?.department || "").trim();
+  field.readOnly = true;
+  field.classList.add("account-department-managed");
+  field.title = "New initiatives are restricted to your assigned department.";
+}
+
+function initialiseDepartmentUserControls() {
+  applyDepartmentProfileControl();
+  const modal = $("#initiative-modal");
+  if (!modal) return;
+  const observer = new MutationObserver(() => {
+    if (!modal.classList.contains("hidden")) applyDepartmentInitiativeControl();
+  });
+  observer.observe(modal, { attributes: true, attributeFilter: ["class"] });
 }
