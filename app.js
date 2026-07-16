@@ -1,7 +1,7 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.8/+esm";
 
-const SUPABASE_URL = "https://ueuvavxdvclnfffujafz.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_AhkBD0Tcki8RECDar7_vkw_fsV_wxX0";
+const SUPABASE_URL = "https://YOUR-PROJECT.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = "YOUR-PUBLISHABLE-KEY";
 const AUTH_REDIRECT_URL = new URL(".", window.location.href).href;
 
 const configured =
@@ -1814,7 +1814,7 @@ function calculateProjectReadiness(project) {
 function calculateExecutiveMetrics(records=projectsForYear()) {
   const today=new Date().toISOString().slice(0,10), total=records.length;
   const sum=field=>records.reduce((s,p)=>s+(numericValue(p[field])||0),0);
-  const originalCost=sum("estimated_cost"), effectiveCost=sum("estimated_cost_post_challenge"), proposedBudget=sum("proposed_budget_post_retreat"), approvedBudget=sum("approved_budget");
+  const originalCost=sum("estimated_cost"), effectiveCost=sum("estimated_cost_post_challenge"), proposedBudget=sum("proposed_budget_post_retreat"), approvedBudget=records.reduce((total,project)=>total+(financialFieldConfirmed(project,"approved_budget")?(numericValue(project.approved_budget)||0):0),0);
   const portfolioCost=records.reduce((s,p)=>s+projectPortfolioCost(p),0);
   const proposedBudgetCount=records.filter(p=>financialFieldConfirmed(p,"proposed_budget_post_retreat")).length;
   const approvedBudgetCount=records.filter(p=>financialFieldConfirmed(p,"approved_budget")).length;
@@ -1837,8 +1837,6 @@ function calculateExecutiveMetrics(records=projectsForYear()) {
     strategicPriority:records.filter(p=>["Strategic Priority","Corporate Priority"].includes(p.priority_status)||p.priority==="Strategic").length,
     watchlist:records.filter(p=>["Watchlist / Under Review","Not Assessed"].includes(p.priority_status)).length,
     atRisk:records.filter(p=>p.status==="At Risk"||["High","Extreme"].includes(p.risk_level)).length,
-    hrDependent:records.filter(p=>["Required","To be confirmed"].includes(p.hr_collaboration_status)).length,
-    ictDependent:records.filter(p=>(p.system_type&&p.system_type!=="Non System")||!["N/A","None",null,undefined,""].includes(p.ict_classification)).length,
     overdue:records.filter(p=>p.target_date&&p.target_date<today&&p.status!=="Completed").length,
     departments:[...new Set(records.map(p=>p.department).filter(Boolean))],strategicReadiness,fullyReady,followUp:total-fullyReady,
     ownershipCompleteness:total?Math.round(records.filter(p=>p.executive_sponsor&&p.accountable_owner&&p.delivery_lead).length/total*100):0,
@@ -1861,8 +1859,12 @@ function renderAdminOverview() {
   $("#admin-kpi-reduction-note").textContent=metrics.originalCost?`${formatPercent(metrics.challengeReduction/metrics.originalCost*100)} challenge movement`:"Original estimate not yet populated";
   $("#admin-kpi-priority").textContent=metrics.strategicPriority;
   $("#admin-kpi-risk").textContent=metrics.atRisk;
-  $("#admin-kpi-hr").textContent=metrics.hrDependent;
-  $("#admin-kpi-ict").textContent=metrics.ictDependent;
+  $("#admin-kpi-approved-budget").textContent=compactRinggit(metrics.approvedBudget);
+  $("#admin-kpi-approved-budget-note").textContent=metrics.approvedBudgetCount
+    ? `${metrics.approvedBudgetCount}/${metrics.total || 0} records with approved allocation`
+    : "Approved allocation not yet populated";
+  $("#admin-kpi-approved-coverage").textContent=`${metrics.approvedBudgetCoverage}%`;
+  $("#admin-kpi-approved-coverage-note").textContent=`${metrics.approvedBudgetCount}/${metrics.total || 0} records populated`;
   $("#admin-kpi-users").textContent=adminProfiles.length;
   $("#admin-assurance-ownership").textContent=`${metrics.ownershipCompleteness}%`;
   $("#admin-assurance-evidence").textContent=`${metrics.evidenceAverage}%`;
