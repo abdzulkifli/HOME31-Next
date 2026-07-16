@@ -1,0 +1,127 @@
+/* HOME31 V7.9.3 — non-obstructive display control and chart consistency */
+
+/* Login / password screens: compact floating accessibility control. */
+body:not(.home31-platform-visible) .display-settings {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  top: auto;
+  z-index: 140;
+}
+body:not(.home31-platform-visible) .display-settings-toggle {
+  width: 48px;
+  min-width: 48px;
+  height: 48px;
+  padding: 0;
+  border-radius: 50%;
+  justify-content: center;
+  box-shadow: 0 10px 26px rgba(4, 24, 38, .22);
+}
+body:not(.home31-platform-visible) .display-settings-label { display: none; }
+
+/* Platform: the control becomes part of the topbar instead of covering content. */
+.display-settings.display-settings-inline {
+  position: relative;
+  inset: auto;
+  right: auto;
+  bottom: auto;
+  z-index: 55;
+  flex: 0 0 auto;
+}
+.display-settings.display-settings-inline .display-settings-toggle {
+  min-width: 44px;
+  height: 42px;
+  padding: 0 12px;
+  gap: 7px;
+  border-radius: 12px;
+  box-shadow: none;
+}
+.display-settings.display-settings-inline .display-settings-icon {
+  width: 28px;
+  height: 28px;
+  font-size: 13px;
+}
+.display-settings.display-settings-inline .display-settings-label {
+  font-size: 12px;
+  white-space: nowrap;
+}
+.display-settings.display-settings-inline .display-settings-panel {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  bottom: auto;
+  width: min(470px, calc(100vw - 28px));
+  max-height: min(680px, calc(100vh - 92px));
+  overflow: auto;
+}
+
+/* Make the chart panels visually consistent without changing their meaning. */
+.home31-chart-basis {
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px solid rgba(112, 151, 175, .24);
+  color: #9fb5c4;
+  font-size: 11px;
+  line-height: 1.45;
+}
+.home31-chart-basis strong {
+  color: #d7e7ef;
+  font-weight: 700;
+}
+.home31-chart-basis[data-status="warning"] {
+  color: #dfc27d;
+  border-top-color: rgba(209, 173, 99, .35);
+}
+.home31-chart-empty-note {
+  display: grid;
+  place-items: center;
+  min-height: 120px;
+  padding: 16px;
+  color: #91a9b9;
+  text-align: center;
+  font-size: 12px;
+}
+
+/* Prevent chart canvases from stretching differently between panels. */
+.executive-chart-shell,
+.admin-command-chart-shell,
+.chart-shell,
+.admin-small-chart {
+  min-width: 0;
+}
+.executive-chart-shell canvas,
+.admin-command-chart-shell canvas,
+.chart-shell canvas,
+.admin-small-chart canvas {
+  max-width: 100%;
+}
+
+@media (max-width: 900px) {
+  .display-settings.display-settings-inline .display-settings-label { display: none; }
+  .display-settings.display-settings-inline .display-settings-toggle {
+    width: 42px;
+    min-width: 42px;
+    padding: 0;
+    justify-content: center;
+  }
+  .display-settings.display-settings-inline .display-settings-panel {
+    position: fixed;
+    top: 72px;
+    right: 12px;
+    left: 12px;
+    width: auto;
+    max-height: calc(100vh - 86px);
+  }
+}
+
+@media (max-width: 560px) {
+  body:not(.home31-platform-visible) .display-settings {
+    right: 12px;
+    bottom: 12px;
+  }
+  body:not(.home31-platform-visible) .display-settings-toggle {
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+  }
+}
