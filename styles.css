@@ -3888,3 +3888,55 @@ body.modal-open .display-settings{
 @media(max-width:560px){
   .pm-filter-grid{grid-template-columns:1fr}
 }
+
+
+/* ================================================================
+   V7.9.4.4 DEPARTMENT END-USER WORKSPACE
+   ================================================================ */
+.account-department-field input:disabled,
+#initiative-department:disabled{
+  opacity:1;
+  cursor:not-allowed;
+  color:#5d5153;
+  background:#f2eceb;
+  border-style:dashed;
+}
+body.admin-command-active .account-department-field input:disabled,
+.project-management-module #initiative-department:disabled{
+  color:#b9cbd6;
+  background:#0b263b;
+}
+.department-access-badge{
+  display:inline-flex;
+  align-items:center;
+  min-height:25px;
+  padding:4px 8px;
+  border:1px solid #9ab5c5;
+  border-radius:999px;
+  font-size:var(--read-xs);
+  font-weight:700;
+  white-space:nowrap;
+}
+.department-access-badge.owned{color:#0f654f;background:#eaf7f1;border-color:#93c8b6}
+.department-access-badge.shared{color:#315b75;background:#edf6fc;border-color:#aac8dc}
+.initiative-card-badges{display:flex;align-items:center;justify-content:flex-end;gap:7px;flex-wrap:wrap}
+.initiative-card.initiative-shared{border-left:4px solid #7f99af;background:#fbfdfe}
+.initiative-card.initiative-owned{border-left:4px solid #6ca69b}
+.initiative-readonly-banner{
+  display:flex;
+  align-items:flex-start;
+  gap:12px;
+  margin:15px 0;
+  padding:13px 15px;
+  border:1px solid #9db9c9;
+  border-left:5px solid #57999b;
+  border-radius:14px;
+  color:#23475d;
+  background:#edf6fc;
+}
+.initiative-readonly-banner>span{font-size:20px;line-height:1}
+.initiative-readonly-banner strong{display:block;font-size:var(--read-base)}
+.initiative-readonly-banner small{display:block;margin-top:3px;color:#587387;font-size:var(--read-sm);line-height:1.45}
+#initiative-form :disabled{opacity:1}
+.project-management-module .pm-admin-only.hidden{display:none!important}
+@media(max-width:700px){.initiative-card-badges{justify-content:flex-start}.initiative-card-head{display:grid}}

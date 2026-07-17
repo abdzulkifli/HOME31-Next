@@ -4,13 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; form-action 'self'; script-src 'self' https://cdn.jsdelivr.net https://cdn.sheetjs.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' https://*.supabase.co; img-src 'self' data:; upgrade-insecure-requests">
-  <meta name="description" content="HOME31 Enterprise Management Platform V7.9.4.3 — project management edition">
+  <meta name="description" content="HOME31 Enterprise Management Platform V7.9.4.4 — department end-user edition">
   <meta name="theme-color" content="#061b2b">
-  <title>HOME31 Enterprise Management Platform V7.9.4.3</title>
+  <title>HOME31 Enterprise Management Platform V7.9.4.4</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=7.9.4.3"> 
+    <link rel="stylesheet" href="styles.css?v=7.9.4.4"> 
 </head>
 <body>
 
@@ -92,7 +92,7 @@
 
     <div class="auth-card-wrap">
       <div id="configuration-warning" class="notice warning hidden">
-        Configure <code>SUPABASE_URL</code> and <code>SUPABASE_PUBLISHABLE_KEY</code> in <code>app.js?v=7.9.4.3</code>.
+        Configure <code>SUPABASE_URL</code> and <code>SUPABASE_PUBLISHABLE_KEY</code> in <code>app.js?v=7.9.4.4</code>.
       </div>
 
       <form id="login-form" class="auth-card">
@@ -186,8 +186,9 @@
       </div>
 
       <nav id="user-nav" class="module-nav" aria-label="User navigation">
-        <button class="nav-item active" data-module="user-home" data-tooltip="My Dashboard" aria-label="My Dashboard"><span>⌂</span><b>My Dashboard</b></button>
-        <button class="nav-item" data-module="my-initiatives" data-tooltip="My Initiatives" aria-label="My Initiatives"><span>▤</span><b>My Initiatives</b></button>
+        <button class="nav-item active" data-module="user-home" data-tooltip="Department Dashboard" aria-label="Department Dashboard"><span>⌂</span><b>Department Dashboard</b></button>
+        <button class="nav-item" data-module="my-initiatives" data-tooltip="Department Initiatives" aria-label="Department Initiatives"><span>▤</span><b>Department Initiatives</b></button>
+        <button class="nav-item" data-module="project-management" data-tooltip="Project Management" aria-label="Project Management"><span>◧</span><b>Project Management</b></button>
         <button class="nav-item" data-module="readiness" data-tooltip="Readiness & HR" aria-label="Readiness and HR"><span>✓</span><b>Readiness & HR</b></button>
         <button class="nav-item" data-module="account" data-tooltip="My Account" aria-label="My Account"><span>⚙</span><b>My Account</b></button>
       </nav>
@@ -196,7 +197,7 @@
         <div class="nav-separator">SUPER ADMIN</div>
         <button class="nav-item" data-module="admin-overview" data-tooltip="Executive Overview" aria-label="Executive Overview"><span>◫</span><b>Executive Overview</b></button>
         <button class="nav-item" data-module="admin-portfolio" data-tooltip="Enterprise Portfolio" aria-label="Enterprise Portfolio"><span>▦</span><b>Enterprise Portfolio</b></button>
-        <button class="nav-item" data-module="admin-project-management" data-tooltip="Project Management" aria-label="Project Management"><span>◧</span><b>Project Management</b></button>
+        <button class="nav-item" data-module="project-management" data-tooltip="Project Management" aria-label="Project Management"><span>◧</span><b>Project Management</b></button>
         <button class="nav-item" data-module="admin-users" data-tooltip="User Administration" aria-label="User Administration"><span>♙</span><b>User Administration</b></button>
         <button class="nav-item" data-module="admin-exceptions" data-tooltip="Risks & Exceptions" aria-label="Risks and Exceptions"><span>!</span><b>Risks & Exceptions</b></button>
         <button class="nav-item" data-module="admin-system" data-tooltip="System & Future" aria-label="System and Future"><span>⚙</span><b>System & Future</b></button>
@@ -208,7 +209,7 @@
           <span class="sidebar-logout-icon" aria-hidden="true">↪</span>
           <span class="sidebar-logout-label">Sign out</span>
         </button>
-        <span class="sidebar-version">HOME31 Platform V7.9.4.3</span>
+        <span class="sidebar-version">HOME31 Platform V7.9.4.4</span>
       </div>
     </aside>
 
@@ -243,22 +244,22 @@
             <div>
               <span id="welcome-role" class="hero-tag">Normal User</span>
               <h2 id="welcome-title">Welcome to HOME31.</h2>
-              <p id="welcome-copy">Submit initiatives, complete readiness requirements and monitor your project portfolio.</p>
+              <p id="welcome-copy">View your department portfolio, manage records you created and follow shared delivery progress.</p>
             </div>
             <button class="button gold" type="button" data-open-initiative>+ Create Initiative</button>
           </div>
 
           <div class="kpi-grid four">
-            <article><span>My initiatives</span><strong id="user-kpi-total">0</strong><small>Total records under your account</small></article>
+            <article><span>Department initiatives</span><strong id="user-kpi-total">0</strong><small>All visible records in your assigned department</small></article>
             <article><span>In progress</span><strong id="user-kpi-progress">0</strong><small>Currently executing</small></article>
             <article><span>At risk</span><strong id="user-kpi-risk">0</strong><small>Require attention</small></article>
-            <article><span>Average progress</span><strong id="user-kpi-average">0%</strong><small>Across your portfolio</small></article>
+            <article><span>Average progress</span><strong id="user-kpi-average">0%</strong><small>Across the department portfolio</small></article>
           </div>
 
           <div class="dashboard-grid">
             <article class="panel chart-panel">
-              <div class="panel-heading"><div><span class="section-label">My delivery</span><h3>Status distribution</h3></div></div>
-              <div class="chart-shell"><canvas id="user-status-chart" role="img" tabindex="0" aria-label="Status distribution for the signed-in user’s initiatives"></canvas></div>
+              <div class="panel-heading"><div><span class="section-label">Department delivery</span><h3>Status distribution</h3></div></div>
+              <div class="chart-shell"><canvas id="user-status-chart" role="img" tabindex="0" aria-label="Status distribution for the signed-in user’s department initiatives"></canvas></div>
             </article>
 
             <article class="panel">
@@ -269,12 +270,12 @@
 
           <div class="panel">
             <div class="panel-heading">
-              <div><span class="section-label">Recent portfolio</span><h3>My latest initiatives</h3></div>
+              <div><span class="section-label">Recent portfolio</span><h3>Latest department initiatives</h3></div>
               <button class="button secondary small" data-jump="my-initiatives" type="button">Open all</button>
             </div>
             <div class="table-wrap">
               <table id="user-recent-table">
-                <thead><tr><th>Initiative</th><th>Pillar</th><th>Status</th><th>Readiness</th><th>Progress</th></tr></thead>
+                <thead><tr><th>Initiative</th><th>Access</th><th>Pillar</th><th>Status</th><th>Readiness</th><th>Progress</th></tr></thead>
                 <tbody></tbody>
               </table>
             </div>
@@ -283,7 +284,7 @@
 
         <section id="module-my-initiatives" class="module">
           <div class="module-heading">
-            <div><span class="section-label">Personal portfolio</span><h2>My Initiatives</h2><p>Create, update and monitor initiatives assigned to your account.</p></div>
+            <div><span class="section-label">Department portfolio</span><h2>Department Initiatives</h2><p>View every initiative in your assigned department. Records created by colleagues are view-only.</p></div>
             <button class="button gold" type="button" data-open-initiative>+ New Initiative</button>
           </div>
 
@@ -301,11 +302,11 @@
 
         <section id="module-readiness" class="module">
           <div class="module-heading">
-            <div><span class="section-label">Governance and people readiness</span><h2>Readiness & HR Collaboration</h2><p>Review readiness scores, gaps and initiatives requiring HR involvement.</p></div>
+            <div><span class="section-label">Governance and people readiness</span><h2>Readiness & HR Collaboration</h2><p>Review readiness scores, gaps and HR involvement across your assigned department.</p></div>
           </div>
 
           <div class="kpi-grid four">
-            <article><span>Average readiness</span><strong id="readiness-average">0%</strong><small>Across your initiatives</small></article>
+            <article><span>Average readiness</span><strong id="readiness-average">0%</strong><small>Across department initiatives</small></article>
             <article><span>Below 70%</span><strong id="readiness-low">0</strong><small>Need corrective action</small></article>
             <article><span>HR required</span><strong id="readiness-hr">0</strong><small>People collaboration needed</small></article>
             <article><span>High risk</span><strong id="readiness-risk">0</strong><small>Escalation or treatment</small></article>
@@ -324,7 +325,7 @@
               <div class="panel-heading"><h3>Profile Information</h3></div>
               <label class="field"><span>Full name</span><input id="account-full-name" required></label>
               <label class="field"><span>Email</span><input id="account-email" type="email" disabled></label>
-              <label class="field"><span>Department</span><input id="account-department"></label>
+              <label class="field account-department-field"><span>Department</span><input id="account-department" aria-describedby="account-department-note"><small id="account-department-note">For normal users, department assignment is controlled by a HOME31 super admin.</small></label>
               <button class="button gold" type="submit">Save Profile</button>
             </form>
 
@@ -841,16 +842,16 @@
           </div>
         </section>
 
-        <section id="module-admin-project-management" class="module admin-command-module project-management-module">
+        <section id="module-project-management" class="module admin-command-module project-management-module">
           <div class="admin-command-hero project-management-hero">
             <div>
-              <span class="admin-command-code">DELIVERY 01</span>
+              <span id="pm-workspace-kicker" class="admin-command-code">DELIVERY 01</span>
               <h2>Project Management</h2>
-              <p>Monitor schedule, progress, readiness, risk and next actions across the selected HOME31 portfolio year.</p>
+              <p id="pm-workspace-copy">Monitor schedule, progress, readiness, risk and next actions across the selected HOME31 portfolio year.</p>
             </div>
             <div class="admin-command-actions">
               <button id="pm-refresh" class="admin-command-button ghost" type="button">↻ Refresh</button>
-              <button class="admin-command-button ghost" data-jump="admin-portfolio" type="button">Open Enterprise Portfolio</button>
+              <button class="admin-command-button ghost pm-admin-only" data-jump="admin-portfolio" type="button">Open Enterprise Portfolio</button>
               <button class="admin-command-button gold" type="button" data-open-initiative>+ Key In Initiative</button>
             </div>
           </div>
@@ -899,12 +900,12 @@
             </div>
             <div class="pm-filter-grid">
               <label><span>Search</span><input id="pm-search" type="search" placeholder="Project, owner or next action"></label>
-              <label><span>Department</span><select id="pm-department-filter"><option value="">All departments</option></select></label>
+              <label id="pm-department-control"><span>Department</span><select id="pm-department-filter"><option value="">All departments</option></select></label>
               <label><span>Status</span><select id="pm-status-filter"><option value="">All status</option><option>Planning</option><option>In Progress</option><option>At Risk</option><option>On Hold</option><option>Completed</option></select></label>
               <label><span>Risk level</span><select id="pm-risk-filter"><option value="">All risk</option><option>Low</option><option>Medium</option><option>High</option><option>Extreme</option></select></label>
               <label><span>Delivery health</span><select id="pm-health-filter"><option value="">All health</option><option>Critical</option><option>Watch</option><option>On track</option><option>Completed</option></select></label>
             </div>
-            <div id="pm-active-filters" class="portfolio-active-filters" aria-live="polite"><span class="portfolio-filter-empty">No active filters. Showing the selected portfolio year.</span></div>
+            <div id="pm-active-filters" class="portfolio-active-filters" aria-live="polite"><span class="portfolio-filter-empty">No active filters. Showing the selected portfolio scope.</span></div>
           </article>
 
           <div class="admin-command-grid pm-overview-grid">
@@ -917,7 +918,7 @@
                 </div>
               </div>
               <div class="admin-command-chart-shell"><canvas id="pm-status-chart" role="img" tabindex="0" aria-label="Project delivery status distribution"></canvas></div>
-              <div class="pm-data-note">Data basis: saved <code>status</code> values. No forecast status is inferred.</div>
+              <div id="pm-data-note" class="pm-data-note">Data basis: saved <code>status</code> values. No forecast status is inferred.</div>
             </article>
 
             <article class="admin-command-panel pm-attention-panel">
@@ -1453,7 +1454,12 @@
         <button id="close-initiative-modal" class="icon-button" type="button" aria-label="Close initiative form">×</button>
       </div>
 
-      <div class="initiative-draft-bar" role="status" aria-live="polite">
+      <div id="initiative-readonly-banner" class="initiative-readonly-banner hidden" role="note">
+        <span aria-hidden="true">◉</span>
+        <div><strong>Department record — view only</strong><small>You can review this initiative because it belongs to your department. Only the record creator or a super admin can change it.</small></div>
+      </div>
+
+      <div id="initiative-draft-bar" class="initiative-draft-bar" role="status" aria-live="polite">
         <div class="initiative-draft-state">
           <span class="draft-shield" aria-hidden="true">✓</span>
           <div>
@@ -2206,6 +2212,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-    <script type="module" src="app.js?v=7.9.4.3"></script>
+    <script type="module" src="app.js?v=7.9.4.4"></script>
 </body>
 </html>

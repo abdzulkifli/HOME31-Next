@@ -132,6 +132,7 @@ let lastModalTrigger = null;
 let authRouteTimer = null;
 let authRouteRevision = 0;
 let activeWorkspaceModule = null;
+let initiativeModalReadOnly = false;
 
 const INITIATIVE_DRAFT_PREFIX = "home31-initiative-draft-v1";
 const INITIATIVE_DRAFT_DELAY = 800;
@@ -410,7 +411,7 @@ function bindEvents() {
   $("#refresh-admin-data").addEventListener("click", loadAdminData);
   $("#admin-overview-refresh").addEventListener("click", loadAdminData);
   $("#admin-portfolio-refresh").addEventListener("click", loadAdminData);
-  $("#pm-refresh").addEventListener("click", loadAdminData);
+  $("#pm-refresh").addEventListener("click", refreshProjectManagementData);
   $("#admin-export-portfolio").addEventListener("click", exportAdminPortfolioCsv);
   $("#admin-download-template").addEventListener("click", downloadExcelImportTemplate);
   $("#admin-import-excel").addEventListener("click", openExcelImportModal);
@@ -605,6 +606,8 @@ async function openPlatform(revision = authRouteRevision, userId = currentUser?.
     $("#initiative-owner-field").classList.add("hidden");
   }
 
+  configureProjectManagementWorkspace();
+
   $("#auth-screen").classList.add("hidden");
   $("#force-password-screen").classList.add("hidden");
   $("#platform").classList.remove("hidden");
@@ -615,14 +618,23 @@ async function openPlatform(revision = authRouteRevision, userId = currentUser?.
 
 function renderIdentity() {
   const name = currentProfile.full_name || currentUser.email;
+  const isSuperAdmin = currentProfile.role === "super_admin";
+  const department = String(currentProfile.department || "").trim();
   $("#sidebar-name").textContent = name;
   $("#sidebar-role").textContent = labelRole(currentProfile.role);
   $("#sidebar-avatar").textContent = initials(name);
   $("#welcome-title").textContent = `Welcome, ${name.split(" ")[0] || "User"}.`;
   $("#welcome-role").textContent = labelRole(currentProfile.role);
+  $("#welcome-copy").textContent = isSuperAdmin
+    ? "Manage enterprise initiatives, readiness, users and delivery oversight."
+    : department
+      ? `Showing the ${department} portfolio. Shared department records are view-only unless you created them.`
+      : "Your department has not been assigned. Contact a HOME31 super admin before creating or viewing initiatives.";
   $("#account-full-name").value = currentProfile.full_name || "";
   $("#account-email").value = currentUser.email || "";
-  $("#account-department").value = currentProfile.department || "";
+  $("#account-department").value = department;
+  $("#account-department").disabled = !isSuperAdmin;
+  $("#account-department").setAttribute("aria-readonly", String(!isSuperAdmin));
 }
 
 async function login(event) {
@@ -733,16 +745,18 @@ async function updateProfile(event) {
   event.preventDefault();
   const updates = {
     full_name: $("#account-full-name").value.trim(),
-    department: $("#account-department").value.trim(),
     updated_at: new Date().toISOString()
   };
+  if (currentProfile?.role === "super_admin") {
+    updates.department = $("#account-department").value.trim();
+  }
 
   const { error } = await supabase.from("profiles").update(updates).eq("id", currentUser.id);
   if (error) return showToast(error.message, true);
 
   Object.assign(currentProfile, updates);
   renderIdentity();
-  showToast("Profile updated.");
+  showToast(currentProfile?.role === "super_admin" ? "Profile updated." : "Profile name updated. Department assignment remains admin-controlled.");
 }
 
 async function updatePasswordFromAccount(event) {
@@ -792,8 +806,8 @@ function readWorkspaceModule(isSuperAdmin) {
   try {
     const saved = localStorage.getItem(WORKSPACE_MODULE_STATE_KEY);
     const allowed = isSuperAdmin
-      ? ["admin-overview", "admin-portfolio", "admin-project-management", "admin-users", "admin-exceptions", "admin-system", "account"]
-      : ["user-home", "my-initiatives", "readiness", "account"];
+      ? ["admin-overview", "admin-portfolio", "project-management", "admin-users", "admin-exceptions", "admin-system", "account"]
+      : ["user-home", "my-initiatives", "project-management", "readiness", "account"];
     return allowed.includes(saved) ? saved : null;
   } catch (_error) {
     return null;
@@ -832,9 +846,10 @@ function showModule(name, { scrollToTop = true } = {}) {
   rememberWorkspaceModule(name);
   $("#page-title").textContent = nav?.querySelector("b")?.textContent || "HOME31";
   if (isMobileNavigation()) closeSidebarDrawer();
-  document.body.classList.toggle("admin-command-active", name.startsWith("admin-"));
-  const yearAwareModules = ["admin-overview", "admin-portfolio", "admin-project-management", "admin-exceptions"];
-  $("#admin-year-control").classList.toggle("hidden", !yearAwareModules.includes(name));
+  document.body.classList.toggle("admin-command-active", name.startsWith("admin-") || name === "project-management");
+  const yearAwareModules = ["admin-overview", "admin-portfolio", "project-management", "admin-exceptions"];
+  const showYearControl = currentProfile?.role === "super_admin" && yearAwareModules.includes(name);
+  $("#admin-year-control").classList.toggle("hidden", !showYearControl);
   if (scrollToTop) window.scrollTo({ top: 0, behavior: "auto" });
 
   if (name === "user-home") renderUserDashboard();
@@ -842,24 +857,45 @@ function showModule(name, { scrollToTop = true } = {}) {
   if (name === "readiness") renderReadiness();
   if (name === "admin-overview") renderAdminOverview();
   if (name === "admin-portfolio") renderAdminPortfolio();
-  if (name === "admin-project-management") renderProjectManagement();
+  if (name === "project-management") renderProjectManagement();
   if (name === "admin-users") renderAdminUsers();
   if (name === "admin-exceptions") renderAdminExceptions();
   window.setTimeout(() => Object.values(charts).forEach(chart => chart?.resize?.()), 80);
 }
 
+function normaliseDepartment(value) {
+  return String(value || "").trim().toLocaleLowerCase("en");
+}
+
+function canEditInitiative(project) {
+  return currentProfile?.role === "super_admin" || String(project?.created_by || "") === String(currentUser?.id || "");
+}
+
 async function loadUserProjects() {
+  const assignedDepartment = normaliseDepartment(currentProfile?.department);
+  if (!assignedDepartment && currentProfile?.role !== "super_admin") {
+    userProjects = [];
+    renderUserDashboard();
+    renderUserInitiatives();
+    renderReadiness();
+    renderProjectManagement();
+    showToast("Your account has no department assignment. Contact a HOME31 super admin.", true);
+    return;
+  }
+
   const { data, error } = await supabase
     .from("initiatives")
     .select("*")
-    .eq("created_by", currentUser.id)
     .order("updated_at", { ascending: false });
 
   if (error) return showToast(error.message, true);
-  userProjects = data || [];
+  userProjects = (data || []).filter(project =>
+    currentProfile?.role === "super_admin" || normaliseDepartment(project.department) === assignedDepartment
+  );
   renderUserDashboard();
   renderUserInitiatives();
   renderReadiness();
+  renderProjectManagement();
 }
 
 function renderUserDashboard() {
@@ -880,6 +916,7 @@ function renderUserDashboard() {
   $("#user-recent-table tbody").innerHTML = userProjects.slice(0, 6).map(project => `
     <tr>
       <td><strong>${escapeHtml(project.initiative_name)}</strong></td>
+      <td><span class="department-access-badge ${canEditInitiative(project) ? "owned" : "shared"}">${canEditInitiative(project) ? "Editable" : "View only"}</span></td>
       <td>${escapeHtml(project.strategic_pillar)}</td>
       <td><span class="status-pill">${escapeHtml(project.status)}</span></td>
       <td>${Number(project.readiness_score || 0)}%</td>
@@ -916,17 +953,17 @@ function renderUserInitiatives() {
   const query = ($("#user-search").value || "").toLowerCase();
   const status = $("#user-status-filter").value || "";
 
-  const filtered = userProjects.filter(project =>
-    (!query || project.initiative_name.toLowerCase().includes(query)) &&
-    (!status || project.status === status)
-  );
+  const filtered = userProjects.filter(project => {
+    const haystack = [project.initiative_name, project.accountable_owner, project.department, project.strategic_pillar].join(" ").toLowerCase();
+    return (!query || haystack.includes(query)) && (!status || project.status === status);
+  });
 
   $("#user-initiative-list").innerHTML = filtered.length
-    ? filtered.map(project => initiativeCard(project, false)).join("")
-    : '<div class="notice blue">No matching initiatives.</div>';
+    ? filtered.map(project => initiativeCard(project)).join("")
+    : '<div class="notice blue">No matching department initiatives.</div>';
 
-  $$("[data-edit-project]").forEach(button =>
-    button.addEventListener("click", () => openInitiativeModal(button.dataset.editProject))
+  $$("[data-open-project]").forEach(button =>
+    button.addEventListener("click", () => openInitiativeModal(button.dataset.openProject))
   );
   $$("[data-delete-project]").forEach(button =>
     button.addEventListener("click", () => deleteInitiative(button.dataset.deleteProject))
@@ -998,7 +1035,7 @@ function populateAdminDepartmentOptions() {
 
   ["#admin-department-filter", "#pm-department-filter"].forEach(selector => {
     const select = $(selector);
-    if (!select) return;
+    if (!select || (selector === "#pm-department-filter" && currentProfile?.role !== "super_admin")) return;
     const current = select.value;
     select.innerHTML = [
       '<option value="">All departments</option>',
@@ -1474,6 +1511,7 @@ function renderAdminUsers() {
             <button class="text-button" data-toggle-role="${profile.id}" type="button">
               ${profile.role === "super_admin" ? "Make Normal User" : "Make Super Admin"}
             </button>
+            <button class="text-button" data-change-department="${profile.id}" type="button">Change department</button>
             <button class="text-button" data-reset-password="${profile.id}" type="button">Reset temporary password</button>
           ` : '<span>Current account</span>'}
         </div>
@@ -1483,6 +1521,9 @@ function renderAdminUsers() {
 
   $$("[data-toggle-role]").forEach(button =>
     button.addEventListener("click", () => toggleRole(button.dataset.toggleRole))
+  );
+  $$("[data-change-department]").forEach(button =>
+    button.addEventListener("click", () => changeUserDepartment(button.dataset.changeDepartment))
   );
   $$("[data-reset-password]").forEach(button =>
     button.addEventListener("click", () => resetUserPassword(button.dataset.resetPassword))
@@ -1542,6 +1583,28 @@ function renderAdminUserGovernance() {
       <em>${value}</em>
     </div>
   `).join("");
+}
+
+async function changeUserDepartment(profileId) {
+  if (currentProfile?.role !== "super_admin") return;
+  const profile = adminProfiles.find(item => String(item.id) === String(profileId));
+  if (!profile) return;
+  const nextDepartment = window.prompt(
+    `Assign department for ${profile.full_name || profile.email}:`,
+    profile.department || ""
+  );
+  if (nextDepartment === null) return;
+  const department = nextDepartment.trim();
+  if (!department) return showToast("Department cannot be blank for a normal user.", true);
+
+  const { error } = await supabase
+    .from("profiles")
+    .update({ department, updated_at: new Date().toISOString() })
+    .eq("id", profileId);
+  if (error) return showToast(error.message, true);
+
+  showToast(`${profile.full_name || profile.email} is now assigned to ${department}.`);
+  await loadAdminData();
 }
 
 function clearAdminUserFilters() {
@@ -1858,6 +1921,10 @@ function handleInitiativeBeforeUnload(event) {
 }
 
 function openInitiativeModal(projectId = null) {
+  initiativeModalReadOnly = false;
+  $$("#initiative-form input, #initiative-form select, #initiative-form textarea").forEach(element => { element.disabled = false; });
+  $("#initiative-readonly-banner")?.classList.add("hidden");
+  $("#initiative-draft-bar")?.classList.remove("hidden");
   initiativeFormInitialising = true;
   initiativeFormDirty = false;
   pendingInitiativeDraft = null;
@@ -1894,11 +1961,13 @@ function openInitiativeModal(projectId = null) {
   $("#initiative-created-by").value = currentUser.id;
   if (!projectId && currentProfile?.role !== "super_admin") {
     $("#initiative-owner").value = currentProfile?.full_name || currentUser?.email || "";
+    $("#initiative-department").value = currentProfile?.department || "";
   }
   $("#initiative-modal-title").textContent = projectId ? "Edit Initiative" : "Create Initiative";
 
   const source = currentProfile?.role === "super_admin" ? adminProjects : userProjects;
   const project = source.find(item => String(item.id) === String(projectId));
+  initiativeModalReadOnly = Boolean(project && !canEditInitiative(project));
   activeInitiativeDraftKey = initiativeDraftStorageKey(project?.id || projectId || "new");
 
   if (project) {
@@ -1980,6 +2049,16 @@ function openInitiativeModal(projectId = null) {
     $("#initiative-evidence-notes").value = project.evidence_notes || "";
   }
 
+  const isNormalUser = currentProfile?.role !== "super_admin";
+  if (isNormalUser) $("#initiative-department").disabled = true;
+  if (initiativeModalReadOnly) {
+    $$("#initiative-form input, #initiative-form select, #initiative-form textarea").forEach(element => { element.disabled = true; });
+    $("#initiative-modal-title").textContent = "View Department Initiative";
+    $("#initiative-readonly-banner")?.classList.remove("hidden");
+    $("#initiative-draft-bar")?.classList.add("hidden");
+    $("#initiative-draft-recovery")?.classList.add("hidden");
+  }
+
   currentInitiativeFormStep = 1;
   renderInitiativeFormStep();
   updateEvidencePresentation();
@@ -1991,7 +2070,7 @@ function openInitiativeModal(projectId = null) {
   modal.setAttribute("aria-hidden", "false");
   document.body.classList.add("modal-open");
   initiativeFormInitialising = false;
-  checkForInitiativeDraft(project);
+  if (!initiativeModalReadOnly) checkForInitiativeDraft(project);
   window.setTimeout(() => $("#close-initiative-modal")?.focus(), 20);
 }
 
@@ -2006,6 +2085,7 @@ function closeInitiativeModal({ clearDraft = false } = {}) {
   document.body.classList.remove("modal-open");
   initiativeFormDirty = false;
   initiativeFormInitialising = false;
+  initiativeModalReadOnly = false;
   pendingInitiativeDraft = null;
   activeInitiativeDraftKey = null;
   const trigger = lastModalTrigger;
@@ -2088,7 +2168,8 @@ function renderInitiativeFormStep() {
 
   $("#initiative-previous-step").classList.toggle("hidden", currentInitiativeFormStep === 1);
   $("#initiative-next-step").classList.toggle("hidden", currentInitiativeFormStep === 7);
-  $("#save-initiative-button").classList.toggle("hidden", currentInitiativeFormStep !== 7);
+  $("#save-initiative-button").classList.toggle("hidden", initiativeModalReadOnly || currentInitiativeFormStep !== 7);
+  $("#cancel-initiative-modal").classList.toggle("hidden", initiativeModalReadOnly);
   $("#initiative-current-step-label").textContent = `Step ${currentInitiativeFormStep} of 7`;
 
   if (currentInitiativeFormStep === 4) renderBudgetSummary();
@@ -2278,6 +2359,7 @@ function renderInitiativeReviewSummary() {
 
 async function saveInitiative(event) {
   event.preventDefault();
+  if (initiativeModalReadOnly) return showToast("This department record is view-only for your account.", true);
 
   for (let step = 1; step <= 7; step += 1) {
     if (!validateInitiativeStep(step)) {
@@ -2396,6 +2478,7 @@ async function saveInitiative(event) {
 async function deleteInitiative(projectId) {
   const project = userProjects.find(item => String(item.id) === String(projectId));
   if (!project) return;
+  if (!canEditInitiative(project)) return showToast("Only the record creator or a super admin can delete this initiative.", true);
   if (!window.confirm(`Delete "${project.initiative_name}"?`)) return;
 
   const { error } = await supabase.from("initiatives").delete().eq("id", projectId);
@@ -2944,22 +3027,26 @@ function profileFor(userId) {
 }
 
 function initiativeCard(project) {
+  const editable = canEditInitiative(project);
   return `
-    <article class="initiative-card">
+    <article class="initiative-card ${editable ? "initiative-owned" : "initiative-shared"}">
       <div class="initiative-card-head">
         <div>
           <strong>${escapeHtml(project.initiative_name)}</strong>
           <span>${escapeHtml(project.strategic_pillar)} · ${escapeHtml(project.department)}</span>
         </div>
-        <span class="status-pill">${escapeHtml(project.status)}</span>
+        <div class="initiative-card-badges">
+          <span class="department-access-badge ${editable ? "owned" : "shared"}">${editable ? "Editable" : "View only"}</span>
+          <span class="status-pill">${escapeHtml(project.status)}</span>
+        </div>
       </div>
       <span>${escapeHtml(project.initiative_category || "Unclassified")} · ${escapeHtml(project.system_type || "System not recorded")} · ${escapeHtml(project.priority_status || "Not assessed")}</span>
       <span>Project owner: ${escapeHtml(project.accountable_owner || "Not recorded")} · Sponsor: ${escapeHtml(project.executive_sponsor || "Not recorded")} · Delivery lead: ${escapeHtml(project.delivery_lead || "Not recorded")}</span>
       <span>Risk: ${escapeHtml(project.risk_level)} · Readiness: ${Number(project.readiness_score || 0)}% · HR: ${escapeHtml(project.hr_collaboration_status || "Not required")} · Evidence: ${Number(project.evidence_completeness || 0)}%</span>
       <div class="progress-track"><span style="width:${Number(project.progress || 0)}%"></span></div>
       <div class="initiative-actions">
-        <button class="button secondary small" data-edit-project="${project.id}" type="button">Edit</button>
-        <button class="text-button" data-delete-project="${project.id}" type="button">Delete</button>
+        <button class="button secondary small" data-open-project="${project.id}" type="button">${editable ? "Edit" : "View details"}</button>
+        ${editable ? `<button class="text-button" data-delete-project="${project.id}" type="button">Delete</button>` : ""}
       </div>
     </article>
   `;
@@ -3470,7 +3557,7 @@ function getFilteredAdminPortfolioRecords() {
   const status = $("#admin-status-filter").value || "";
   const pillar = $("#admin-pillar-filter").value || "";
   const risk = $("#admin-risk-filter").value || "";
-  return projectsForYear().filter(project => {
+  return projectManagementSourceRecords().filter(project => {
     const haystack = [projectImplementationYear(project), project.initiative_name, project.accountable_owner, project.executive_sponsor, project.delivery_lead, project.department, project.initiative_category, project.system_type, project.priority_status].join(" ").toLowerCase();
     return matchesAdminQuickFilter(project) &&
       (!query || haystack.includes(query)) &&
@@ -3700,6 +3787,36 @@ function safeCsvCell(value) {
 }
 function exportAdminPortfolioCsv() {if(currentProfile?.role!=="super_admin")return;const records=getFilteredAdminPortfolioRecords(),headers=["Implementation Year","Initiative","Department","Executive Sponsor","Project Owner Name","Delivery Lead","Category","System Type","Priority Status","Strategic Pillar","Status","Risk","Approved Budget","Post-Challenge Cost","Readiness","Progress","Evidence Completeness"],rows=records.map(p=>[projectImplementationYear(p),p.initiative_name,p.department,p.executive_sponsor,p.accountable_owner,p.delivery_lead,p.initiative_category,p.system_type,p.priority_status,p.strategic_pillar,p.status,p.risk_level,financialFieldConfirmed(p,"approved_budget")?(p.approved_budget??0):"",financialFieldConfirmed(p,"estimated_cost_post_challenge")?(p.estimated_cost_post_challenge??0):"",p.readiness_score??0,p.progress??0,p.evidence_completeness??0]),csv="\uFEFF"+[headers,...rows].map(r=>r.map(safeCsvCell).join(',')).join('\n'),blob=new Blob([csv],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=`HOME31-${selectedYearLabel().replaceAll(' ','-')}-Portfolio-${new Date().toISOString().slice(0,10)}.csv`;link.click();URL.revokeObjectURL(url);}
 
+function configureProjectManagementWorkspace() {
+  const isSuperAdmin = currentProfile?.role === "super_admin";
+  const department = String(currentProfile?.department || "").trim();
+  $("#pm-workspace-kicker").textContent = isSuperAdmin ? "DELIVERY 01 · ENTERPRISE" : "DELIVERY 01 · DEPARTMENT";
+  $("#pm-workspace-copy").textContent = isSuperAdmin
+    ? "Monitor schedule, progress, readiness, risk and next actions across the selected HOME31 portfolio year."
+    : department
+      ? `Monitor schedule, progress, readiness, risk and next actions for ${department}. Shared records remain view-only unless you created them.`
+      : "A super admin must assign your department before project information can be displayed.";
+  $("#pm-data-note").innerHTML = isSuperAdmin
+    ? 'Data basis: saved <code>status</code> values for the selected portfolio year. No forecast status is inferred.'
+    : `Data basis: saved records visible to <strong>${escapeHtml(department || "your assigned department")}</strong>. No cross-department records are included.`;
+  $("#pm-department-control")?.classList.toggle("hidden", !isSuperAdmin);
+  const departmentFilter = $("#pm-department-filter");
+  if (departmentFilter) {
+    departmentFilter.disabled = !isSuperAdmin;
+    if (!isSuperAdmin) departmentFilter.value = "";
+  }
+  $$(".pm-admin-only").forEach(element => element.classList.toggle("hidden", !isSuperAdmin));
+}
+
+async function refreshProjectManagementData() {
+  if (currentProfile?.role === "super_admin") await loadAdminData();
+  else await loadUserProjects();
+}
+
+function projectManagementSourceRecords() {
+  return currentProfile?.role === "super_admin" ? projectsForYear() : userProjects.slice();
+}
+
 function projectManagementDate(value) {
   if (!value) return "Not set";
   const date = new Date(`${value}T00:00:00`);
@@ -3760,7 +3877,7 @@ function renderProjectManagementActiveFilters() {
   if (!container) return;
   const controls = [
     ["search", $("#pm-search").value.trim(), value => `Search: ${value}`],
-    ["department", $("#pm-department-filter").value, value => `Department: ${value}`],
+    ...(currentProfile?.role === "super_admin" ? [["department", $("#pm-department-filter").value, value => `Department: ${value}`]] : []),
     ["status", $("#pm-status-filter").value, value => `Status: ${value}`],
     ["risk", $("#pm-risk-filter").value, value => `Risk: ${value}`],
     ["health", $("#pm-health-filter").value, value => `Health: ${value}`]
@@ -3801,7 +3918,8 @@ function projectAttentionReason(project) {
 }
 
 function renderProjectManagement() {
-  if (currentProfile?.role !== "super_admin" || !$("#module-admin-project-management")) return;
+  if (!currentProfile || !$("#module-project-management")) return;
+  configureProjectManagementWorkspace();
   const records = getFilteredProjectManagementRecords();
   const active = records.filter(project => project.status !== "Completed");
   const today = new Date();
@@ -3897,7 +4015,7 @@ function renderProjectManagementTable(records) {
   $("#pm-register-count").textContent = `${records.length} record${records.length === 1 ? "" : "s"}`;
   $("#pm-project-table tbody").innerHTML = records.length ? records.map(project => {
     const health = projectDeliveryHealth(project);
-    return `<tr><td><strong>${escapeHtml(project.initiative_name)}</strong><span>${escapeHtml(project.source_reference_no || `AMP${projectImplementationYear(project)}`)}</span></td><td>${escapeHtml(project.accountable_owner || "Not assigned")}</td><td>${escapeHtml(project.department || "Not recorded")}</td><td><span class="status-pill">${escapeHtml(project.status || "Planning")}</span></td><td><span class="risk-pill">${escapeHtml(project.risk_level || "Medium")}</span></td><td>${escapeHtml(projectManagementDate(project.start_date))}</td><td>${escapeHtml(projectManagementDate(project.target_date))}</td><td>${progressBar(project.progress)}</td><td>${Number(project.readiness_score || 0)}%</td><td><span class="pm-health-badge ${projectHealthClass(health)}">${escapeHtml(health)}</span></td><td>${escapeHtml(project.next_action || "Not recorded")}</td><td><button class="text-button" type="button" data-pm-open="${project.id}">Open</button></td></tr>`;
+    return `<tr><td><strong>${escapeHtml(project.initiative_name)}</strong><span>${escapeHtml(project.source_reference_no || `AMP${projectImplementationYear(project)}`)}</span></td><td>${escapeHtml(project.accountable_owner || "Not assigned")}</td><td>${escapeHtml(project.department || "Not recorded")}</td><td><span class="status-pill">${escapeHtml(project.status || "Planning")}</span></td><td><span class="risk-pill">${escapeHtml(project.risk_level || "Medium")}</span></td><td>${escapeHtml(projectManagementDate(project.start_date))}</td><td>${escapeHtml(projectManagementDate(project.target_date))}</td><td>${progressBar(project.progress)}</td><td>${Number(project.readiness_score || 0)}%</td><td><span class="pm-health-badge ${projectHealthClass(health)}">${escapeHtml(health)}</span></td><td>${escapeHtml(project.next_action || "Not recorded")}</td><td><button class="text-button" type="button" data-pm-open="${project.id}">${canEditInitiative(project) ? "Edit" : "View"}</button></td></tr>`;
   }).join("") : '<tr><td colspan="12">No projects match the selected filters.</td></tr>';
   bindProjectManagementOpenButtons();
   scheduleResponsiveTableEnhancement();
