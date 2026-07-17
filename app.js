@@ -187,6 +187,7 @@ let currentInitiativeFormStep = 1;
 let lastModalTrigger = null;
 let authRouteTimer = null;
 let authRouteRevision = 0;
+let ownPasswordUpdateInProgress = false;
 let activeWorkspaceModule = null;
 let adminOverviewView = "summary";
 let activeAdminContextKey = "";
@@ -571,6 +572,11 @@ function bindEvents() {
 }
 
 function scheduleAuthRoute(session) {
+  /* PASSWORD UPDATE ROUTE GUARD */
+  if (ownPasswordUpdateInProgress) {
+    currentUser = session?.user ?? currentUser;
+    return;
+  }
   const revision = ++authRouteRevision;
   const user = session?.user ?? null;
 
@@ -894,23 +900,41 @@ async function updatePasswordFromAccount(event) {
 }
 
 async function changeOwnPassword(password) {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session?.access_token) return "Your session has expired. Sign in again.";
+  if (!currentUser?.id) return "Your session has expired. Sign in again.";
 
+  ownPasswordUpdateInProgress = true;
   try {
-    const response = await fetch(`${SUPABASE_URL}/functions/v1/change-own-password`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${session.access_token}`,
-        "apikey": SUPABASE_PUBLISHABLE_KEY
-      },
-      body: JSON.stringify({ password })
-    });
-    const payload = await response.json().catch(() => ({}));
-    return response.ok ? null : (payload.error || `Password update failed with HTTP ${response.status}.`);
-  } catch (_error) {
-    return "Unable to reach the protected password service.";
+    const { data: authData, error: authError } = await supabase.auth.updateUser({ password });
+    if (authError) return authError.message || "Unable to update your password.";
+
+    const changedAt = new Date().toISOString();
+    const { data: profileRows, error: profileError } = await supabase
+      .from("profiles")
+      .update({
+        must_change_password: false,
+        password_changed_at: changedAt,
+        updated_at: changedAt
+      })
+      .eq("id", currentUser.id)
+      .select("id, must_change_password, password_changed_at");
+
+    if (profileError) {
+      return "Your authentication password changed, but HOME31 could not complete the profile update: " + profileError.message;
+    }
+    if (!profileRows?.length) {
+      return "Your authentication password changed, but HOME31 could not confirm the profile update. Contact the administrator.";
+    }
+
+    if (authData?.user) currentUser = authData.user;
+    if (currentProfile) {
+      currentProfile.must_change_password = false;
+      currentProfile.password_changed_at = changedAt;
+    }
+    return null;
+  } catch (error) {
+    return error?.message || "Unable to update your password. Check your connection and try again.";
+  } finally {
+    ownPasswordUpdateInProgress = false;
   }
 }
 
@@ -1890,35 +1914,59 @@ async function createUserAsAdmin(event) {
   event.preventDefault();
   if (currentProfile?.role !== "super_admin") return;
 
+  const button = event.submitter || event.currentTarget.querySelector('button[type="submit"]');
+  const status = document.getElementById("user-service-status");
+  const setStatus = (state, message) => {
+    if (!status) return;
+    status.className = "admin-service-status " + state;
+    status.textContent = message;
+  };
   const password = $("#admin-user-password").value;
   if (!isStrongPassword(password)) {
+    setStatus("error", "Temporary password does not meet the HOME31 password standard.");
     return showToast("Temporary password must contain at least 10 characters with uppercase, lowercase, number and symbol.", true);
   }
 
   const { data: { session } } = await supabase.auth.getSession();
-  if (!session?.access_token) return showToast("Your session has expired. Sign in again.", true);
+  if (!session?.access_token) {
+    setStatus("error", "Your administrator session has expired. Sign in again.");
+    return showToast("Your session has expired. Sign in again.", true);
+  }
 
-  const response = await fetch(`${SUPABASE_URL}/functions/v1/admin-create-user`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${session.access_token}`,
-      "apikey": SUPABASE_PUBLISHABLE_KEY
-    },
-    body: JSON.stringify({
-      full_name: $("#admin-user-name").value.trim(),
-      department: $("#admin-user-department").value.trim(),
-      email: $("#admin-user-email").value.trim().toLowerCase(),
-      password
-    })
-  });
-
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) return showToast(payload.error || `User creation failed with HTTP ${response.status}.`, true);
-
-  $("#admin-create-user-form").reset();
-  showToast("Active normal user created. The user must change the temporary password at first login.");
-  await loadAdminData();
+  if (button) { button.disabled = true; button.textContent = "Creating user…"; }
+  setStatus("checking", "Contacting the protected admin-create-user service…");
+  try {
+    const response = await fetch(SUPABASE_URL + "/functions/v1/admin-create-user", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + session.access_token,
+        "apikey": SUPABASE_PUBLISHABLE_KEY
+      },
+      body: JSON.stringify({
+        full_name: $("#admin-user-name").value.trim(),
+        department: $("#admin-user-department").value.trim(),
+        email: $("#admin-user-email").value.trim().toLowerCase(),
+        password
+      })
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const message = payload.error || ("User creation failed with HTTP " + response.status + ".");
+      setStatus("error", message + " Check Supabase Edge Function logs for admin-create-user.");
+      return showToast(message, true);
+    }
+    $("#admin-create-user-form").reset();
+    setStatus("success", "Service available. Active normal user created successfully and first-login password change is required.");
+    showToast("Active normal user created. The user must change the temporary password at first login.");
+    await loadAdminData();
+  } catch (error) {
+    const message = error?.message || "Unable to reach admin-create-user.";
+    setStatus("error", message + " Confirm that the admin-create-user Edge Function is deployed in this Supabase project.");
+    showToast("Unable to reach the protected user-creation service.", true);
+  } finally {
+    if (button) { button.disabled = false; button.textContent = "Create Active User"; }
+  }
 }
 
 function secureRandomCharacter(characters) {
@@ -5057,3 +5105,6 @@ function updateChartReadability() {
     chart.update("none");
   });
 }
+
+
+/* HOME31 V7.9.4.10 ADMIN LIGHT PASSWORD FIX */
