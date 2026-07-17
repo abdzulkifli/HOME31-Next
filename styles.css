@@ -3802,3 +3802,45 @@ body.modal-open .display-settings{
   .executive-workspace-tab{min-height:40px;padding:9px 12px;font-size:13px}
 }
 @media(prefers-reduced-motion:reduce){.executive-workspace-tabs{scroll-behavior:auto}}
+
+
+/* ================================================================
+   V7.9.5 DEPARTMENT END-USER WORKSPACE
+   ================================================================ */
+.department-dashboard-shell{--dept-accent:#235a82;--dept-teal:#11725b}
+.department-portfolio-hero{align-items:flex-end;background:linear-gradient(135deg,#102f49,#174d6b 62%,#0c3e49)}
+.department-hero-department{display:block;margin-top:11px;color:#e8ca84;font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
+.department-access-note{margin:14px 0 0;padding:13px 15px;border:1px solid #bad1df;border-left:5px solid var(--dept-accent);border-radius:14px;background:#edf6fc;color:#274e69;font-size:13px;line-height:1.55}
+.department-access-note.warning{border-color:#e4c785;border-left-color:#b85c18;background:#fff7e4;color:#70400e}
+.department-kpi-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:11px;margin-top:14px}
+.department-kpi-grid article{min-height:128px;padding:17px;border:1px solid var(--line);border-radius:17px;background:#fff;box-shadow:0 8px 20px rgba(70,24,27,.05)}
+.department-kpi-grid article.attention{border-top:4px solid #b85c18}
+.department-kpi-grid span{display:block;color:var(--muted);font-size:11px;font-weight:700}
+.department-kpi-grid strong{display:block;margin-top:10px;font-size:28px;line-height:1.05}
+.department-kpi-grid small{display:block;margin-top:8px;color:var(--muted);font-size:10.5px;line-height:1.4}
+.department-dashboard-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:14px}
+.department-dashboard-grid .panel-heading p,.department-recent-panel .panel-heading p{margin:5px 0 0;color:var(--muted);font-size:11px;line-height:1.45}
+.department-attention-list{display:grid;gap:9px}
+.department-attention-item{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;padding:13px;border:1px solid var(--line);border-radius:14px;background:#fffaf8}
+.department-attention-item strong{display:block;font-size:12px}.department-attention-item span{display:block;margin-top:4px;color:var(--muted);font-size:10.5px;line-height:1.45}
+.department-attention-item em{font-style:normal;color:#8e1019;font-size:10px;font-weight:800;text-align:right}
+.department-scope-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.department-scope-grid article{padding:15px;border:1px solid var(--line);border-radius:14px;background:#f8fbfd}
+.department-scope-grid strong{display:block;color:#102f49;font-size:24px}.department-scope-grid span{display:block;margin-top:5px;color:var(--muted);font-size:10.5px}
+.department-recent-panel{margin-top:14px}
+.department-initiative-card{border-left:4px solid #235a82}
+.department-initiative-card.shared-record{border-left-color:#57999b}
+.department-card-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:12px}
+.department-card-metrics article{padding:10px;border:1px solid var(--line);border-radius:12px;background:#fafcfd}
+.department-card-metrics span{margin:0;color:var(--muted);font-size:9.5px}.department-card-metrics strong{display:block;margin-top:4px;font-size:11px}
+.department-record-details{margin-top:12px;border:1px solid var(--line);border-radius:13px;background:#fff}
+.department-record-details summary{padding:11px 13px;color:#235a82;font-size:11px;font-weight:800;cursor:pointer}
+.department-record-details-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;padding:0 13px 13px}
+.department-record-details-grid article{padding:10px;border-radius:11px;background:#f8f5f4}
+.department-record-details-grid span{margin:0;color:var(--muted);font-size:9.5px;text-transform:uppercase;letter-spacing:.04em}
+.department-record-details-grid strong{display:block;margin-top:5px;font-size:11px;line-height:1.45}
+.department-record-access{display:inline-flex;margin-top:12px;padding:7px 10px;border-radius:999px;background:#edf6fc;color:#235a82;font-size:10px;font-weight:800}
+.account-department-managed{background:#f3f5f6!important;color:#5d6a72!important;cursor:not-allowed}
+@media(max-width:1200px){.department-kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:900px){.department-dashboard-grid{grid-template-columns:1fr}.department-card-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:600px){.department-kpi-grid,.department-card-metrics,.department-scope-grid,.department-record-details-grid{grid-template-columns:1fr}.department-attention-item{grid-template-columns:1fr}.department-attention-item em{text-align:left}}
