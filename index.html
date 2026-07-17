@@ -4,13 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; form-action 'self'; script-src 'self' https://cdn.jsdelivr.net https://cdn.sheetjs.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' https://*.supabase.co; img-src 'self' data:; upgrade-insecure-requests">
-  <meta name="description" content="HOME31 Enterprise Management Platform V7.9.5 — portfolio continuity edition">
+  <meta name="description" content="HOME31 Enterprise Management Platform V7.9.2 — portfolio continuity edition">
   <meta name="theme-color" content="#061b2b">
-  <title>HOME31 Enterprise Management Platform V7.9.5</title>
+  <title>HOME31 Enterprise Management Platform V7.9.2</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=7.9.5"> 
+  <link rel="stylesheet" href="styles.css?v=7.9.2">
 </head>
 <body>
 
@@ -92,7 +92,10 @@
 
     <div class="auth-card-wrap">
       <div id="configuration-warning" class="notice warning hidden">
-        Configure <code>SUPABASE_URL</code> and <code>SUPABASE_PUBLISHABLE_KEY</code> in <code>app.js?v=7.9.5"login-form" class="auth-card">
+        Configure <code>SUPABASE_URL</code> and <code>SUPABASE_PUBLISHABLE_KEY</code> in <code>app.js</code>.
+      </div>
+
+      <form id="login-form" class="auth-card">
         <span class="section-label">Secure login</span>
         <h2>Welcome back</h2>
         <p>Sign in using the email and temporary or permanent password assigned to your account.</p>
@@ -183,8 +186,8 @@
       </div>
 
       <nav id="user-nav" class="module-nav" aria-label="User navigation">
-        <button class="nav-item active" data-module="user-home" data-tooltip="Department Dashboard" aria-label="Department Dashboard"><span>⌂</span><b>Department Dashboard</b></button>
-        <button class="nav-item" data-module="my-initiatives" data-tooltip="Department Initiatives" aria-label="Department Initiatives"><span>▤</span><b>Department Initiatives</b></button>
+        <button class="nav-item active" data-module="user-home" data-tooltip="My Dashboard" aria-label="My Dashboard"><span>⌂</span><b>My Dashboard</b></button>
+        <button class="nav-item" data-module="my-initiatives" data-tooltip="My Initiatives" aria-label="My Initiatives"><span>▤</span><b>My Initiatives</b></button>
         <button class="nav-item" data-module="readiness" data-tooltip="Readiness & HR" aria-label="Readiness and HR"><span>✓</span><b>Readiness & HR</b></button>
         <button class="nav-item" data-module="account" data-tooltip="My Account" aria-label="My Account"><span>⚙</span><b>My Account</b></button>
       </nav>
@@ -204,7 +207,7 @@
           <span class="sidebar-logout-icon" aria-hidden="true">↪</span>
           <span class="sidebar-logout-label">Sign out</span>
         </button>
-        <span class="sidebar-version">HOME31 Platform V7.9.5</span>
+        <span class="sidebar-version">HOME31 Platform V7.9.2</span>
       </div>
     </aside>
 
@@ -234,84 +237,52 @@
       </header>
 
       <section class="content">
-        <section id="module-user-home" class="module active department-dashboard-shell">
-          <div class="hero department-portfolio-hero">
+        <section id="module-user-home" class="module active">
+          <div class="hero">
             <div>
               <span id="welcome-role" class="hero-tag">Normal User</span>
-              <span id="user-department-name" class="department-hero-department">Department portfolio</span>
               <h2 id="welcome-title">Welcome to HOME31.</h2>
-              <p id="welcome-copy">Your department portfolio will appear after your profile is loaded.</p>
+              <p id="welcome-copy">Submit initiatives, complete readiness requirements and monitor your project portfolio.</p>
             </div>
-            <button class="button gold" type="button" data-open-initiative>+ Create Department Initiative</button>
+            <button class="button gold" type="button" data-open-initiative>+ Create Initiative</button>
           </div>
 
-          <div id="user-department-access-note" class="department-access-note" role="note"></div>
-
-          <div class="department-kpi-grid">
-            <article><span>Department initiatives</span><strong id="user-kpi-total">0</strong><small>All visible records for your department</small></article>
+          <div class="kpi-grid four">
+            <article><span>My initiatives</span><strong id="user-kpi-total">0</strong><small>Total records under your account</small></article>
             <article><span>In progress</span><strong id="user-kpi-progress">0</strong><small>Currently executing</small></article>
-            <article class="attention"><span>At risk</span><strong id="user-kpi-risk">0</strong><small>At-risk status or High / Extreme risk</small></article>
-            <article><span>Average progress</span><strong id="user-kpi-average">0%</strong><small>Across the department portfolio</small></article>
-            <article><span>Average readiness</span><strong id="user-kpi-readiness">0%</strong><small>Current readiness score</small></article>
-            <article><span>Approved budget</span><strong id="user-kpi-budget">RM0</strong><small>Confirmed Approved Budget only</small></article>
-            <article><span>Budget coverage</span><strong id="user-kpi-budget-coverage">0%</strong><small>Records with Approved Budget confirmed</small></article>
-            <article class="attention"><span>Overdue active</span><strong id="user-kpi-overdue">0</strong><small>Past target date and not completed</small></article>
+            <article><span>At risk</span><strong id="user-kpi-risk">0</strong><small>Require attention</small></article>
+            <article><span>Average progress</span><strong id="user-kpi-average">0%</strong><small>Across your portfolio</small></article>
           </div>
 
-          <div class="department-dashboard-grid">
+          <div class="dashboard-grid">
             <article class="panel chart-panel">
-              <div class="panel-heading"><div><span class="section-label">Department delivery</span><h3>Status Distribution</h3><p>Saved initiative status values.</p></div></div>
-              <div class="chart-shell"><canvas id="user-status-chart" role="img" tabindex="0" aria-label="Department initiative status distribution"></canvas></div>
-            </article>
-
-            <article class="panel chart-panel">
-              <div class="panel-heading"><div><span class="section-label">Exposure</span><h3>Risk Distribution</h3><p>Saved Low, Medium, High and Extreme risk ratings.</p></div></div>
-              <div class="chart-shell"><canvas id="user-risk-chart" role="img" tabindex="0" aria-label="Department initiative risk distribution"></canvas></div>
-            </article>
-
-            <article class="panel chart-panel">
-              <div class="panel-heading"><div><span class="section-label">Strategic alignment</span><h3>Initiatives by HOME31 Pillar</h3><p>Initiative count using the assigned strategic pillar.</p></div></div>
-              <div class="chart-shell"><canvas id="user-pillar-chart" role="img" tabindex="0" aria-label="Department initiatives by HOME31 strategic pillar"></canvas></div>
+              <div class="panel-heading"><div><span class="section-label">My delivery</span><h3>Status distribution</h3></div></div>
+              <div class="chart-shell"><canvas id="user-status-chart" role="img" tabindex="0" aria-label="Status distribution for the signed-in user’s initiatives"></canvas></div>
             </article>
 
             <article class="panel">
-              <div class="panel-heading"><div><span class="section-label">Management attention</span><h3>Priority Follow-Up</h3><p>Risk, overdue and readiness exceptions.</p></div></div>
-              <div id="user-attention-list" class="department-attention-list"></div>
-            </article>
-          </div>
-
-          <div class="dashboard-grid department-readiness-grid">
-            <article class="panel">
-              <div class="panel-heading"><div><span class="section-label">Immediate action</span><h3>Readiness Gaps</h3><p>Department initiatives below 70% readiness.</p></div></div>
+              <div class="panel-heading"><div><span class="section-label">Immediate action</span><h3>Readiness gaps</h3></div></div>
               <div id="user-gap-list" class="future-list"></div>
             </article>
-            <article class="panel department-scope-panel">
-              <div class="panel-heading"><div><span class="section-label">Department scope</span><h3>Portfolio Participation</h3><p>Visibility covers the department; record changes remain ownership-controlled.</p></div></div>
-              <div class="department-scope-grid">
-                <article><strong id="user-contribution-count">0</strong><span>Created by you</span></article>
-                <article><strong id="user-shared-count">0</strong><span>Shared department records</span></article>
-                <article><strong id="user-budget-confirmed-count">0</strong><span>Budgets confirmed</span></article>
-                <article><strong id="user-department-owner-count">0</strong><span>Named project owners</span></article>
-              </div>
-            </article>
           </div>
 
-          <div class="panel department-recent-panel">
+          <div class="panel">
             <div class="panel-heading">
-              <div><span class="section-label">Recent department portfolio</span><h3>Latest Department Initiatives</h3><p>Approved Budget is shown only when the field is confirmed.</p></div>
-              <button class="button secondary small" data-jump="my-initiatives" type="button">Open Department Register</button>
+              <div><span class="section-label">Recent portfolio</span><h3>My latest initiatives</h3></div>
+              <button class="button secondary small" data-jump="my-initiatives" type="button">Open all</button>
             </div>
             <div class="table-wrap">
               <table id="user-recent-table">
-                <thead><tr><th>Initiative</th><th>Project Owner</th><th>Status</th><th>Risk</th><th>Approved Budget</th><th>Readiness</th><th>Progress</th></tr></thead>
+                <thead><tr><th>Initiative</th><th>Pillar</th><th>Status</th><th>Readiness</th><th>Progress</th></tr></thead>
                 <tbody></tbody>
               </table>
             </div>
           </div>
         </section>
+
         <section id="module-my-initiatives" class="module">
           <div class="module-heading">
-            <div><span class="section-label">Department portfolio</span><h2>Department Initiatives</h2><p>View all initiatives assigned to your department. Shared records are view-only; records you created remain editable.</p></div><span id="department-initiative-count" class="status-pill">0 records</span>
+            <div><span class="section-label">Personal portfolio</span><h2>My Initiatives</h2><p>Create, update and monitor initiatives assigned to your account.</p></div>
             <button class="button gold" type="button" data-open-initiative>+ New Initiative</button>
           </div>
 
@@ -329,11 +300,11 @@
 
         <section id="module-readiness" class="module">
           <div class="module-heading">
-            <div><span class="section-label">Governance and people readiness</span><h2>Readiness & HR Collaboration</h2><p>Review readiness, people impact and HR collaboration across your department portfolio.</p></div>
+            <div><span class="section-label">Governance and people readiness</span><h2>Readiness & HR Collaboration</h2><p>Review readiness scores, gaps and initiatives requiring HR involvement.</p></div>
           </div>
 
           <div class="kpi-grid four">
-            <article><span>Average readiness</span><strong id="readiness-average">0%</strong><small>Across department initiatives</small></article>
+            <article><span>Average readiness</span><strong id="readiness-average">0%</strong><small>Across your initiatives</small></article>
             <article><span>Below 70%</span><strong id="readiness-low">0</strong><small>Need corrective action</small></article>
             <article><span>HR required</span><strong id="readiness-hr">0</strong><small>People collaboration needed</small></article>
             <article><span>High risk</span><strong id="readiness-risk">0</strong><small>Escalation or treatment</small></article>
@@ -352,7 +323,7 @@
               <div class="panel-heading"><h3>Profile Information</h3></div>
               <label class="field"><span>Full name</span><input id="account-full-name" required></label>
               <label class="field"><span>Email</span><input id="account-email" type="email" disabled></label>
-              <label class="field"><span>Department</span><input id="account-department"><small id="account-department-note">Department assignment controls portfolio access.</small></label>
+              <label class="field"><span>Department</span><input id="account-department"></label>
               <button class="button gold" type="submit">Save Profile</button>
             </form>
 
@@ -1152,7 +1123,7 @@
               <p>Translate the working prototype into a secure, integrated and governable enterprise platform roadmap.</p>
             </div>
             <div class="admin-command-actions">
-              <span class="admin-command-chip good">V7.9.5 foundation</span>
+              <span class="admin-command-chip good">V7.9.0 foundation</span>
             </div>
           </div>
 
@@ -1327,7 +1298,7 @@
           </article>
 
           <div class="admin-command-assurance-strip">
-            <article><strong>V7.9.5</strong><span>Protected form & Excel import</span></article>
+            <article><strong>V7.9.0</strong><span>Protected form & Excel import</span></article>
             <article><strong>Modular</strong><span>Expandable architecture</span></article>
             <article><strong>RBAC</strong><span>Controlled role model</span></article>
             <article><strong>RLS</strong><span>Database security</span></article>
@@ -2102,6 +2073,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-    <script type="module" src="app.js?v=7.9.5"></script>
+  <script type="module" src="app.js?v=7.9.2"></script>
 </body>
 </html>
