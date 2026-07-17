@@ -133,6 +133,9 @@ let authRouteTimer = null;
 let authRouteRevision = 0;
 let activeWorkspaceModule = null;
 let initiativeModalReadOnly = false;
+let userProjectScope = "all";
+let projectManagementQuickFilter = "";
+const USER_PROJECT_SCOPE_KEY = "home31-user-project-scope-v1";
 
 const INITIATIVE_DRAFT_PREFIX = "home31-initiative-draft-v1";
 const INITIATIVE_DRAFT_DELAY = 800;
@@ -152,6 +155,7 @@ async function initialise() {
   initialiseDisplaySettings();
   initialiseNavigation();
   initialiseExecutiveInteractions();
+  initialiseUserProjectScope();
   bindEvents();
   populatePillars();
   handleResetLink();
@@ -341,6 +345,7 @@ function bindEvents() {
   $("#force-logout-button").addEventListener("click", logout);
 
   $("#logout-button").addEventListener("click", logout);
+  $("#top-logout-button")?.addEventListener("click", logout);
   $("#menu-toggle").addEventListener("click", toggleNavigation);
   $("#sidebar-collapse-button").addEventListener("click", toggleNavigation);
   $("#sidebar-overlay").addEventListener("click", () => closeSidebarDrawer({ restoreFocus: true }));
@@ -381,6 +386,9 @@ function bindEvents() {
     $("#user-status-filter").value = "";
     renderUserInitiatives();
   });
+  $$('[data-user-project-scope]').forEach(button =>
+    button.addEventListener('click', () => setUserProjectScope(button.dataset.userProjectScope))
+  );
 
   $("#admin-search").addEventListener("input", () => {
     adminQuickFilter = "";
@@ -404,6 +412,10 @@ function bindEvents() {
   ["#pm-department-filter", "#pm-status-filter", "#pm-risk-filter", "#pm-health-filter"].forEach(selector =>
     $(selector).addEventListener("change", renderProjectManagement)
   );
+  $("#pm-ownership-filter")?.addEventListener("change", event => {
+    setUserProjectScope(event.target.value, { renderDashboard: false });
+    renderProjectManagement();
+  });
   $("#pm-clear-filters").addEventListener("click", clearProjectManagementFilters);
 
   $("#admin-create-user-form").addEventListener("submit", createUserAsAdmin);
@@ -519,7 +531,11 @@ function resetSessionState() {
   adminProjects = [];
   adminProfiles = [];
   destroyCharts();
-  document.body.classList.remove("super-admin-shell", "admin-command-active");
+  document.body.classList.remove("super-admin-shell", "department-user-shell", "admin-command-active");
+  $("#user-top-nav")?.classList.add("hidden");
+  $("#top-user-summary")?.classList.add("hidden");
+  $("#top-logout-button")?.classList.add("hidden");
+  syncDisplaySettingsPlacement(false);
   closeSidebarDrawer();
   $("#initiative-modal")?.classList.add("hidden");
   $("#excel-import-modal")?.classList.add("hidden");
@@ -572,6 +588,7 @@ async function routeSession(revision = authRouteRevision) {
 }
 
 function showAuth() {
+  syncDisplaySettingsPlacement(false);
   $("#auth-screen").classList.remove("hidden");
   $("#force-password-screen").classList.add("hidden");
   $("#platform").classList.add("hidden");
@@ -579,6 +596,7 @@ function showAuth() {
 }
 
 function showForcedPassword() {
+  syncDisplaySettingsPlacement(false);
   $("#auth-screen").classList.add("hidden");
   $("#force-password-screen").classList.remove("hidden");
   $("#platform").classList.add("hidden");
@@ -593,15 +611,19 @@ async function openPlatform(revision = authRouteRevision, userId = currentUser?.
 
   const isSuperAdmin = currentProfile.role === "super_admin";
   document.body.classList.toggle("super-admin-shell", isSuperAdmin);
+  document.body.classList.toggle("department-user-shell", !isSuperAdmin);
+
+  $("#user-nav").classList.add("hidden");
+  $("#user-top-nav").classList.toggle("hidden", isSuperAdmin);
+  $("#top-user-summary").classList.toggle("hidden", isSuperAdmin);
+  $("#top-logout-button").classList.toggle("hidden", isSuperAdmin);
 
   if (isSuperAdmin) {
-    $("#user-nav").classList.add("hidden");
     $("#admin-nav").classList.remove("hidden");
     $("#initiative-owner-field").classList.remove("hidden");
     await loadAdminData();
     if (!isCurrentAuthRoute(revision, userId)) return;
   } else {
-    $("#user-nav").classList.remove("hidden");
     $("#admin-nav").classList.add("hidden");
     $("#initiative-owner-field").classList.add("hidden");
   }
@@ -611,6 +633,7 @@ async function openPlatform(revision = authRouteRevision, userId = currentUser?.
   $("#auth-screen").classList.add("hidden");
   $("#force-password-screen").classList.add("hidden");
   $("#platform").classList.remove("hidden");
+  syncDisplaySettingsPlacement(!isSuperAdmin);
   const fallbackModule = isSuperAdmin ? "admin-overview" : "user-home";
   const restoredModule = readWorkspaceModule(isSuperAdmin) || fallbackModule;
   showModule(restoredModule, { scrollToTop: false });
@@ -623,13 +646,20 @@ function renderIdentity() {
   $("#sidebar-name").textContent = name;
   $("#sidebar-role").textContent = labelRole(currentProfile.role);
   $("#sidebar-avatar").textContent = initials(name);
-  $("#welcome-title").textContent = `Welcome, ${name.split(" ")[0] || "User"}.`;
-  $("#welcome-role").textContent = labelRole(currentProfile.role);
-  $("#welcome-copy").textContent = isSuperAdmin
+  if ($("#top-user-name")) $("#top-user-name").textContent = name;
+  if ($("#top-user-department")) $("#top-user-department").textContent = department || labelRole(currentProfile.role);
+  if ($("#top-user-avatar")) $("#top-user-avatar").textContent = initials(name);
+  if ($("#welcome-title")) $("#welcome-title").textContent = `Welcome, ${name.split(" ")[0] || "User"}.`;
+  if ($("#welcome-role")) $("#welcome-role").textContent = labelRole(currentProfile.role);
+  if ($("#welcome-copy")) $("#welcome-copy").textContent = isSuperAdmin
     ? "Manage enterprise initiatives, readiness, users and delivery oversight."
     : department
       ? `Showing the ${department} portfolio. Shared department records are view-only unless you created them.`
       : "Your department has not been assigned. Contact a HOME31 super admin before creating or viewing initiatives.";
+  if ($("#user-department-title")) $("#user-department-title").textContent = department ? `${department} Action Centre` : "Department Action Centre";
+  if ($("#user-department-summary")) $("#user-department-summary").textContent = department
+    ? `One focused view of ${department} delivery ownership, attention items and progress.`
+    : "A super admin must assign your department before project information can be displayed.";
   $("#account-full-name").value = currentProfile.full_name || "";
   $("#account-email").value = currentUser.email || "";
   $("#account-department").value = department;
@@ -846,7 +876,8 @@ function showModule(name, { scrollToTop = true } = {}) {
   rememberWorkspaceModule(name);
   $("#page-title").textContent = nav?.querySelector("b")?.textContent || "HOME31";
   if (isMobileNavigation()) closeSidebarDrawer();
-  document.body.classList.toggle("admin-command-active", name.startsWith("admin-") || name === "project-management");
+  const useAdminVisualShell = currentProfile?.role === "super_admin" && (name.startsWith("admin-") || name === "project-management");
+  document.body.classList.toggle("admin-command-active", useAdminVisualShell);
   const yearAwareModules = ["admin-overview", "admin-portfolio", "project-management", "admin-exceptions"];
   const showYearControl = currentProfile?.role === "super_admin" && yearAwareModules.includes(name);
   $("#admin-year-control").classList.toggle("hidden", !showYearControl);
@@ -898,55 +929,133 @@ async function loadUserProjects() {
   renderProjectManagement();
 }
 
-function renderUserDashboard() {
-  const total = userProjects.length;
-  const inProgress = userProjects.filter(project => project.status === "In Progress").length;
-  const atRisk = userProjects.filter(project =>
-    project.status === "At Risk" || ["High", "Extreme"].includes(project.risk_level)
-  ).length;
-  const average = total
-    ? Math.round(userProjects.reduce((sum, project) => sum + Number(project.progress || 0), 0) / total)
-    : 0;
-
-  $("#user-kpi-total").textContent = total;
-  $("#user-kpi-progress").textContent = inProgress;
-  $("#user-kpi-risk").textContent = atRisk;
-  $("#user-kpi-average").textContent = `${average}%`;
-
-  $("#user-recent-table tbody").innerHTML = userProjects.slice(0, 6).map(project => `
-    <tr>
-      <td><strong>${escapeHtml(project.initiative_name)}</strong></td>
-      <td><span class="department-access-badge ${canEditInitiative(project) ? "owned" : "shared"}">${canEditInitiative(project) ? "Editable" : "View only"}</span></td>
-      <td>${escapeHtml(project.strategic_pillar)}</td>
-      <td><span class="status-pill">${escapeHtml(project.status)}</span></td>
-      <td>${Number(project.readiness_score || 0)}%</td>
-      <td>${progressBar(project.progress)}</td>
-    </tr>
-  `).join("");
-
-  const gaps = userProjects.filter(project => Number(project.readiness_score || 0) < 70);
-  $("#user-gap-list").innerHTML = gaps.length
-    ? gaps.slice(0, 6).map(project => futureItem(project, `${project.readiness_score}% readiness`)).join("")
-    : '<div class="notice blue">No initiatives below 70% readiness.</div>';
-
-  renderUserStatusChart();
+function initialiseUserProjectScope() {
+  try {
+    const stored = localStorage.getItem(USER_PROJECT_SCOPE_KEY);
+    userProjectScope = ["all", "mine", "shared"].includes(stored) ? stored : "all";
+  } catch (_error) {
+    userProjectScope = "all";
+  }
 }
 
-function renderUserStatusChart() {
-  charts.userStatus?.destroy();
-  if (typeof Chart === "undefined") return;
-
-  const statuses = ["Planning", "In Progress", "At Risk", "On Hold", "Completed"];
-  charts.userStatus = new Chart($("#user-status-chart"), {
-    type: "doughnut",
-    data: {
-      labels: statuses,
-      datasets: [{
-        data: statuses.map(status => userProjects.filter(project => project.status === status).length)
-      }]
-    },
-    options: baseChartOptions()
+function setUserProjectScope(scope, { renderDashboard = true } = {}) {
+  userProjectScope = ["all", "mine", "shared"].includes(scope) ? scope : "all";
+  try {
+    localStorage.setItem(USER_PROJECT_SCOPE_KEY, userProjectScope);
+  } catch (_error) {
+    // Scope remains active for the current session.
+  }
+  $$('[data-user-project-scope]').forEach(button => {
+    const active = button.dataset.userProjectScope === userProjectScope;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', String(active));
   });
+  if ($("#pm-ownership-filter")) $("#pm-ownership-filter").value = userProjectScope;
+  if (renderDashboard) renderUserDashboard();
+}
+
+function scopedDepartmentProjects(records = userProjects) {
+  if (userProjectScope === "mine") return records.filter(canEditInitiative);
+  if (userProjectScope === "shared") return records.filter(project => !canEditInitiative(project));
+  return records.slice();
+}
+
+function projectTargetState(project) {
+  if (!project.target_date || project.status === "Completed") return { overdue: false, dueSoon: false };
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const target = new Date(`${project.target_date}T00:00:00`);
+  if (Number.isNaN(target.getTime())) return { overdue: false, dueSoon: false };
+  const limit = new Date(today);
+  limit.setDate(limit.getDate() + 30);
+  return { overdue: target < today, dueSoon: target >= today && target <= limit };
+}
+
+function renderUserDashboard() {
+  const departmentRecords = userProjects.slice();
+  const records = scopedDepartmentProjects(departmentRecords);
+  const owned = departmentRecords.filter(canEditInitiative);
+  const shared = departmentRecords.filter(project => !canEditInitiative(project));
+  const attention = records.filter(project => ["Critical", "Watch"].includes(projectDeliveryHealth(project)));
+  const dueSoon = records.filter(project => projectTargetState(project).dueSoon);
+  const overdue = records.filter(project => projectTargetState(project).overdue);
+  const averageProgress = records.length
+    ? Math.round(records.reduce((sum, project) => sum + Number(project.progress || 0), 0) / records.length)
+    : 0;
+  const averageReadiness = records.length
+    ? Math.round(records.reduce((sum, project) => sum + Number(project.readiness_score || 0), 0) / records.length)
+    : 0;
+
+  $("#user-kpi-total").textContent = departmentRecords.length;
+  $("#user-kpi-owned").textContent = owned.length;
+  $("#user-kpi-shared").textContent = shared.length;
+  $("#user-kpi-attention").textContent = attention.length;
+  $("#user-kpi-readiness").textContent = `${averageReadiness}%`;
+  $("#user-kpi-average").textContent = `${averageProgress}%`;
+  $("#user-kpi-due-soon").textContent = dueSoon.length;
+  $("#user-kpi-overdue").textContent = overdue.length;
+  $("#user-header-total").textContent = departmentRecords.length;
+  $("#user-header-owned").textContent = owned.length;
+  $("#user-header-last-refresh").textContent = `Updated ${new Date().toLocaleTimeString("en-MY", { hour: "2-digit", minute: "2-digit" })}`;
+  $("#user-scope-count-all").textContent = departmentRecords.length;
+  $("#user-scope-count-mine").textContent = owned.length;
+  $("#user-scope-count-shared").textContent = shared.length;
+  setUserProjectScope(userProjectScope, { renderDashboard: false });
+
+  $("#user-recent-table tbody").innerHTML = records.length ? records.slice(0, 7).map(project => {
+    const health = projectDeliveryHealth(project);
+    return `
+      <tr>
+        <td><strong>${escapeHtml(project.initiative_name)}</strong><span>${escapeHtml(project.accountable_owner || "Owner not assigned")}</span></td>
+        <td><span class="department-access-badge ${canEditInitiative(project) ? "owned" : "shared"}">${canEditInitiative(project) ? "Editable" : "View only"}</span></td>
+        <td><span class="status-pill">${escapeHtml(project.status || "Planning")}</span></td>
+        <td><span class="pm-health-badge ${projectHealthClass(health)}">${escapeHtml(health)}</span></td>
+        <td>${escapeHtml(projectManagementDate(project.target_date))}</td>
+        <td>${Number(project.readiness_score || 0)}%</td>
+        <td>${progressBar(project.progress)}</td>
+      </tr>`;
+  }).join("") : '<tr><td colspan="7">No projects are available in the selected scope.</td></tr>';
+
+  renderUserActionList(records);
+  renderUserStatusChart(records);
+  scheduleResponsiveTableEnhancement();
+}
+
+function renderUserActionList(records) {
+  const definitions = [
+    { key: "attention", label: "Critical or watch projects", count: records.filter(project => ["Critical", "Watch"].includes(projectDeliveryHealth(project))).length, detail: "Delivery health requires review" },
+    { key: "readiness", label: "Below 70% readiness", count: records.filter(project => Number(project.readiness_score || 0) < 70).length, detail: "Readiness corrective action required" },
+    { key: "overdue", label: "Overdue active projects", count: records.filter(project => projectTargetState(project).overdue).length, detail: "Target date has passed" },
+    { key: "due-soon", label: "Due within 30 days", count: records.filter(project => projectTargetState(project).dueSoon).length, detail: "Confirm completion plan and next action" },
+    { key: "no-target", label: "Target date missing", count: records.filter(project => project.status !== "Completed" && !project.target_date).length, detail: "Delivery timing is not recorded" },
+    { key: "zero-progress", label: "Active projects at 0%", count: records.filter(project => project.status !== "Completed" && Number(project.progress || 0) === 0).length, detail: "Confirm whether work has started" }
+  ];
+  const active = definitions.filter(item => item.count > 0);
+  $("#user-action-list").innerHTML = active.length ? active.map(item => `
+    <button class="user-action-item" type="button" data-user-action="${item.key}">
+      <span><strong>${escapeHtml(item.label)}</strong><small>${escapeHtml(item.detail)}</small></span>
+      <em>${item.count}</em>
+    </button>`).join("") : '<div class="user-action-clear"><strong>No immediate delivery exceptions</strong><span>The selected project scope has no current action flags.</span></div>';
+  $$('[data-user-action]').forEach(button => button.addEventListener('click', () => {
+    projectManagementQuickFilter = button.dataset.userAction;
+    showModule('project-management');
+  }));
+}
+
+function renderUserStatusChart(records = scopedDepartmentProjects()) {
+  charts.userStatus?.destroy();
+  const statuses = ["Planning", "In Progress", "At Risk", "On Hold", "Completed"];
+  const total = records.length;
+  $("#user-status-summary").innerHTML = statuses.map(status => {
+    const count = records.filter(project => project.status === status).length;
+    const percent = total ? Math.round(count / total * 100) : 0;
+    return `<div class="user-status-row"><span>${escapeHtml(status)}</span><i><b style="width:${percent}%"></b></i><strong>${count}</strong></div>`;
+  }).join("");
+  const zeroProgress = records.filter(project => project.status !== "Completed" && Number(project.progress || 0) === 0).length;
+  const lowReadiness = records.filter(project => Number(project.readiness_score || 0) < 70).length;
+  $("#user-delivery-note").innerHTML = total
+    ? `<strong>${total} project${total === 1 ? "" : "s"} in this view.</strong><span>${zeroProgress} active at 0% progress · ${lowReadiness} below 70% readiness. Progress and readiness are separate measures.</span>`
+    : '<strong>No projects in this scope.</strong><span>Select another portfolio scope to continue.</span>';
 }
 
 function renderUserInitiatives() {
@@ -3800,6 +3909,8 @@ function configureProjectManagementWorkspace() {
     ? 'Data basis: saved <code>status</code> values for the selected portfolio year. No forecast status is inferred.'
     : `Data basis: saved records visible to <strong>${escapeHtml(department || "your assigned department")}</strong>. No cross-department records are included.`;
   $("#pm-department-control")?.classList.toggle("hidden", !isSuperAdmin);
+  $("#pm-ownership-control")?.classList.toggle("hidden", isSuperAdmin);
+  if ($("#pm-ownership-filter")) $("#pm-ownership-filter").value = userProjectScope;
   const departmentFilter = $("#pm-department-filter");
   if (departmentFilter) {
     departmentFilter.disabled = !isSuperAdmin;
@@ -3850,6 +3961,7 @@ function getFilteredProjectManagementRecords() {
   const status = $("#pm-status-filter")?.value || "";
   const risk = $("#pm-risk-filter")?.value || "";
   const health = $("#pm-health-filter")?.value || "";
+  const ownership = currentProfile?.role === "super_admin" ? "all" : userProjectScope;
   // Super admins use the selected enterprise portfolio year. Normal users use
   // the department-scoped records returned by RLS and loaded into userProjects.
   return projectManagementSourceRecords().filter(project => {
@@ -3859,9 +3971,11 @@ function getFilteredProjectManagementRecords() {
     ].join(" ").toLowerCase();
     return (!query || haystack.includes(query)) &&
       (!department || project.department === department) &&
+      (ownership === "all" || (ownership === "mine" ? canEditInitiative(project) : !canEditInitiative(project))) &&
       (!status || project.status === status) &&
       (!risk || project.risk_level === risk) &&
-      (!health || projectDeliveryHealth(project) === health);
+      (!health || projectDeliveryHealth(project) === health) &&
+      matchesProjectManagementQuickFilter(project);
   });
 }
 
@@ -3871,15 +3985,43 @@ function clearProjectManagementFilters() {
   $("#pm-status-filter").value = "";
   $("#pm-risk-filter").value = "";
   $("#pm-health-filter").value = "";
+  projectManagementQuickFilter = "";
+  if (currentProfile?.role !== "super_admin") setUserProjectScope("all", { renderDashboard: false });
   renderProjectManagement();
+}
+
+function matchesProjectManagementQuickFilter(project) {
+  if (!projectManagementQuickFilter) return true;
+  const target = projectTargetState(project);
+  switch (projectManagementQuickFilter) {
+    case "attention": return ["Critical", "Watch"].includes(projectDeliveryHealth(project));
+    case "readiness": return Number(project.readiness_score || 0) < 70;
+    case "overdue": return target.overdue;
+    case "due-soon": return target.dueSoon;
+    case "no-target": return project.status !== "Completed" && !project.target_date;
+    case "zero-progress": return project.status !== "Completed" && Number(project.progress || 0) === 0;
+    default: return true;
+  }
+}
+
+function projectManagementQuickFilterLabel() {
+  return {
+    attention: "Critical or watch",
+    readiness: "Readiness below 70%",
+    overdue: "Overdue active",
+    "due-soon": "Due within 30 days",
+    "no-target": "Target date missing",
+    "zero-progress": "Active at 0% progress"
+  }[projectManagementQuickFilter] || "";
 }
 
 function renderProjectManagementActiveFilters() {
   const container = $("#pm-active-filters");
   if (!container) return;
   const controls = [
+    ["quick", projectManagementQuickFilter, () => `Focus: ${projectManagementQuickFilterLabel()}`],
     ["search", $("#pm-search").value.trim(), value => `Search: ${value}`],
-    ...(currentProfile?.role === "super_admin" ? [["department", $("#pm-department-filter").value, value => `Department: ${value}`]] : []),
+    ...(currentProfile?.role === "super_admin" ? [["department", $("#pm-department-filter").value, value => `Department: ${value}`]] : [["ownership", userProjectScope !== "all" ? userProjectScope : "", value => value === "mine" ? "Ownership: My editable projects" : "Ownership: Shared view-only projects"]]),
     ["status", $("#pm-status-filter").value, value => `Status: ${value}`],
     ["risk", $("#pm-risk-filter").value, value => `Risk: ${value}`],
     ["health", $("#pm-health-filter").value, value => `Health: ${value}`]
@@ -3892,11 +4034,14 @@ function renderProjectManagementActiveFilters() {
   }
   container.innerHTML = controls.map(([key, value, label]) => `<button class="portfolio-filter-chip" type="button" data-clear-pm-filter="${key}"><span>${escapeHtml(label(value))}</span><b aria-hidden="true">×</b><span class="sr-only">Remove filter</span></button>`).join("");
   $$('[data-clear-pm-filter]').forEach(button => button.addEventListener('click', () => {
+    const key = button.dataset.clearPmFilter;
     const map = {
       search: "#pm-search", department: "#pm-department-filter", status: "#pm-status-filter",
       risk: "#pm-risk-filter", health: "#pm-health-filter"
     };
-    const control = $(map[button.dataset.clearPmFilter]);
+    if (key === "quick") projectManagementQuickFilter = "";
+    if (key === "ownership") setUserProjectScope("all", { renderDashboard: false });
+    const control = $(map[key]);
     if (control) control.value = "";
     renderProjectManagement();
   }));
@@ -3979,7 +4124,7 @@ function renderProjectManagementCharts(records) {
       datasets: [{
         data: statuses.map(status => records.filter(project => project.status === status).length),
         backgroundColor: ["#7f99af", "#57999b", "#d26066", "#d1ad63", "#6ca69b"],
-        borderColor: "#102f49",
+        borderColor: currentProfile?.role === "super_admin" ? "#102f49" : "#ffffff",
         borderWidth: 4,
         cutout: "62%"
       }]
@@ -3987,7 +4132,7 @@ function renderProjectManagementCharts(records) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      plugins: { legend: { position: "bottom", labels: { color: EXECUTIVE_COLORS.text, usePointStyle: true, boxWidth: 8, font: { size: 12 } } } }
+      plugins: { legend: { position: "bottom", labels: { color: currentProfile?.role === "super_admin" ? EXECUTIVE_COLORS.text : "#5f4b4d", usePointStyle: true, boxWidth: 8, font: { size: 12 } } } }
     }
   });
 }
@@ -4064,6 +4209,20 @@ function renderAdminExceptionCharts(data) {
 /* ================================================================
    V7.7.1 DISPLAY SETTINGS AND RESPONSIVE READABILITY
    ================================================================ */
+
+function syncDisplaySettingsPlacement(inlineInTopbar) {
+  const settings = $("#display-settings");
+  const actions = $(".topbar-actions");
+  if (!settings) return;
+  const useInline = Boolean(inlineInTopbar && actions && !$("#platform")?.classList.contains("hidden"));
+  settings.classList.toggle("display-settings-inline", useInline);
+  if (useInline) {
+    const accountButton = $("#top-account-button");
+    actions.insertBefore(settings, accountButton || null);
+  } else if (settings.parentElement !== document.body) {
+    document.body.appendChild(settings);
+  }
+}
 
 function initialiseDisplaySettings() {
   try {

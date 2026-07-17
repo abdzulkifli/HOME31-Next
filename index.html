@@ -4,13 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; form-action 'self'; script-src 'self' https://cdn.jsdelivr.net https://cdn.sheetjs.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' https://*.supabase.co; img-src 'self' data:; upgrade-insecure-requests">
-  <meta name="description" content="HOME31 Enterprise Management Platform V7.9.4.5 — department end-user edition">
+  <meta name="description" content="HOME31 Enterprise Management Platform V7.9.4.6 — end-user action centre edition">
   <meta name="theme-color" content="#061b2b">
-  <title>HOME31 Enterprise Management Platform V7.9.4.5</title>
+  <title>HOME31 Enterprise Management Platform V7.9.4.6</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=7.9.4.5"> 
+    <link rel="stylesheet" href="styles.css?v=7.9.4.6"> 
 </head>
 <body>
 
@@ -92,7 +92,7 @@
 
     <div class="auth-card-wrap">
       <div id="configuration-warning" class="notice warning hidden">
-        Configure <code>SUPABASE_URL</code> and <code>SUPABASE_PUBLISHABLE_KEY</code> in <code>app.js?v=7.9.4.5</code>.
+        Configure <code>SUPABASE_URL</code> and <code>SUPABASE_PUBLISHABLE_KEY</code> in <code>app.js?v=7.9.4.6</code>.
       </div>
 
       <form id="login-form" class="auth-card">
@@ -209,7 +209,7 @@
           <span class="sidebar-logout-icon" aria-hidden="true">↪</span>
           <span class="sidebar-logout-label">Sign out</span>
         </button>
-        <span class="sidebar-version">HOME31 Platform V7.9.4.5</span>
+        <span class="sidebar-version">HOME31 Platform V7.9.4.6</span>
       </div>
     </aside>
 
@@ -233,49 +233,89 @@
             </label>
             <small id="admin-year-source-badge">Live data</small>
           </div>
+          <div id="top-user-summary" class="top-user-summary hidden" aria-label="Signed-in user">
+            <span id="top-user-avatar" class="top-user-avatar" aria-hidden="true">U</span>
+            <span class="top-user-copy">
+              <strong id="top-user-name">User</strong>
+              <small id="top-user-department">Department</small>
+            </span>
+          </div>
           <button id="top-new-initiative" class="button gold" type="button">+ New Initiative</button>
           <button id="top-account-button" class="icon-button" type="button" aria-label="Open my account">👤</button>
+          <button id="top-logout-button" class="icon-button top-logout-button hidden" type="button" aria-label="Sign out" title="Sign out">↪</button>
         </div>
       </header>
 
+      <nav id="user-top-nav" class="user-top-navigation hidden" aria-label="Department workspace navigation">
+        <button class="nav-item user-top-nav-item active" data-module="user-home" aria-label="Department Dashboard"><span>⌂</span><b>Dashboard</b></button>
+        <button class="nav-item user-top-nav-item" data-module="my-initiatives" aria-label="Department Initiatives"><span>▤</span><b>Department Initiatives</b></button>
+        <button class="nav-item user-top-nav-item" data-module="project-management" aria-label="Project Management"><span>◧</span><b>Project Management</b></button>
+        <button class="nav-item user-top-nav-item" data-module="readiness" aria-label="Readiness and HR"><span>✓</span><b>Readiness &amp; HR</b></button>
+        <button class="nav-item user-top-nav-item" data-module="account" aria-label="My Account"><span>⚙</span><b>My Account</b></button>
+      </nav>
+
       <section class="content">
-        <section id="module-user-home" class="module active">
-          <div class="hero">
+        <section id="module-user-home" class="module active department-action-centre">
+          <header class="department-command-header">
             <div>
-              <span id="welcome-role" class="hero-tag">Normal User</span>
-              <h2 id="welcome-title">Welcome to HOME31.</h2>
-              <p id="welcome-copy">View your department portfolio, manage records you created and follow shared delivery progress.</p>
+              <span class="section-label">Department action centre</span>
+              <h2 id="user-department-title">Department Dashboard</h2>
+              <p id="user-department-summary">A focused view of delivery ownership, attention items and department progress.</p>
             </div>
-            <button class="button gold" type="button" data-open-initiative>+ Create Initiative</button>
+            <div class="department-header-meta" aria-label="Department portfolio context">
+              <span><strong id="user-header-total">0</strong> visible projects</span>
+              <span><strong id="user-header-owned">0</strong> editable by you</span>
+              <span id="user-header-last-refresh">Updated just now</span>
+            </div>
+          </header>
+
+          <section class="user-scope-bar" aria-labelledby="user-scope-title">
+            <div>
+              <span class="section-label">Portfolio scope</span>
+              <strong id="user-scope-title">Choose the work you need to see</strong>
+            </div>
+            <div class="user-scope-switch" role="group" aria-label="Department project scope">
+              <button class="active" type="button" data-user-project-scope="all" aria-pressed="true">All Department <span id="user-scope-count-all">0</span></button>
+              <button type="button" data-user-project-scope="mine" aria-pressed="false">My Projects <span id="user-scope-count-mine">0</span></button>
+              <button type="button" data-user-project-scope="shared" aria-pressed="false">Shared Projects <span id="user-scope-count-shared">0</span></button>
+            </div>
+          </section>
+
+          <div class="kpi-grid user-kpi-grid-eight">
+            <article><span>Department projects</span><strong id="user-kpi-total">0</strong><small>All visible department records</small></article>
+            <article><span>My editable projects</span><strong id="user-kpi-owned">0</strong><small>Records created by your account</small></article>
+            <article><span>Shared view-only</span><strong id="user-kpi-shared">0</strong><small>Department records created by colleagues</small></article>
+            <article class="user-kpi-attention"><span>Need attention</span><strong id="user-kpi-attention">0</strong><small>Critical or watch delivery health</small></article>
+            <article><span>Average readiness</span><strong id="user-kpi-readiness">0%</strong><small>Across the selected project scope</small></article>
+            <article><span>Delivery progress</span><strong id="user-kpi-average">0%</strong><small>Average saved progress value</small></article>
+            <article><span>Due within 30 days</span><strong id="user-kpi-due-soon">0</strong><small>Active projects approaching target date</small></article>
+            <article class="user-kpi-overdue"><span>Overdue</span><strong id="user-kpi-overdue">0</strong><small>Past target date and not completed</small></article>
           </div>
 
-          <div class="kpi-grid four">
-            <article><span>Department initiatives</span><strong id="user-kpi-total">0</strong><small>All visible records in your assigned department</small></article>
-            <article><span>In progress</span><strong id="user-kpi-progress">0</strong><small>Currently executing</small></article>
-            <article><span>At risk</span><strong id="user-kpi-risk">0</strong><small>Require attention</small></article>
-            <article><span>Average progress</span><strong id="user-kpi-average">0%</strong><small>Across the department portfolio</small></article>
-          </div>
-
-          <div class="dashboard-grid">
-            <article class="panel chart-panel">
-              <div class="panel-heading"><div><span class="section-label">Department delivery</span><h3>Status distribution</h3></div></div>
-              <div class="chart-shell"><canvas id="user-status-chart" role="img" tabindex="0" aria-label="Status distribution for the signed-in user’s department initiatives"></canvas></div>
+          <div class="department-action-grid">
+            <article class="panel department-action-panel">
+              <div class="panel-heading">
+                <div><span class="section-label">Action required</span><h3>What needs attention now</h3><p>Open Project Management with the relevant delivery filter.</p></div>
+                <button class="button secondary small" data-jump="project-management" type="button">Open Project Management</button>
+              </div>
+              <div id="user-action-list" class="user-action-list"></div>
             </article>
 
-            <article class="panel">
-              <div class="panel-heading"><div><span class="section-label">Immediate action</span><h3>Readiness gaps</h3></div></div>
-              <div id="user-gap-list" class="future-list"></div>
+            <article class="panel department-status-panel">
+              <div class="panel-heading"><div><span class="section-label">Department delivery</span><h3>Compact status summary</h3><p>Based only on each initiative's saved status.</p></div></div>
+              <div id="user-status-summary" class="user-status-summary"></div>
+              <div id="user-delivery-note" class="department-delivery-note"></div>
             </article>
           </div>
 
-          <div class="panel">
+          <div class="panel department-recent-panel">
             <div class="panel-heading">
-              <div><span class="section-label">Recent portfolio</span><h3>Latest department initiatives</h3></div>
-              <button class="button secondary small" data-jump="my-initiatives" type="button">Open all</button>
+              <div><span class="section-label">Recent department work</span><h3>Latest projects in the selected scope</h3><p>Ownership and delivery health are shown separately from saved status.</p></div>
+              <button class="button secondary small" data-jump="my-initiatives" type="button">Open Department Initiatives</button>
             </div>
             <div class="table-wrap">
               <table id="user-recent-table">
-                <thead><tr><th>Initiative</th><th>Access</th><th>Pillar</th><th>Status</th><th>Readiness</th><th>Progress</th></tr></thead>
+                <thead><tr><th>Initiative</th><th>Access</th><th>Status</th><th>Delivery Health</th><th>Target Date</th><th>Readiness</th><th>Progress</th></tr></thead>
                 <tbody></tbody>
               </table>
             </div>
@@ -901,6 +941,7 @@
             <div class="pm-filter-grid">
               <label><span>Search</span><input id="pm-search" type="search" placeholder="Project, owner or next action"></label>
               <label id="pm-department-control"><span>Department</span><select id="pm-department-filter"><option value="">All departments</option></select></label>
+              <label id="pm-ownership-control" class="hidden"><span>Ownership</span><select id="pm-ownership-filter"><option value="all">All department projects</option><option value="mine">My editable projects</option><option value="shared">Shared view-only projects</option></select></label>
               <label><span>Status</span><select id="pm-status-filter"><option value="">All status</option><option>Planning</option><option>In Progress</option><option>At Risk</option><option>On Hold</option><option>Completed</option></select></label>
               <label><span>Risk level</span><select id="pm-risk-filter"><option value="">All risk</option><option>Low</option><option>Medium</option><option>High</option><option>Extreme</option></select></label>
               <label><span>Delivery health</span><select id="pm-health-filter"><option value="">All health</option><option>Critical</option><option>Watch</option><option>On track</option><option>Completed</option></select></label>
@@ -2212,6 +2253,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-    <script type="module" src="app.js?v=7.9.4.5"></script>
+    <script type="module" src="app.js?v=7.9.4.6"></script>
 </body>
 </html>

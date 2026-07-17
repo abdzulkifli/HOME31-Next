@@ -3945,3 +3945,263 @@ body.admin-command-active .account-department-field input:disabled,
 /* V7.9.4.5 department Project Management ownership clarity */
 .pm-project-table td:first-child .department-access-badge{margin-top:7px;width:max-content}
 .pm-board-card small{line-height:1.45}
+
+
+/* ================================================================
+   V7.9.4.6 END-USER TOP NAVIGATION & DEPARTMENT ACTION CENTRE
+   ================================================================ */
+body.department-user-shell .app-shell{
+  display:block;
+  min-height:100vh;
+}
+body.department-user-shell .sidebar,
+body.department-user-shell .sidebar-overlay,
+body.department-user-shell #menu-toggle{
+  display:none!important;
+}
+body.department-user-shell .main{width:100%;min-width:0}
+body.department-user-shell .topbar{
+  padding:14px clamp(18px,3vw,42px);
+  background:rgba(255,255,255,.97);
+}
+body.department-user-shell .topbar-left{min-width:220px}
+body.department-user-shell .topbar-actions{margin-left:auto;flex-wrap:nowrap}
+body.department-user-shell .content{
+  width:min(1600px,100%);
+  margin:0 auto;
+  padding:26px clamp(16px,3vw,42px) 70px;
+}
+.user-top-navigation{
+  position:sticky;
+  top:82px;
+  z-index:26;
+  display:flex;
+  align-items:center;
+  gap:6px;
+  padding:9px clamp(18px,3vw,42px);
+  overflow-x:auto;
+  border-bottom:1px solid var(--line);
+  background:rgba(255,255,255,.97);
+  backdrop-filter:blur(14px);
+  box-shadow:0 8px 22px rgba(70,24,27,.05);
+  scrollbar-width:thin;
+}
+.user-top-navigation .nav-item{
+  width:auto;
+  min-width:max-content;
+  min-height:44px;
+  display:inline-flex;
+  grid-template-columns:none;
+  align-items:center;
+  gap:8px;
+  padding:9px 14px!important;
+  border:1px solid transparent;
+  border-radius:999px;
+  color:#645457;
+  background:transparent;
+}
+.user-top-navigation .nav-item span{min-width:auto;font-size:16px!important}
+.user-top-navigation .nav-item b{font-size:14px!important;white-space:nowrap}
+.user-top-navigation .nav-item:hover{color:var(--brand);background:var(--brand-soft)}
+.user-top-navigation .nav-item.active{
+  color:#fff;
+  background:linear-gradient(135deg,var(--brand-dark),var(--brand));
+  border-color:var(--brand);
+  box-shadow:0 8px 18px rgba(142,16,25,.16);
+}
+.top-user-summary{
+  display:flex;
+  align-items:center;
+  gap:9px;
+  min-width:0;
+  padding:5px 10px 5px 6px;
+  border:1px solid var(--line);
+  border-radius:999px;
+  background:#fff;
+}
+.top-user-avatar{
+  width:34px;height:34px;display:grid;place-items:center;border-radius:50%;
+  color:#352000;background:linear-gradient(135deg,#e9ba4e,#f6d983);font-size:12px;font-weight:800;
+}
+.top-user-copy{display:block;min-width:0;line-height:1.15}
+.top-user-copy strong{display:block;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px}
+.top-user-copy small{display:block;max-width:180px;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted);font-size:10px!important}
+.top-logout-button{color:var(--brand)}
+.display-settings.display-settings-inline{
+  position:relative;
+  right:auto;
+  bottom:auto;
+  z-index:70;
+}
+.display-settings.display-settings-inline .display-settings-toggle{
+  min-width:48px;
+  width:48px;
+  min-height:48px;
+  padding:5px!important;
+  border-color:var(--line);
+  color:var(--brand);
+  background:#fff;
+  box-shadow:none;
+}
+.display-settings.display-settings-inline .display-settings-label{display:none}
+.display-settings.display-settings-inline .display-settings-icon{width:34px;height:34px;background:var(--gold);font-size:13px}
+.display-settings.display-settings-inline .display-settings-panel{
+  top:58px;
+  right:0;
+  bottom:auto;
+}
+.department-command-header{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:24px;
+  padding:21px 24px;
+  border:1px solid #681219;
+  border-radius:22px;
+  color:#fff;
+  background:
+    radial-gradient(circle at 88% 20%,rgba(226,184,81,.16),transparent 28%),
+    linear-gradient(135deg,#5a0c12,#90111b 62%,#4a0b10);
+  box-shadow:0 16px 34px rgba(70,24,27,.13);
+}
+.department-command-header .section-label{color:#f3cdd0}
+.department-command-header h2{margin:5px 0 4px;font-size:clamp(27px,3.2vw,42px);line-height:1.08}
+.department-command-header p{max-width:850px;margin:0;color:#f1dfe1;font-size:15px!important}
+.department-header-meta{display:flex;align-items:stretch;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.department-header-meta span{
+  min-width:128px;padding:10px 12px;border:1px solid rgba(255,255,255,.18);border-radius:13px;
+  color:#edd9db;background:rgba(255,255,255,.07);font-size:11px;line-height:1.35;
+}
+.department-header-meta strong{display:block;color:#fff;font-size:18px}
+.user-scope-bar{
+  display:flex;align-items:center;justify-content:space-between;gap:18px;
+  margin-top:15px;padding:13px 15px;border:1px solid var(--line);border-radius:17px;background:#fff;
+  box-shadow:0 8px 22px rgba(70,24,27,.04);
+}
+.user-scope-bar>div:first-child{display:grid;gap:2px}
+.user-scope-bar>div:first-child>strong{font-size:14px}
+.user-scope-switch{display:flex;gap:5px;padding:4px;border-radius:999px;background:#f3edeb}
+.user-scope-switch button{
+  min-height:38px;padding:7px 12px;border:0;border-radius:999px;color:#68585a;background:transparent;font-size:12px;font-weight:700;
+}
+.user-scope-switch button span{
+  display:inline-grid;place-items:center;min-width:23px;height:23px;margin-left:5px;padding:0 6px;border-radius:999px;background:#fff;font-size:10px;
+}
+.user-scope-switch button.active{color:#fff;background:var(--brand)}
+.user-scope-switch button.active span{color:var(--brand);background:#fff}
+.user-kpi-grid-eight{grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:14px}
+.user-kpi-grid-eight article{min-height:125px;padding:17px 18px}
+.user-kpi-grid-eight article.user-kpi-attention{border-top:4px solid var(--gold)}
+.user-kpi-grid-eight article.user-kpi-overdue{border-top:4px solid #c54d56}
+.user-kpi-grid-eight strong{font-size:28px!important}
+.department-action-grid{display:grid;grid-template-columns:minmax(0,1.08fr) minmax(360px,.92fr);gap:14px;margin-top:14px}
+.department-action-grid .panel{margin:0}
+.department-action-grid .panel-heading p,.department-recent-panel .panel-heading p{margin:3px 0 0;color:var(--muted);font-size:12px!important}
+.user-action-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.user-action-item{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;padding:13px 14px;
+  border:1px solid var(--line);border-left:4px solid var(--gold);border-radius:14px;color:var(--ink);background:#fff;text-align:left;
+}
+.user-action-item:hover,.user-action-item:focus-visible{border-color:#d4b064;background:var(--gold-soft);outline:none;transform:translateY(-1px)}
+.user-action-item span{min-width:0}
+.user-action-item strong{display:block;font-size:13px}
+.user-action-item small{display:block;margin-top:4px;color:var(--muted);font-size:11px!important;line-height:1.4}
+.user-action-item em{min-width:34px;height:34px;display:grid;place-items:center;border-radius:11px;color:#fff;background:var(--brand);font-size:13px;font-style:normal;font-weight:800}
+.user-action-clear{padding:18px;border:1px dashed #9fc7b8;border-radius:14px;color:#245c4c;background:var(--green-soft)}
+.user-action-clear strong,.user-action-clear span{display:block}
+.user-action-clear span{margin-top:4px;font-size:12px}
+.user-status-summary{display:grid;gap:10px}
+.user-status-row{display:grid;grid-template-columns:110px minmax(120px,1fr) 34px;align-items:center;gap:10px}
+.user-status-row>span{font-size:12px;font-weight:600}
+.user-status-row>i{height:11px;overflow:hidden;border-radius:999px;background:#eee7e5}
+.user-status-row>i>b{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,var(--brand),var(--gold))}
+.user-status-row>strong{text-align:right;font-size:13px}
+.department-delivery-note{margin-top:16px;padding:12px 13px;border-radius:13px;color:#3f596a;background:var(--blue-soft)}
+.department-delivery-note strong,.department-delivery-note span{display:block}
+.department-delivery-note span{margin-top:4px;font-size:11px;line-height:1.45}
+.department-recent-panel{margin-top:14px}
+#user-recent-table td>span:not(.department-access-badge):not(.status-pill):not(.pm-health-badge){display:block;margin-top:3px;color:var(--muted);font-size:11px}
+
+/* Normal-user Project Management uses the lighter department workspace shell. */
+body.department-user-shell .project-management-module{
+  --admin-bg:transparent;--admin-panel:#fff;--admin-panel-deep:#fff;--admin-line:var(--line);--admin-text:var(--ink);--admin-muted:var(--muted);
+  margin:0;min-height:auto;padding:0 0 60px;color:var(--ink);background:transparent;
+}
+body.department-user-shell .project-management-module .admin-command-hero{
+  border-color:#681219;background:linear-gradient(135deg,#5a0c12,#90111b 62%,#4a0b10);box-shadow:0 16px 34px rgba(70,24,27,.13);
+}
+body.department-user-shell .project-management-module .admin-command-hero h2{color:#fff}
+body.department-user-shell .project-management-module .admin-command-hero p{color:#f0dfe1}
+body.department-user-shell .project-management-module .admin-command-code{color:#f1c8cb}
+body.department-user-shell .project-management-module .admin-command-button.ghost{color:#fff;border-color:rgba(255,255,255,.35);background:rgba(255,255,255,.08)}
+body.department-user-shell .project-management-module .admin-command-kpi,
+body.department-user-shell .project-management-module .admin-command-panel{
+  color:var(--ink);border-color:var(--line);background:#fff;box-shadow:0 10px 26px rgba(70,24,27,.06);
+}
+body.department-user-shell .project-management-module .admin-command-kpi>span,
+body.department-user-shell .project-management-module .admin-command-kpi>small,
+body.department-user-shell .project-management-module .admin-command-panel-heading p,
+body.department-user-shell .project-management-module .pm-data-note{color:var(--muted)}
+body.department-user-shell .project-management-module .admin-command-kpi>strong,
+body.department-user-shell .project-management-module .admin-command-panel-heading h3{color:var(--ink)}
+body.department-user-shell .project-management-module .admin-command-section-code{color:var(--brand)}
+body.department-user-shell .project-management-module .pm-filter-grid label>span{color:#6f6264}
+body.department-user-shell .project-management-module .pm-filter-grid input,
+body.department-user-shell .project-management-module .pm-filter-grid select{color:var(--ink);border-color:var(--line);background:#fff}
+body.department-user-shell .project-management-module .pm-board-lane{border-color:var(--line);background:#f8f4f3}
+body.department-user-shell .project-management-module .pm-board-lane-heading strong{color:var(--ink)}
+body.department-user-shell .project-management-module .pm-board-card{color:var(--ink);border-color:var(--line);background:#fff}
+body.department-user-shell .project-management-module .pm-board-card strong{color:var(--ink)}
+body.department-user-shell .project-management-module .pm-board-card>span,
+body.department-user-shell .project-management-module .pm-board-card small{color:var(--muted)}
+body.department-user-shell .project-management-module .admin-command-list-item{border-color:var(--line);background:#fff}
+body.department-user-shell .project-management-module .admin-command-list-item strong{color:var(--ink)}
+body.department-user-shell .project-management-module .admin-command-list-item span{color:var(--muted)}
+body.department-user-shell .project-management-module .admin-command-table-wrap{border-color:var(--line)}
+body.department-user-shell .project-management-module .admin-command-table{background:#fff}
+body.department-user-shell .project-management-module .admin-command-table th{color:#6a3438;background:#fff6f4}
+body.department-user-shell .project-management-module .admin-command-table td{color:#55494b;border-bottom-color:var(--line)}
+body.department-user-shell .project-management-module .admin-command-table td strong{color:var(--ink)}
+body.department-user-shell .project-management-module .admin-command-table .status-pill,
+body.department-user-shell .project-management-module .admin-command-table .risk-pill{color:var(--brand);border-color:#e5c8ca;background:var(--brand-soft)}
+body.department-user-shell .project-management-module .admin-command-assurance-strip{border-color:var(--line);background:var(--line)}
+body.department-user-shell .project-management-module .admin-command-assurance-strip article{background:#fff}
+body.department-user-shell .project-management-module .admin-command-assurance-strip strong{color:var(--brand)}
+body.department-user-shell .project-management-module .admin-command-assurance-strip span{color:var(--muted)}
+
+@media(max-width:1200px){
+  .top-user-copy{display:none}
+  .top-user-summary{padding-right:6px}
+  .user-kpi-grid-eight{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .department-action-grid{grid-template-columns:1fr}
+}
+@media(max-width:850px){
+  body.department-user-shell .topbar{min-height:72px;padding:10px 12px}
+  body.department-user-shell .topbar-left{min-width:0}
+  body.department-user-shell .topbar h1{font-size:18px!important}
+  body.department-user-shell .topbar .eyebrow{display:none}
+  body.department-user-shell .topbar-actions{gap:5px}
+  body.department-user-shell #top-new-initiative{min-width:44px;width:44px;padding:0!important;font-size:0!important}
+  body.department-user-shell #top-new-initiative::before{content:"+";font-size:22px}
+  .user-top-navigation{top:72px;padding:8px 12px}
+  .user-top-navigation .nav-item{padding:8px 11px!important}
+  .user-top-navigation .nav-item b{font-size:12px!important}
+  .top-user-summary{display:none!important}
+  .department-command-header{display:block;padding:20px}
+  .department-header-meta{justify-content:flex-start;margin-top:15px}
+  .department-header-meta span{min-width:110px}
+  .user-scope-bar{display:block}
+  .user-scope-switch{margin-top:12px;overflow-x:auto}
+  .user-scope-switch button{min-width:max-content}
+  .user-action-list{grid-template-columns:1fr}
+}
+@media(max-width:560px){
+  body.department-user-shell .content{padding:16px 10px 55px}
+  .user-kpi-grid-eight{grid-template-columns:1fr}
+  .department-command-header h2{font-size:27px}
+  .department-header-meta{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+  .department-header-meta span:last-child{grid-column:1/-1}
+  .user-top-navigation .nav-item b{display:none}
+  .user-top-navigation .nav-item{min-width:47px;justify-content:center}
+  .display-settings.display-settings-inline .display-settings-panel{position:fixed;top:74px;right:8px;bottom:auto}
+}
