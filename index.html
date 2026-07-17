@@ -4,13 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; form-action 'self'; script-src 'self' https://cdn.jsdelivr.net https://cdn.sheetjs.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' https://*.supabase.co; img-src 'self' data:; upgrade-insecure-requests">
-  <meta name="description" content="HOME31 Enterprise Management Platform V7.9.4.7 — admin top navigation and clarity edition">
+  <meta name="description" content="HOME31 Enterprise Management Platform V7.9.4.8 — interactive project timeline edition">
   <meta name="theme-color" content="#061b2b">
-  <title>HOME31 Enterprise Management Platform V7.9.4.7</title>
+  <title>HOME31 Enterprise Management Platform V7.9.4.8</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=7.9.4.7"> 
+    <link rel="stylesheet" href="styles.css?v=7.9.4.8"> 
 </head>
 <body>
 
@@ -92,7 +92,7 @@
 
     <div class="auth-card-wrap">
       <div id="configuration-warning" class="notice warning hidden">
-        Configure <code>SUPABASE_URL</code> and <code>SUPABASE_PUBLISHABLE_KEY</code> in <code>app.js?v=7.9.4.7</code>.
+        Configure <code>SUPABASE_URL</code> and <code>SUPABASE_PUBLISHABLE_KEY</code> in <code>app.js?v=7.9.4.8</code>.
       </div>
 
       <form id="login-form" class="auth-card">
@@ -209,7 +209,7 @@
           <span class="sidebar-logout-icon" aria-hidden="true">↪</span>
           <span class="sidebar-logout-label">Sign out</span>
         </button>
-        <span class="sidebar-version">HOME31 Platform V7.9.4.7</span>
+        <span class="sidebar-version">HOME31 Platform V7.9.4.8</span>
       </div>
     </aside>
 
@@ -968,11 +968,74 @@
             <div id="pm-active-filters" class="portfolio-active-filters" aria-live="polite"><span class="portfolio-filter-empty">No active filters. Showing the selected portfolio scope.</span></div>
           </article>
 
+          <article id="pm-timeline-section" class="admin-command-panel pm-timeline-panel">
+            <div class="admin-command-panel-heading pm-timeline-heading">
+              <div>
+                <span class="admin-command-section-code">TIMELINE 03</span>
+                <h3>Horizontal Project Timeline</h3>
+                <p>Track scheduled delivery using saved start and target dates. Switch between week, month and year views without changing project records.</p>
+              </div>
+              <div class="pm-timeline-toolbar" aria-label="Timeline controls">
+                <div class="pm-timeline-scale" role="group" aria-label="Timeline scale">
+                  <button type="button" data-pm-timeline-scale="week">Week</button>
+                  <button type="button" data-pm-timeline-scale="month" class="active">Month</button>
+                  <button type="button" data-pm-timeline-scale="year">Year</button>
+                </div>
+                <div class="pm-timeline-navigation" role="group" aria-label="Timeline period navigation">
+                  <button id="pm-timeline-previous" type="button" aria-label="Previous timeline period">‹</button>
+                  <button id="pm-timeline-today" type="button">Today</button>
+                  <button id="pm-timeline-next" type="button" aria-label="Next timeline period">›</button>
+                </div>
+                <button id="pm-timeline-fit" class="pm-timeline-fit" type="button">Fit projects</button>
+              </div>
+            </div>
+
+            <div class="pm-timeline-context-row">
+              <div>
+                <strong id="pm-timeline-range">Current month</strong>
+                <span id="pm-timeline-scope">Timeline uses the current Project Controls selection.</span>
+              </div>
+              <div class="pm-timeline-legend" aria-label="Timeline legend">
+                <span class="on-track">On track</span>
+                <span class="watch">Watch</span>
+                <span class="critical">Critical</span>
+                <span class="completed">Completed</span>
+                <span class="today">Today</span>
+              </div>
+            </div>
+
+            <div class="pm-timeline-kpi-grid">
+              <article><strong id="pm-timeline-visible">0</strong><span>Scheduled in view</span></article>
+              <article><strong id="pm-timeline-due">0</strong><span>Targets in view</span></article>
+              <article><strong id="pm-timeline-overdue">0</strong><span>Overdue selected</span></article>
+              <article><strong id="pm-timeline-unscheduled-count">0</strong><span>Schedule dates missing</span></article>
+            </div>
+
+            <div id="pm-timeline-scroll" class="pm-timeline-scroll" tabindex="0" aria-label="Horizontally scrollable project timeline">
+              <div id="pm-timeline" class="pm-timeline"></div>
+            </div>
+
+            <div id="pm-timeline-empty" class="admin-command-empty hidden">No scheduled projects intersect the selected timeline period.</div>
+
+            <section class="pm-unscheduled-section" aria-labelledby="pm-unscheduled-title">
+              <div class="pm-unscheduled-heading">
+                <div>
+                  <strong id="pm-unscheduled-title">Schedule follow-up</strong>
+                  <span>Projects with missing dates or valid schedules outside the selected period.</span>
+                </div>
+                <span id="pm-timeline-outside-count" class="admin-command-chip neutral">0 outside view</span>
+              </div>
+              <div id="pm-timeline-unscheduled" class="pm-unscheduled-list"></div>
+            </section>
+
+            <div id="pm-timeline-note" class="pm-data-note">Timeline bars are derived only from saved start and target dates. Missing dates are never replaced with assumed dates.</div>
+          </article>
+
           <div class="admin-command-grid pm-overview-grid">
             <article id="pm-status-section" class="admin-command-panel chart-panel">
               <div class="admin-command-panel-heading">
                 <div>
-                  <span class="admin-command-section-code">DELIVERY 03</span>
+                  <span class="admin-command-section-code">DELIVERY 04</span>
                   <h3>Delivery Status</h3>
                   <p>Saved initiative status for the current project-management selection.</p>
                 </div>
@@ -984,7 +1047,7 @@
             <article id="pm-attention-section" class="admin-command-panel pm-attention-panel">
               <div class="admin-command-panel-heading">
                 <div>
-                  <span class="admin-command-section-code">ATTENTION 04</span>
+                  <span class="admin-command-section-code">ATTENTION 05</span>
                   <h3>Management Attention</h3>
                   <p>Derived from overdue dates, saved risk/status, readiness and missing next actions.</p>
                 </div>
@@ -997,7 +1060,7 @@
           <article id="pm-board-section" class="admin-command-panel pm-board-panel">
             <div class="admin-command-panel-heading">
               <div>
-                <span class="admin-command-section-code">BOARD 05</span>
+                <span class="admin-command-section-code">BOARD 06</span>
                 <h3>Delivery Board</h3>
                 <p>Projects grouped by their saved status. Select a project to open its comprehensive initiative record.</p>
               </div>
@@ -1009,7 +1072,7 @@
           <article id="pm-register-section" class="admin-command-panel pm-register-panel">
             <div class="admin-command-panel-heading">
               <div>
-                <span class="admin-command-section-code">REGISTER 06</span>
+                <span class="admin-command-section-code">REGISTER 07</span>
                 <h3>Project Control Register</h3>
                 <p>Schedule, ownership, progress, readiness, delivery health and immediate next action.</p>
               </div>
@@ -2272,6 +2335,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-    <script type="module" src="app.js?v=7.9.4.7"></script>
+    <script type="module" src="app.js?v=7.9.4.8"></script>
 </body>
 </html>

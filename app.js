@@ -76,6 +76,7 @@ const ADMIN_CONTEXT_CONFIG = {
     label: "Project Management",
     items: [
       { key: "summary", label: "Delivery Summary", target: "pm-summary" },
+      { key: "timeline", label: "Timeline", target: "pm-timeline-section" },
       { key: "attention", label: "Management Attention", target: "pm-attention-section" },
       { key: "board", label: "Delivery Board", target: "pm-board-section" },
       { key: "register", label: "Project Register", target: "pm-register-section" }
@@ -194,6 +195,10 @@ let initiativeModalReadOnly = false;
 let userProjectScope = "all";
 let projectManagementQuickFilter = "";
 const USER_PROJECT_SCOPE_KEY = "home31-user-project-scope-v1";
+const PM_TIMELINE_VIEW_KEY = "home31-pm-timeline-view-v1";
+let pmTimelineScale = "month";
+let pmTimelineAnchor = new Date();
+let pmTimelineAnchorInitialised = false;
 
 const INITIATIVE_DRAFT_PREFIX = "home31-initiative-draft-v1";
 const INITIATIVE_DRAFT_DELAY = 800;
@@ -214,6 +219,7 @@ async function initialise() {
   initialiseNavigation();
   initialiseExecutiveInteractions();
   initialiseUserProjectScope();
+  initialiseProjectTimelineState();
   bindEvents();
   populatePillars();
   handleResetLink();
@@ -482,6 +488,13 @@ function bindEvents() {
   $("#admin-overview-refresh").addEventListener("click", loadAdminData);
   $("#admin-portfolio-refresh").addEventListener("click", loadAdminData);
   $("#pm-refresh").addEventListener("click", refreshProjectManagementData);
+  $$('[data-pm-timeline-scale]').forEach(button =>
+    button.addEventListener('click', () => setProjectTimelineScale(button.dataset.pmTimelineScale))
+  );
+  $("#pm-timeline-previous").addEventListener("click", () => moveProjectTimeline(-1));
+  $("#pm-timeline-today").addEventListener("click", () => setProjectTimelineToday());
+  $("#pm-timeline-next").addEventListener("click", () => moveProjectTimeline(1));
+  $("#pm-timeline-fit").addEventListener("click", fitProjectTimelineToProjects);
   $("#admin-export-portfolio").addEventListener("click", exportAdminPortfolioCsv);
   $("#admin-download-template").addEventListener("click", downloadExcelImportTemplate);
   $("#admin-import-excel").addEventListener("click", openExcelImportModal);
@@ -3402,6 +3415,7 @@ function populateAdminYearOptions() {
 }
 function handleAdminYearChange(event) {
   selectedAdminYear = event.target.value;
+  pmTimelineAnchorInitialised = false;
   updateAdminYearBadge();
   renderAdminOverview();
   renderAdminPortfolio();
@@ -4264,10 +4278,368 @@ function renderProjectManagement() {
   $("#pm-assurance-target-date").textContent = `${records.length ? Math.round(records.filter(project => project.target_date).length / records.length * 100) : 0}%`;
 
   renderProjectManagementActiveFilters();
+  renderProjectTimeline(records);
   renderProjectManagementCharts(records);
   renderProjectManagementAttention(records);
   renderProjectManagementBoard(records);
   renderProjectManagementTable(records);
+}
+
+
+function initialiseProjectTimelineState() {
+  try {
+    const stored = localStorage.getItem(PM_TIMELINE_VIEW_KEY);
+    pmTimelineScale = ["week", "month", "year"].includes(stored) ? stored : "month";
+  } catch (_error) {
+    pmTimelineScale = "month";
+  }
+  pmTimelineAnchor = projectTimelineStartOfDay(new Date());
+}
+
+function projectTimelineStartOfDay(value) {
+  const date = value instanceof Date ? new Date(value) : new Date(value);
+  if (Number.isNaN(date.getTime())) return new Date();
+  date.setHours(0, 0, 0, 0);
+  return date;
+}
+
+function parseProjectTimelineDate(value) {
+  if (!value) return null;
+  const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const date = match
+    ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
+    : new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  date.setHours(0, 0, 0, 0);
+  return date;
+}
+
+function addProjectTimelineDays(date, amount) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + amount);
+  return projectTimelineStartOfDay(next);
+}
+
+function startOfProjectTimelineWeek(date) {
+  const start = projectTimelineStartOfDay(date);
+  const day = start.getDay();
+  const mondayOffset = day === 0 ? -6 : 1 - day;
+  return addProjectTimelineDays(start, mondayOffset);
+}
+
+function projectTimelineDateKey(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function setProjectTimelineScale(scale, { keepAnchor = true } = {}) {
+  pmTimelineScale = ["week", "month", "year"].includes(scale) ? scale : "month";
+  try {
+    localStorage.setItem(PM_TIMELINE_VIEW_KEY, pmTimelineScale);
+  } catch (_error) {
+    // Timeline remains usable when browser storage is unavailable.
+  }
+  if (!keepAnchor) pmTimelineAnchorInitialised = false;
+  renderProjectTimeline(getFilteredProjectManagementRecords(), { focusToday: false });
+}
+
+function moveProjectTimeline(direction) {
+  const next = new Date(pmTimelineAnchor);
+  if (pmTimelineScale === "week") next.setDate(next.getDate() + (7 * direction));
+  if (pmTimelineScale === "month") next.setMonth(next.getMonth() + direction, 1);
+  if (pmTimelineScale === "year") next.setFullYear(next.getFullYear() + direction, 0, 1);
+  pmTimelineAnchor = projectTimelineStartOfDay(next);
+  pmTimelineAnchorInitialised = true;
+  renderProjectTimeline(getFilteredProjectManagementRecords());
+}
+
+function setProjectTimelineToday() {
+  pmTimelineAnchor = projectTimelineStartOfDay(new Date());
+  pmTimelineAnchorInitialised = true;
+  renderProjectTimeline(getFilteredProjectManagementRecords(), { focusToday: true });
+}
+
+function projectTimelineRelevantDates(records) {
+  return records.flatMap(project => [
+    parseProjectTimelineDate(project.start_date),
+    parseProjectTimelineDate(project.target_date)
+  ]).filter(Boolean).sort((a, b) => a - b);
+}
+
+function projectTimelinePreferredAnchor(records) {
+  const dated = projectTimelineRelevantDates(records);
+  const today = projectTimelineStartOfDay(new Date());
+  if (currentProfile?.role === "super_admin" && String(selectedAdminYear) !== "all") {
+    const selectedYear = Number(selectedAdminYear);
+    const inYear = dated.filter(date => date.getFullYear() === selectedYear);
+    if (inYear.length) {
+      const upcoming = inYear.find(date => date >= today);
+      return upcoming || inYear[0];
+    }
+    return new Date(selectedYear, 0, 1);
+  }
+  if (!dated.length) return today;
+  const nearby = dated.find(date => date >= addProjectTimelineDays(today, -30));
+  return nearby || dated[0];
+}
+
+function ensureProjectTimelineAnchor(records) {
+  if (pmTimelineAnchorInitialised) return;
+  pmTimelineAnchor = projectTimelinePreferredAnchor(records);
+  pmTimelineAnchorInitialised = true;
+}
+
+function fitProjectTimelineToProjects() {
+  const records = getFilteredProjectManagementRecords();
+  const dates = projectTimelineRelevantDates(records);
+  if (!dates.length) {
+    showToast("No saved project dates are available to fit.", true);
+    return;
+  }
+  const first = dates[0];
+  const last = dates.at(-1);
+  const days = Math.max(1, Math.ceil((last - first) / 86400000));
+  pmTimelineScale = days <= 14 ? "week" : days <= 45 ? "month" : "year";
+  if (pmTimelineScale === "week") {
+    pmTimelineAnchor = new Date(first.getTime() + ((last - first) / 2));
+  } else if (pmTimelineScale === "month") {
+    pmTimelineAnchor = new Date(first.getFullYear(), first.getMonth(), 1);
+  } else {
+    const counts = new Map();
+    dates.forEach(date => counts.set(date.getFullYear(), (counts.get(date.getFullYear()) || 0) + 1));
+    const year = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0][0];
+    pmTimelineAnchor = new Date(year, 0, 1);
+  }
+  pmTimelineAnchorInitialised = true;
+  try {
+    localStorage.setItem(PM_TIMELINE_VIEW_KEY, pmTimelineScale);
+  } catch (_error) {
+    // No action required.
+  }
+  renderProjectTimeline(records, { focusToday: false });
+}
+
+function projectTimelineRange() {
+  const anchor = projectTimelineStartOfDay(pmTimelineAnchor);
+  if (pmTimelineScale === "week") {
+    const start = startOfProjectTimelineWeek(anchor);
+    const end = addProjectTimelineDays(start, 13);
+    return { start, end, width: 14 * 68, units: projectTimelineDayUnits(start, end), label: `${projectTimelineDateLabel(start, false)} – ${projectTimelineDateLabel(end, true)}` };
+  }
+  if (pmTimelineScale === "year") {
+    const start = new Date(anchor.getFullYear(), 0, 1);
+    const end = new Date(anchor.getFullYear(), 11, 31);
+    return { start, end, width: 12 * 106, units: projectTimelineMonthUnits(start), label: String(anchor.getFullYear()) };
+  }
+  const start = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
+  const end = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0);
+  const dayCount = end.getDate();
+  return {
+    start,
+    end,
+    width: Math.max(960, dayCount * 42),
+    units: projectTimelineDayUnits(start, end),
+    label: start.toLocaleDateString("en-MY", { month: "long", year: "numeric" })
+  };
+}
+
+function projectTimelineDayUnits(start, end) {
+  const units = [];
+  let cursor = new Date(start);
+  const count = Math.round((end - start) / 86400000) + 1;
+  while (cursor <= end) {
+    units.push({
+      label: cursor.toLocaleDateString("en-MY", { weekday: "short" }),
+      sublabel: String(cursor.getDate()),
+      weekend: [0, 6].includes(cursor.getDay()),
+      today: projectTimelineDateKey(cursor) === projectTimelineDateKey(new Date()),
+      fraction: 1 / count
+    });
+    cursor = addProjectTimelineDays(cursor, 1);
+  }
+  return units;
+}
+
+function projectTimelineMonthUnits(start) {
+  const year = start.getFullYear();
+  const daysInYear = (new Date(year + 1, 0, 1) - new Date(year, 0, 1)) / 86400000;
+  return Array.from({ length: 12 }, (_, month) => {
+    const monthStart = new Date(year, month, 1);
+    const monthEnd = new Date(year, month + 1, 0);
+    return {
+      label: monthStart.toLocaleDateString("en-MY", { month: "short" }),
+      sublabel: String(year),
+      weekend: false,
+      today: new Date().getFullYear() === year && new Date().getMonth() === month,
+      fraction: monthEnd.getDate() / daysInYear
+    };
+  });
+}
+
+function projectTimelineDateLabel(date, includeYear = true) {
+  return date.toLocaleDateString("en-MY", includeYear
+    ? { day: "2-digit", month: "short", year: "numeric" }
+    : { day: "2-digit", month: "short" });
+}
+
+function projectTimelineRangeContains(date, range) {
+  return Boolean(date && date >= range.start && date <= range.end);
+}
+
+function projectTimelinePosition(date, range) {
+  const endExclusive = addProjectTimelineDays(range.end, 1);
+  const duration = Math.max(1, endExclusive - range.start);
+  return Math.max(0, Math.min(100, ((date - range.start) / duration) * 100));
+}
+
+function projectTimelineProjectState(project, range) {
+  const start = parseProjectTimelineDate(project.start_date);
+  const target = parseProjectTimelineDate(project.target_date);
+  const invalid = Boolean(start && target && start > target);
+  if (invalid) return { project, start, target, invalid, inView: false, missingBoth: false, partial: false };
+  const missingBoth = !start && !target;
+  const partial = Boolean(start) !== Boolean(target);
+  let inView = false;
+  if (start && target) inView = start <= range.end && target >= range.start;
+  else if (start) inView = projectTimelineRangeContains(start, range);
+  else if (target) inView = projectTimelineRangeContains(target, range);
+  return { project, start, target, invalid, missingBoth, partial, inView };
+}
+
+function projectTimelineGridMarkup(units) {
+  return `<div class="pm-timeline-grid-lines" aria-hidden="true">${units.map(unit => `<span class="${unit.weekend ? "weekend" : ""}${unit.today ? " today-unit" : ""}" style="width:${unit.fraction * 100}%"></span>`).join("")}</div>`;
+}
+
+function projectTimelineHeaderMarkup(range) {
+  return `<div class="pm-timeline-row pm-timeline-header-row">
+    <div class="pm-timeline-project-header"><span>Project / owner</span><small>Dates and access</small></div>
+    <div class="pm-timeline-axis" style="width:${range.width}px">${range.units.map(unit => `<span class="pm-timeline-axis-cell${unit.weekend ? " weekend" : ""}${unit.today ? " today-unit" : ""}" style="width:${unit.fraction * 100}%"><strong>${escapeHtml(unit.label)}</strong><small>${escapeHtml(unit.sublabel)}</small></span>`).join("")}</div>
+  </div>`;
+}
+
+function projectTimelineBarMarkup(state, range) {
+  const { project, start, target } = state;
+  const health = projectDeliveryHealth(project);
+  const healthClass = projectHealthClass(health);
+  const progress = Math.max(0, Math.min(100, Number(project.progress || 0)));
+  const today = projectTimelineStartOfDay(new Date());
+  if (start && target) {
+    const clippedStart = start < range.start ? range.start : start;
+    const clippedEnd = target > range.end ? range.end : target;
+    const left = projectTimelinePosition(clippedStart, range);
+    const end = projectTimelinePosition(addProjectTimelineDays(clippedEnd, 1), range);
+    const width = Math.max(1.2, end - left);
+    const clippedLeft = start < range.start;
+    const clippedRight = target > range.end;
+    return `<button class="pm-timeline-bar ${healthClass}${clippedLeft ? " clipped-left" : ""}${clippedRight ? " clipped-right" : ""}" type="button" data-pm-open="${project.id}" style="left:${left}%;width:${width}%" title="${escapeHtml(project.initiative_name)} · ${projectTimelineDateLabel(start)} to ${projectTimelineDateLabel(target)} · ${progress}% progress · ${escapeHtml(health)}"><i style="width:${progress}%"></i><span>${progress}%</span></button>`;
+  }
+  const markerDate = start || target;
+  const left = projectTimelinePosition(markerDate, range);
+  const type = start ? "start" : "target";
+  const label = start ? "Start only" : "Target only";
+  const overdue = target && target < today && project.status !== "Completed";
+  return `<button class="pm-timeline-marker ${type} ${healthClass}${overdue ? " overdue" : ""}" type="button" data-pm-open="${project.id}" style="left:${left}%" title="${escapeHtml(project.initiative_name)} · ${label}: ${projectTimelineDateLabel(markerDate)}"><span aria-hidden="true"></span><b>${label}</b></button>`;
+}
+
+function projectTimelineRowMarkup(state, range) {
+  const { project } = state;
+  const health = projectDeliveryHealth(project);
+  const access = projectManagementAccessText(project);
+  const dateSummary = state.start && state.target
+    ? `${projectTimelineDateLabel(state.start)} – ${projectTimelineDateLabel(state.target)}`
+    : state.start
+      ? `Starts ${projectTimelineDateLabel(state.start)} · target missing`
+      : `Target ${projectTimelineDateLabel(state.target)} · start missing`;
+  return `<div class="pm-timeline-row">
+    <button class="pm-timeline-project-cell" type="button" data-pm-open="${project.id}">
+      <span><strong>${escapeHtml(project.initiative_name)}</strong><em class="pm-health-badge ${projectHealthClass(health)}">${escapeHtml(health)}</em></span>
+      <small>${escapeHtml(project.accountable_owner || "Owner not assigned")} · ${escapeHtml(project.department || "Department not recorded")}</small>
+      <small>${escapeHtml(dateSummary)}${access ? ` · ${escapeHtml(access)}` : ""}</small>
+    </button>
+    <div class="pm-timeline-track" style="width:${range.width}px">${projectTimelineGridMarkup(range.units)}${projectTimelineBarMarkup(state, range)}${projectTimelineTodayLine(range)}</div>
+  </div>`;
+}
+
+function projectTimelineTodayLine(range) {
+  const today = projectTimelineStartOfDay(new Date());
+  if (!projectTimelineRangeContains(today, range)) return "";
+  const left = projectTimelinePosition(today, range);
+  return `<span class="pm-timeline-today-line" style="left:${left}%" aria-hidden="true"></span>`;
+}
+
+function projectTimelineFollowUpMarkup(states, outsideCount) {
+  const issues = states.filter(state => state.missingBoth || state.invalid || state.partial).slice(0, 12);
+  if (!issues.length && !outsideCount) {
+    return '<div class="admin-command-empty">All selected projects have usable schedule dates in the current view.</div>';
+  }
+  const issueMarkup = issues.map(state => {
+    const project = state.project;
+    const reason = state.invalid
+      ? "Start date is after target date"
+      : state.missingBoth
+        ? "Start and target dates missing"
+        : state.start
+          ? "Target date missing"
+          : "Start date missing";
+    return `<button type="button" data-pm-open="${project.id}"><span><strong>${escapeHtml(project.initiative_name)}</strong><small>${escapeHtml(project.department || "No department")} · ${escapeHtml(reason)}</small></span><b>${canEditInitiative(project) ? "Edit" : "View"}</b></button>`;
+  }).join("");
+  const outside = outsideCount ? `<div class="pm-outside-view-note"><strong>${outsideCount}</strong><span>scheduled project${outsideCount === 1 ? " is" : "s are"} outside this ${pmTimelineScale} view. Use Previous, Next or Fit projects.</span></div>` : "";
+  return `${issueMarkup}${outside}`;
+}
+
+function renderProjectTimeline(records, { focusToday = false } = {}) {
+  if (!$("#pm-timeline")) return;
+  ensureProjectTimelineAnchor(records);
+  const range = projectTimelineRange();
+  const states = records.map(project => projectTimelineProjectState(project, range));
+  const visible = states.filter(state => state.inView && !state.invalid).sort((a, b) => {
+    const aDate = a.start || a.target || new Date(8640000000000000);
+    const bDate = b.start || b.target || new Date(8640000000000000);
+    return aDate - bDate || String(a.project.initiative_name || "").localeCompare(String(b.project.initiative_name || ""));
+  });
+  const outside = states.filter(state => !state.inView && !state.invalid && !state.missingBoth && !state.partial).length;
+  const missingSchedule = states.filter(state => state.missingBoth || state.partial || state.invalid).length;
+  const targetsInView = states.filter(state => projectTimelineRangeContains(state.target, range)).length;
+  const today = projectTimelineStartOfDay(new Date());
+  const overdue = records.filter(project => {
+    const target = parseProjectTimelineDate(project.target_date);
+    return target && target < today && project.status !== "Completed";
+  }).length;
+
+  $$('[data-pm-timeline-scale]').forEach(button => {
+    const active = button.dataset.pmTimelineScale === pmTimelineScale;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+  $("#pm-timeline-range").textContent = range.label;
+  $("#pm-timeline-scope").textContent = currentProfile?.role === "super_admin"
+    ? `${visible.length} of ${records.length} selected projects intersect this ${pmTimelineScale} view.`
+    : `${visible.length} of ${records.length} visible department projects intersect this ${pmTimelineScale} view.`;
+  $("#pm-timeline-visible").textContent = visible.length;
+  $("#pm-timeline-due").textContent = targetsInView;
+  $("#pm-timeline-overdue").textContent = overdue;
+  $("#pm-timeline-unscheduled-count").textContent = missingSchedule;
+  $("#pm-timeline-outside-count").textContent = `${outside} outside view`;
+
+  const timeline = $("#pm-timeline");
+  timeline.style.setProperty("--pm-timeline-width", `${range.width}px`);
+  timeline.innerHTML = visible.length
+    ? `${projectTimelineHeaderMarkup(range)}${visible.map(state => projectTimelineRowMarkup(state, range)).join("")}`
+    : projectTimelineHeaderMarkup(range);
+  $("#pm-timeline-empty").classList.toggle("hidden", visible.length > 0);
+  $("#pm-timeline-unscheduled").innerHTML = projectTimelineFollowUpMarkup(states, outside);
+  $("#pm-timeline-note").textContent = `Based on ${records.length} selected projects. ${visible.length} intersect this ${pmTimelineScale} period; ${missingSchedule} have incomplete or invalid schedule dates. No dates are assumed.`;
+  bindProjectManagementOpenButtons();
+
+  if (focusToday && projectTimelineRangeContains(today, range)) {
+    window.requestAnimationFrame(() => {
+      const scroller = $("#pm-timeline-scroll");
+      const left = projectTimelinePosition(today, range) / 100 * range.width;
+      scroller.scrollLeft = Math.max(0, left - scroller.clientWidth / 2 + 310);
+    });
+  }
 }
 
 function renderProjectManagementCharts(records) {
