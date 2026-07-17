@@ -4573,11 +4573,15 @@ body.super-admin-shell:not(.admin-command-active) #module-account{
 
 
 /* ================================================================
-   V7.9.4.8 INTERACTIVE PROJECT TIMELINE
+   V7.9.4.9 INTERACTIVE PROJECT TIMELINE
    ================================================================ */
 .pm-timeline-panel{margin-top:14px;overflow:hidden}
 .pm-timeline-heading{align-items:center}
 .pm-timeline-toolbar{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.pm-timeline-year-control{display:flex;align-items:center;gap:8px;padding:5px 8px 5px 11px;border:1px solid #3b5d74;border-radius:13px;background:#09243a}
+.pm-timeline-year-control>span{color:#9fb5c4;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;white-space:nowrap}
+.pm-timeline-year-control select{min-width:108px;height:36px;padding:6px 30px 6px 10px!important;border:1px solid #4b7089;border-radius:9px;color:#f2f7fa;background:#123650;font-size:12px!important;font-weight:700;outline:none}
+.pm-timeline-year-control select:focus{border-color:#d1ad63;box-shadow:0 0 0 3px rgba(209,173,99,.13)}
 .pm-timeline-scale,.pm-timeline-navigation{display:flex;align-items:center;padding:4px;border:1px solid #3b5d74;border-radius:999px;background:#09243a}
 .pm-timeline-scale button,.pm-timeline-navigation button,.pm-timeline-fit{
   min-height:34px;padding:7px 12px;border:0;border-radius:999px;color:#a9bdcc;background:transparent;font-size:12px;font-weight:700
@@ -4659,6 +4663,10 @@ body.super-admin-shell:not(.admin-command-active) #module-account{
 .pm-outside-view-note strong{font-size:18px;color:#d1ad63}
 .pm-outside-view-note span{font-size:10.5px;line-height:1.4}
 
+body.department-user-shell .pm-timeline-year-control{border-color:var(--line);background:#f7f1f0}
+body.department-user-shell .pm-timeline-year-control>span{color:var(--muted)}
+body.department-user-shell .pm-timeline-year-control select{color:var(--ink);border-color:#dec6c8;background:#fff}
+body.department-user-shell .pm-timeline-year-control select:focus{border-color:var(--brand);box-shadow:0 0 0 3px rgba(142,16,25,.08)}
 body.department-user-shell .pm-timeline-scale,
 body.department-user-shell .pm-timeline-navigation{border-color:var(--line);background:#f7f1f0}
 body.department-user-shell .pm-timeline-scale button,
@@ -4713,6 +4721,8 @@ body.department-user-shell .pm-outside-view-note strong{color:var(--brand)}
 }
 @media(max-width:620px){
   .pm-timeline-toolbar{display:grid;grid-template-columns:1fr auto}
+  .pm-timeline-year-control{grid-column:1/-1;justify-content:space-between}
+  .pm-timeline-year-control select{flex:0 0 130px}
   .pm-timeline-scale{grid-column:1/-1;justify-content:center}
   .pm-timeline-navigation{justify-content:center}
   .pm-timeline-fit{min-height:42px}

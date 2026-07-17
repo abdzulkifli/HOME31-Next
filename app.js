@@ -196,9 +196,13 @@ let userProjectScope = "all";
 let projectManagementQuickFilter = "";
 const USER_PROJECT_SCOPE_KEY = "home31-user-project-scope-v1";
 const PM_TIMELINE_VIEW_KEY = "home31-pm-timeline-view-v1";
+const PM_TIMELINE_YEAR_KEY = "home31-pm-timeline-calendar-year-v1";
+const PM_TIMELINE_MIN_YEAR = 2025;
+const PM_TIMELINE_MAX_YEAR = 2100;
 let pmTimelineScale = "month";
 let pmTimelineAnchor = new Date();
 let pmTimelineAnchorInitialised = false;
+let pmTimelineCalendarYear = new Date().getFullYear();
 
 const INITIATIVE_DRAFT_PREFIX = "home31-initiative-draft-v1";
 const INITIATIVE_DRAFT_DELAY = 800;
@@ -491,6 +495,7 @@ function bindEvents() {
   $$('[data-pm-timeline-scale]').forEach(button =>
     button.addEventListener('click', () => setProjectTimelineScale(button.dataset.pmTimelineScale))
   );
+  $("#pm-timeline-year").addEventListener("change", event => setProjectTimelineCalendarYear(event.target.value));
   $("#pm-timeline-previous").addEventListener("click", () => moveProjectTimeline(-1));
   $("#pm-timeline-today").addEventListener("click", () => setProjectTimelineToday());
   $("#pm-timeline-next").addEventListener("click", () => moveProjectTimeline(1));
@@ -4287,13 +4292,70 @@ function renderProjectManagement() {
 
 
 function initialiseProjectTimelineState() {
+  const today = projectTimelineStartOfDay(new Date());
+  let storedYear = null;
   try {
     const stored = localStorage.getItem(PM_TIMELINE_VIEW_KEY);
     pmTimelineScale = ["week", "month", "year"].includes(stored) ? stored : "month";
+    storedYear = Number(localStorage.getItem(PM_TIMELINE_YEAR_KEY));
   } catch (_error) {
     pmTimelineScale = "month";
   }
-  pmTimelineAnchor = projectTimelineStartOfDay(new Date());
+
+  if (Number.isInteger(storedYear) && storedYear >= PM_TIMELINE_MIN_YEAR && storedYear <= PM_TIMELINE_MAX_YEAR) {
+    pmTimelineCalendarYear = storedYear;
+    const maximumDay = new Date(storedYear, today.getMonth() + 1, 0).getDate();
+    pmTimelineAnchor = new Date(storedYear, today.getMonth(), Math.min(today.getDate(), maximumDay));
+    pmTimelineAnchorInitialised = true;
+  } else {
+    pmTimelineCalendarYear = Math.max(PM_TIMELINE_MIN_YEAR, Math.min(PM_TIMELINE_MAX_YEAR, today.getFullYear()));
+    pmTimelineAnchor = today;
+    pmTimelineAnchorInitialised = false;
+  }
+}
+
+function clampProjectTimelineYear(value) {
+  const year = Number(value);
+  if (!Number.isFinite(year)) return Math.max(PM_TIMELINE_MIN_YEAR, Math.min(PM_TIMELINE_MAX_YEAR, new Date().getFullYear()));
+  return Math.max(PM_TIMELINE_MIN_YEAR, Math.min(PM_TIMELINE_MAX_YEAR, Math.trunc(year)));
+}
+
+function rememberProjectTimelineYear(year = pmTimelineAnchor.getFullYear()) {
+  pmTimelineCalendarYear = clampProjectTimelineYear(year);
+  try {
+    localStorage.setItem(PM_TIMELINE_YEAR_KEY, String(pmTimelineCalendarYear));
+  } catch (_error) {
+    // Timeline remains usable when browser storage is unavailable.
+  }
+}
+
+function populateProjectTimelineYearOptions() {
+  const select = $("#pm-timeline-year");
+  if (!select) return;
+  const currentYear = new Date().getFullYear();
+  const selected = clampProjectTimelineYear(pmTimelineAnchor.getFullYear());
+  if (select.options.length !== PM_TIMELINE_MAX_YEAR - PM_TIMELINE_MIN_YEAR + 1) {
+    select.innerHTML = Array.from(
+      { length: PM_TIMELINE_MAX_YEAR - PM_TIMELINE_MIN_YEAR + 1 },
+      (_, index) => {
+        const year = PM_TIMELINE_MIN_YEAR + index;
+        return `<option value="${year}">${year}${year === currentYear ? " · Current" : ""}</option>`;
+      }
+    ).join("");
+  }
+  select.value = String(selected);
+}
+
+function setProjectTimelineCalendarYear(value) {
+  const year = clampProjectTimelineYear(value);
+  const anchor = projectTimelineStartOfDay(pmTimelineAnchor);
+  const month = pmTimelineScale === "year" ? 0 : anchor.getMonth();
+  const maximumDay = new Date(year, month + 1, 0).getDate();
+  const day = pmTimelineScale === "year" ? 1 : Math.min(anchor.getDate(), maximumDay);
+  pmTimelineAnchor = new Date(year, month, day);
+  pmTimelineAnchorInitialised = true;
+  rememberProjectTimelineYear(year);
+  renderProjectTimeline(getFilteredProjectManagementRecords(), { focusToday: false });
 }
 
 function projectTimelineStartOfDay(value) {
@@ -4350,15 +4412,24 @@ function moveProjectTimeline(direction) {
   if (pmTimelineScale === "week") next.setDate(next.getDate() + (7 * direction));
   if (pmTimelineScale === "month") next.setMonth(next.getMonth() + direction, 1);
   if (pmTimelineScale === "year") next.setFullYear(next.getFullYear() + direction, 0, 1);
+  const requestedYear = next.getFullYear();
+  const nextYear = clampProjectTimelineYear(requestedYear);
+  if (nextYear !== requestedYear) {
+    next.setFullYear(nextYear, direction < 0 ? 0 : 11, direction < 0 ? 1 : 31);
+  }
   pmTimelineAnchor = projectTimelineStartOfDay(next);
   pmTimelineAnchorInitialised = true;
+  rememberProjectTimelineYear(pmTimelineAnchor.getFullYear());
   renderProjectTimeline(getFilteredProjectManagementRecords());
 }
 
 function setProjectTimelineToday() {
-  pmTimelineAnchor = projectTimelineStartOfDay(new Date());
+  const today = projectTimelineStartOfDay(new Date());
+  const year = clampProjectTimelineYear(today.getFullYear());
+  pmTimelineAnchor = year === today.getFullYear() ? today : new Date(year, 0, 1);
   pmTimelineAnchorInitialised = true;
-  renderProjectTimeline(getFilteredProjectManagementRecords(), { focusToday: true });
+  rememberProjectTimelineYear(year);
+  renderProjectTimeline(getFilteredProjectManagementRecords(), { focusToday: year === today.getFullYear() });
 }
 
 function projectTimelineRelevantDates(records) {
@@ -4387,8 +4458,11 @@ function projectTimelinePreferredAnchor(records) {
 
 function ensureProjectTimelineAnchor(records) {
   if (pmTimelineAnchorInitialised) return;
-  pmTimelineAnchor = projectTimelinePreferredAnchor(records);
+  const preferred = projectTimelinePreferredAnchor(records);
+  const year = clampProjectTimelineYear(preferred.getFullYear());
+  pmTimelineAnchor = year === preferred.getFullYear() ? preferred : new Date(year, 0, 1);
   pmTimelineAnchorInitialised = true;
+  rememberProjectTimelineYear(year);
 }
 
 function fitProjectTimelineToProjects() {
@@ -4412,7 +4486,12 @@ function fitProjectTimelineToProjects() {
     const year = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0][0];
     pmTimelineAnchor = new Date(year, 0, 1);
   }
+  const fittedYear = clampProjectTimelineYear(pmTimelineAnchor.getFullYear());
+  if (fittedYear !== pmTimelineAnchor.getFullYear()) {
+    pmTimelineAnchor = new Date(fittedYear, pmTimelineScale === "year" ? 0 : pmTimelineAnchor.getMonth(), 1);
+  }
   pmTimelineAnchorInitialised = true;
+  rememberProjectTimelineYear(pmTimelineAnchor.getFullYear());
   try {
     localStorage.setItem(PM_TIMELINE_VIEW_KEY, pmTimelineScale);
   } catch (_error) {
@@ -4592,6 +4671,8 @@ function projectTimelineFollowUpMarkup(states, outsideCount) {
 function renderProjectTimeline(records, { focusToday = false } = {}) {
   if (!$("#pm-timeline")) return;
   ensureProjectTimelineAnchor(records);
+  rememberProjectTimelineYear(pmTimelineAnchor.getFullYear());
+  populateProjectTimelineYearOptions();
   const range = projectTimelineRange();
   const states = records.map(project => projectTimelineProjectState(project, range));
   const visible = states.filter(state => state.inView && !state.invalid).sort((a, b) => {
@@ -4613,10 +4694,10 @@ function renderProjectTimeline(records, { focusToday = false } = {}) {
     button.classList.toggle("active", active);
     button.setAttribute("aria-pressed", String(active));
   });
-  $("#pm-timeline-range").textContent = range.label;
+  $("#pm-timeline-range").textContent = pmTimelineScale === "year" ? `Calendar Year ${pmTimelineCalendarYear}` : range.label;
   $("#pm-timeline-scope").textContent = currentProfile?.role === "super_admin"
-    ? `${visible.length} of ${records.length} selected projects intersect this ${pmTimelineScale} view.`
-    : `${visible.length} of ${records.length} visible department projects intersect this ${pmTimelineScale} view.`;
+    ? `${selectedAdminYear === "all" ? "All portfolio years" : `Portfolio ${selectedAdminYear}`} · Calendar ${pmTimelineCalendarYear}. ${visible.length} of ${records.length} selected projects intersect this ${pmTimelineScale} view.`
+    : `Department scope · Calendar ${pmTimelineCalendarYear}. ${visible.length} of ${records.length} visible department projects intersect this ${pmTimelineScale} view.`;
   $("#pm-timeline-visible").textContent = visible.length;
   $("#pm-timeline-due").textContent = targetsInView;
   $("#pm-timeline-overdue").textContent = overdue;
@@ -4630,7 +4711,7 @@ function renderProjectTimeline(records, { focusToday = false } = {}) {
     : projectTimelineHeaderMarkup(range);
   $("#pm-timeline-empty").classList.toggle("hidden", visible.length > 0);
   $("#pm-timeline-unscheduled").innerHTML = projectTimelineFollowUpMarkup(states, outside);
-  $("#pm-timeline-note").textContent = `Based on ${records.length} selected projects. ${visible.length} intersect this ${pmTimelineScale} period; ${missingSchedule} have incomplete or invalid schedule dates. No dates are assumed.`;
+  $("#pm-timeline-note").textContent = `Calendar ${pmTimelineCalendarYear} is independent of the portfolio implementation year. Based on ${records.length} selected projects, ${visible.length} intersect this ${pmTimelineScale} period and ${missingSchedule} have incomplete or invalid schedule dates. No dates are assumed.`;
   bindProjectManagementOpenButtons();
 
   if (focusToday && projectTimelineRangeContains(today, range)) {

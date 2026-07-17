@@ -4,13 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; form-action 'self'; script-src 'self' https://cdn.jsdelivr.net https://cdn.sheetjs.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' https://*.supabase.co; img-src 'self' data:; upgrade-insecure-requests">
-  <meta name="description" content="HOME31 Enterprise Management Platform V7.9.4.8 — interactive project timeline edition">
+  <meta name="description" content="HOME31 Enterprise Management Platform V7.9.4.9 — multi-year project timeline edition">
   <meta name="theme-color" content="#061b2b">
-  <title>HOME31 Enterprise Management Platform V7.9.4.8</title>
+  <title>HOME31 Enterprise Management Platform V7.9.4.9</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=7.9.4.8"> 
+    <link rel="stylesheet" href="styles.css?v=7.9.4.9"> 
 </head>
 <body>
 
@@ -92,7 +92,7 @@
 
     <div class="auth-card-wrap">
       <div id="configuration-warning" class="notice warning hidden">
-        Configure <code>SUPABASE_URL</code> and <code>SUPABASE_PUBLISHABLE_KEY</code> in <code>app.js?v=7.9.4.8</code>.
+        Configure <code>SUPABASE_URL</code> and <code>SUPABASE_PUBLISHABLE_KEY</code> in <code>app.js?v=7.9.4.9</code>.
       </div>
 
       <form id="login-form" class="auth-card">
@@ -209,7 +209,7 @@
           <span class="sidebar-logout-icon" aria-hidden="true">↪</span>
           <span class="sidebar-logout-label">Sign out</span>
         </button>
-        <span class="sidebar-version">HOME31 Platform V7.9.4.8</span>
+        <span class="sidebar-version">HOME31 Platform V7.9.4.9</span>
       </div>
     </aside>
 
@@ -973,9 +973,13 @@
               <div>
                 <span class="admin-command-section-code">TIMELINE 03</span>
                 <h3>Horizontal Project Timeline</h3>
-                <p>Track scheduled delivery using saved start and target dates. Switch between week, month and year views without changing project records.</p>
+                <p>Track scheduled delivery using saved start and target dates. Select any calendar year from 2025 to 2100, then switch between week, month and year views without changing project records.</p>
               </div>
               <div class="pm-timeline-toolbar" aria-label="Timeline controls">
+                <label class="pm-timeline-year-control">
+                  <span>Calendar year</span>
+                  <select id="pm-timeline-year" aria-label="Select timeline calendar year"></select>
+                </label>
                 <div class="pm-timeline-scale" role="group" aria-label="Timeline scale">
                   <button type="button" data-pm-timeline-scale="week">Week</button>
                   <button type="button" data-pm-timeline-scale="month" class="active">Month</button>
@@ -2335,6 +2339,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-    <script type="module" src="app.js?v=7.9.4.8"></script>
+    <script type="module" src="app.js?v=7.9.4.9"></script>
 </body>
 </html>
