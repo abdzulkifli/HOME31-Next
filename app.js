@@ -51,6 +51,61 @@ const EXECUTIVE_SERIES_COLORS = {
 
 const EXECUTIVE_PANEL_STATE_KEY = "home31-executive-panel-state-v1";
 const WORKSPACE_MODULE_STATE_KEY = "home31-workspace-module-v1";
+const ADMIN_OVERVIEW_VIEW_KEY = "home31-admin-overview-view-v1";
+const ADMIN_CONTEXT_CONFIG = {
+  "admin-overview": {
+    label: "Overview",
+    items: [
+      { key: "summary", label: "Management Summary", view: "summary" },
+      { key: "analytics", label: "Visual Analytics", view: "analytics" },
+      { key: "decisions", label: "Decisions", view: "decisions" },
+      { key: "quality", label: "Assurance & Quality", view: "quality" }
+    ]
+  },
+  "admin-portfolio": {
+    label: "Portfolio",
+    items: [
+      { key: "register", label: "Initiative Register", target: "portfolio-register-panel" },
+      { key: "continuity", label: "Continuity Register", target: "portfolio-continuity-register" },
+      { key: "finance", label: "Finance Review", managementView: "finance" },
+      { key: "ict", label: "ICT Review", managementView: "ict" },
+      { key: "actions", label: "Import & Export", target: "portfolio-heading" }
+    ]
+  },
+  "project-management": {
+    label: "Project Management",
+    items: [
+      { key: "summary", label: "Delivery Summary", target: "pm-summary" },
+      { key: "attention", label: "Management Attention", target: "pm-attention-section" },
+      { key: "board", label: "Delivery Board", target: "pm-board-section" },
+      { key: "register", label: "Project Register", target: "pm-register-section" }
+    ]
+  },
+  "admin-exceptions": {
+    label: "Risks & Assurance",
+    items: [
+      { key: "exposure", label: "Risk Exposure", target: "risks-exposure" },
+      { key: "delivery", label: "Delivery Exceptions", target: "risks-delivery-lanes" },
+      { key: "functional", label: "HR, ICT & Evidence", target: "risks-cross-functional" }
+    ]
+  },
+  "admin-users": {
+    label: "Users",
+    items: [
+      { key: "directory", label: "User Directory", target: "users-directory" },
+      { key: "create", label: "Create User", target: "admin-create-user-form" },
+      { key: "assurance", label: "Access Assurance", target: "users-access-assurance" }
+    ]
+  },
+  "admin-system": {
+    label: "System",
+    items: [
+      { key: "foundation", label: "Current Foundation", target: "system-foundation" },
+      { key: "roadmap", label: "Roadmap", target: "system-roadmap" },
+      { key: "readiness", label: "Production Readiness", target: "system-production-readiness" }
+    ]
+  }
+};
 
 const QUADRANT_GUIDE_PLUGIN = {
   id: "quadrantGuide",
@@ -132,6 +187,9 @@ let lastModalTrigger = null;
 let authRouteTimer = null;
 let authRouteRevision = 0;
 let activeWorkspaceModule = null;
+let adminOverviewView = "summary";
+let activeAdminContextKey = "";
+let activeAdminContextModule = "";
 let initiativeModalReadOnly = false;
 let userProjectScope = "all";
 let projectManagementQuickFilter = "";
@@ -533,6 +591,9 @@ function resetSessionState() {
   destroyCharts();
   document.body.classList.remove("super-admin-shell", "department-user-shell", "admin-command-active");
   $("#user-top-nav")?.classList.add("hidden");
+  $("#admin-top-nav")?.classList.add("hidden");
+  $("#admin-context-nav")?.classList.add("hidden");
+  $("#admin-top-brand")?.classList.add("hidden");
   $("#top-user-summary")?.classList.add("hidden");
   $("#top-logout-button")?.classList.add("hidden");
   syncDisplaySettingsPlacement(false);
@@ -615,8 +676,11 @@ async function openPlatform(revision = authRouteRevision, userId = currentUser?.
 
   $("#user-nav").classList.add("hidden");
   $("#user-top-nav").classList.toggle("hidden", isSuperAdmin);
+  $("#admin-top-nav").classList.toggle("hidden", !isSuperAdmin);
+  $("#admin-context-nav").classList.toggle("hidden", !isSuperAdmin);
+  $("#admin-top-brand").classList.toggle("hidden", !isSuperAdmin);
   $("#top-user-summary").classList.toggle("hidden", isSuperAdmin);
-  $("#top-logout-button").classList.toggle("hidden", isSuperAdmin);
+  $("#top-logout-button").classList.remove("hidden");
 
   if (isSuperAdmin) {
     $("#admin-nav").classList.remove("hidden");
@@ -633,7 +697,7 @@ async function openPlatform(revision = authRouteRevision, userId = currentUser?.
   $("#auth-screen").classList.add("hidden");
   $("#force-password-screen").classList.add("hidden");
   $("#platform").classList.remove("hidden");
-  syncDisplaySettingsPlacement(!isSuperAdmin);
+  syncDisplaySettingsPlacement(true);
   const fallbackModule = isSuperAdmin ? "admin-overview" : "user-home";
   const restoredModule = readWorkspaceModule(isSuperAdmin) || fallbackModule;
   showModule(restoredModule, { scrollToTop: false });
@@ -862,19 +926,100 @@ function clearWorkspaceModule() {
   }
 }
 
+function readAdminOverviewView() {
+  try {
+    const saved = localStorage.getItem(ADMIN_OVERVIEW_VIEW_KEY);
+    return ["summary", "analytics", "decisions", "quality"].includes(saved) ? saved : "summary";
+  } catch (_error) {
+    return "summary";
+  }
+}
+
+function setAdminOverviewView(view, { scroll = true } = {}) {
+  const next = ["summary", "analytics", "decisions", "quality"].includes(view) ? view : "summary";
+  adminOverviewView = next;
+  const module = $("#module-admin-overview");
+  if (module) module.dataset.overviewView = next;
+  try {
+    localStorage.setItem(ADMIN_OVERVIEW_VIEW_KEY, next);
+  } catch (_error) {
+    // The tab still works when browser storage is unavailable.
+  }
+  $$("#admin-context-actions [data-admin-overview-view]").forEach(button => {
+    const active = button.dataset.adminOverviewView === next;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-current", active ? "page" : "false");
+  });
+  if (scroll) window.scrollTo({ top: 0, behavior: "auto" });
+  window.setTimeout(() => Object.values(charts).forEach(chart => chart?.resize?.()), 80);
+}
+
+function scrollToAdminTarget(targetId) {
+  const target = document.getElementById(targetId);
+  if (!target) return;
+  const stickyOffset = window.innerWidth <= 850 ? 150 : 182;
+  const top = Math.max(0, target.getBoundingClientRect().top + window.scrollY - stickyOffset);
+  window.scrollTo({ top, behavior: "smooth" });
+}
+
+function updateAdminContextNavigation(moduleName) {
+  const nav = $("#admin-context-nav");
+  const label = $("#admin-context-label");
+  const actions = $("#admin-context-actions");
+  if (!nav || !label || !actions || currentProfile?.role !== "super_admin") return;
+  const config = ADMIN_CONTEXT_CONFIG[moduleName];
+  if (activeAdminContextModule !== moduleName) {
+    activeAdminContextModule = moduleName;
+    activeAdminContextKey = "";
+  }
+  nav.classList.toggle("hidden", !config);
+  if (!config) {
+    actions.innerHTML = "";
+    return;
+  }
+  label.textContent = config.label;
+  actions.innerHTML = config.items.map(item => {
+    const active = moduleName === "admin-overview" ? item.view === adminOverviewView : item.key === activeAdminContextKey;
+    const viewAttribute = item.view ? ` data-admin-overview-view="${item.view}"` : "";
+    return `<button class="admin-context-button${active ? " active" : ""}" type="button" data-admin-context-key="${item.key}"${viewAttribute}>${item.label}</button>`;
+  }).join("");
+  config.items.forEach(item => {
+    const button = actions.querySelector(`[data-admin-context-key="${item.key}"]`);
+    button?.addEventListener("click", () => {
+      activeAdminContextKey = item.key;
+      if (item.view) {
+        setAdminOverviewView(item.view);
+      } else if (item.managementView) {
+        applyManagementView(item.managementView);
+      } else if (item.target) {
+        $$("#admin-context-actions .admin-context-button").forEach(control => control.classList.toggle("active", control === button));
+        scrollToAdminTarget(item.target);
+      }
+    });
+  });
+}
+
 function showModule(name, { scrollToTop = true } = {}) {
   $$(".module").forEach(module => module.classList.remove("active"));
   $$(".nav-item").forEach(button => button.classList.remove("active"));
 
   const module = $(`#module-${name}`);
   const matchingNavItems = $$(`.nav-item[data-module="${name}"]`);
-  const nav = matchingNavItems.find(button => !button.closest(".hidden")) || matchingNavItems[0];
+  const preferredNavigation = currentProfile?.role === "super_admin" ? "#admin-top-nav" : "#user-top-nav";
+  const nav = matchingNavItems.find(button => button.closest(preferredNavigation)) || matchingNavItems.find(button => !button.closest(".hidden")) || matchingNavItems[0];
   if (!module) return;
 
   module.classList.add("active");
-  nav?.classList.add("active");
+  matchingNavItems.forEach(button => button.classList.add("active"));
   rememberWorkspaceModule(name);
   $("#page-title").textContent = nav?.querySelector("b")?.textContent || "HOME31";
+  if (currentProfile?.role === "super_admin") {
+    if (name === "admin-overview") {
+      adminOverviewView = readAdminOverviewView();
+      setAdminOverviewView(adminOverviewView, { scroll: false });
+    }
+    updateAdminContextNavigation(name);
+  }
   if (isMobileNavigation()) closeSidebarDrawer();
   const useAdminVisualShell = currentProfile?.role === "super_admin" && (name.startsWith("admin-") || name === "project-management");
   document.body.classList.toggle("admin-command-active", useAdminVisualShell);
@@ -3330,10 +3475,21 @@ function calculateExecutiveMetrics(records=projectsForYear()) {
     evidence:records.filter(p=>Number(p.evidence_completeness||0)<70).length,
     priority:records.filter(p=>["Not Assessed","Watchlist / Under Review"].includes(p.priority_status)).length
   };
+  const decisionRequired=records.filter(p=>
+    !financialFieldConfirmed(p,"approved_budget") ||
+    !financialFieldConfirmed(p,"estimated_cost_post_challenge") ||
+    p.ict_classification==="New - Pending ICT review" ||
+    ((p.system_type&&p.system_type!=="Non System")&&!p.ict_classification) ||
+    (["Required","To be confirmed"].includes(p.hr_collaboration_status)&&!["Supported","Not required"].includes(p.hr_review_status)) ||
+    Number(p.evidence_completeness||0)<70 ||
+    ["Not Assessed","Watchlist / Under Review"].includes(p.priority_status)
+  ).length;
   return {
     records,total,originalCost,effectiveCost,proposedBudget,approvedBudget,portfolioCost,challengeReduction:originalCost-effectiveCost,
     originalCostCount,effectiveCostCount,portfolioCostCount:approvedBudgetCount,proposedBudgetCount,approvedBudgetCount,
     strategicPriority:records.filter(p=>["Strategic Priority","Corporate Priority"].includes(p.priority_status)||p.priority==="Strategic").length,
+    activeDelivery:records.filter(p=>p.status!=="Completed").length,
+    decisionRequired,
     watchlist:records.filter(p=>["Watchlist / Under Review","Not Assessed"].includes(p.priority_status)).length,
     atRisk:records.filter(p=>p.status==="At Risk"||["High","Extreme"].includes(p.risk_level)).length,
     overdue:records.filter(p=>p.target_date&&p.target_date<today&&p.status!=="Completed").length,
@@ -3350,31 +3506,26 @@ function renderAdminOverview() {
   $("#admin-kpi-total").textContent=metrics.total;
   $("#admin-kpi-total-note").textContent=`${selectedYearLabel()} · ${metrics.departments.length} departments`;
   $("#admin-kpi-health").textContent=`${metrics.strategicReadiness}%`;
-  $("#admin-kpi-health-note").textContent=`${metrics.fullyReady} initiatives meet all seven checks`;
-  $("#admin-kpi-cost-label").textContent="Portfolio cost basis";
+  $("#admin-kpi-health-note").textContent=`${metrics.fullyReady}/${metrics.total || 0} records meet all seven checks`;
+  $("#admin-kpi-cost-label").textContent="Approved Budget";
   $("#admin-kpi-effective-cost").textContent=compactRinggit(metrics.approvedBudget);
-  $("#admin-kpi-effective-note").textContent=`Approved Budget · ${metrics.approvedBudgetCount}/${metrics.total||0} records populated`;
-  const challengeMovement=metrics.challengeReduction;
-  $("#admin-kpi-reduction").textContent=compactRinggit(Math.abs(challengeMovement));
-  $("#admin-kpi-reduction-note").textContent=metrics.originalCost
-    ? `${formatPercent(Math.abs(challengeMovement)/metrics.originalCost*100)} ${challengeMovement>=0?"reduction":"increase"} versus original estimate`
-    : "Original estimate not yet populated";
-  const challengeCard=$("#admin-kpi-reduction").closest(".executive-kpi-card");
-  challengeCard?.classList.toggle("positive", challengeMovement>=0);
-  challengeCard?.classList.toggle("danger", challengeMovement<0);
-  $("#admin-kpi-priority").textContent=metrics.strategicPriority;
+  $("#admin-kpi-effective-note").textContent=`Portfolio cost basis · ${metrics.approvedBudgetCount}/${metrics.total||0} records`;
+  $("#admin-kpi-reduction").textContent=`${metrics.approvedBudgetCoverage}%`;
+  $("#admin-kpi-reduction-note").textContent=`${Math.max(0,metrics.total-metrics.approvedBudgetCount)} records missing Approved Budget`;
+  $("#admin-kpi-priority").textContent=metrics.activeDelivery;
+  $("#admin-kpi-priority").nextElementSibling.textContent="All non-completed initiatives";
   $("#admin-kpi-risk").textContent=metrics.atRisk;
-  $("#admin-kpi-approved-budget").textContent=compactRinggit(metrics.effectiveCost);
-  $("#admin-kpi-approved-budget-note").textContent=metrics.effectiveCostCount
-    ? `${metrics.effectiveCostCount}/${metrics.total || 0} records with confirmed post-challenge cost`
-    : "Post-challenge cost not yet populated";
-  $("#admin-kpi-approved-coverage").textContent=`${metrics.approvedBudgetCoverage}%`;
-  $("#admin-kpi-approved-coverage-note").textContent=`${metrics.approvedBudgetCount}/${metrics.total || 0} records populated`;
+  $("#admin-kpi-approved-budget").textContent=metrics.overdue;
+  $("#admin-kpi-approved-budget-note").textContent="Past target date and not completed";
+  $("#admin-kpi-approved-coverage").textContent=metrics.decisionRequired;
+  $("#admin-kpi-approved-coverage-note").textContent="Projects with at least one decision or information gap";
   $("#admin-kpi-users").textContent=adminProfiles.length;
   $("#admin-assurance-ownership").textContent=`${metrics.ownershipCompleteness}%`;
   $("#admin-assurance-evidence").textContent=`${metrics.evidenceAverage}%`;
   $("#admin-assurance-budget").textContent=`${metrics.approvedBudgetCoverage}%`;
   $("#admin-assurance-overdue").textContent=metrics.overdue;
+  const refreshedAt=new Date().toLocaleString("en-MY",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"});
+  $("#admin-overview-data-basis").textContent=`Based on ${metrics.total} live records · Approved Budget populated ${metrics.approvedBudgetCount}/${metrics.total || 0} · ${Math.max(0,metrics.total-metrics.approvedBudgetCount)} missing · Refreshed ${refreshedAt}`;
   renderManagementViews(metrics.records);
   renderExecutiveNarrative(metrics); renderExecutiveAttention(metrics); renderExecutiveBudget(metrics); renderExecutiveReadiness(metrics); renderExecutiveComparison(); renderExecutiveLists(metrics); renderAdminCharts(metrics); bindExecutiveRecordButtons();
 }
@@ -3391,8 +3542,14 @@ function renderExecutiveAttention(metrics) {
   $("#admin-attention-summary").innerHTML=rows.map(([l,v])=>`<div class="attention-row"><span>${escapeHtml(l)}</span><strong>${v}</strong></div>`).join("");
 }
 function renderExecutiveBudget(metrics) {
-  $("#admin-budget-metrics").innerHTML=`<article><strong>${formatRinggit(metrics.challengeReduction)}</strong><span>Challenge movement versus original estimate</span></article><article><strong>${metrics.proposedBudgetCount}/${metrics.total}</strong><span>Initiatives with proposed budget populated</span></article><article><strong>${metrics.approvedBudgetCount}/${metrics.total}</strong><span>Initiatives with approved budget populated</span></article>`;
-  $("#admin-budget-footnote").textContent=`${selectedYearLabel()} contains ${metrics.total} records. The headline KPI uses ${costBasisLabel().toLowerCase()}; the chart displays all four financial stages where populated.`;
+  const total=metrics.total || 0;
+  $("#admin-budget-metrics").innerHTML=`
+    <article><strong>${metrics.originalCostCount}/${total}</strong><span>Original estimate coverage</span></article>
+    <article><strong>${metrics.effectiveCostCount}/${total}</strong><span>Post-challenge coverage</span></article>
+    <article><strong>${metrics.proposedBudgetCount}/${total}</strong><span>Proposed budget coverage</span></article>
+    <article><strong>${metrics.approvedBudgetCount}/${total}</strong><span>Approved Budget coverage</span></article>
+    <article><strong>${formatRinggit(metrics.challengeReduction)}</strong><span>Challenge movement versus original estimate</span></article>`;
+  $("#admin-budget-footnote").textContent=`${selectedYearLabel()} uses Approved Budget as the portfolio cost basis. The chart excludes blank fields rather than treating them as confirmed zero. ${Math.max(0,total-metrics.approvedBudgetCount)} records are missing Approved Budget.`;
 }
 function renderExecutiveReadiness(metrics) {
   const score = metrics.strategicReadiness;
@@ -4118,23 +4275,30 @@ function renderProjectManagementCharts(records) {
   if (typeof Chart === "undefined" || !$("#pm-status-chart")) return;
   const statuses = ["Planning", "In Progress", "At Risk", "On Hold", "Completed"];
   charts.pmStatus = new Chart($("#pm-status-chart"), {
-    type: "doughnut",
+    type: "bar",
     data: {
       labels: statuses,
       datasets: [{
+        label: "Projects",
         data: statuses.map(status => records.filter(project => project.status === status).length),
         backgroundColor: ["#7f99af", "#57999b", "#d26066", "#d1ad63", "#6ca69b"],
-        borderColor: currentProfile?.role === "super_admin" ? "#102f49" : "#ffffff",
-        borderWidth: 4,
-        cutout: "62%"
+        borderRadius: 7,
+        maxBarThickness: 34
       }]
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      plugins: { legend: { position: "bottom", labels: { color: currentProfile?.role === "super_admin" ? EXECUTIVE_COLORS.text : "#5f4b4d", usePointStyle: true, boxWidth: 8, font: { size: 12 } } } }
+      indexAxis: "y",
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { beginAtZero: true, grid: { color: currentProfile?.role === "super_admin" ? EXECUTIVE_COLORS.grid : "rgba(90,70,72,.12)" }, ticks: { precision: 0, color: currentProfile?.role === "super_admin" ? EXECUTIVE_COLORS.text : "#5f4b4d" } },
+        y: { grid: { display: false }, ticks: { color: currentProfile?.role === "super_admin" ? EXECUTIVE_COLORS.text : "#5f4b4d" } }
+      }
     }
   });
+  const missingStatus=records.filter(project=>!String(project.status||"").trim()).length;
+  $("#pm-data-note").textContent=`Based on ${records.length} selected projects using saved status values. ${missingStatus ? `${missingStatus} records have no status.` : "All selected records have a saved status."} Delivery health remains a separate derived indicator.`;
 }
 
 function projectManagementAccessBadge(project) {
@@ -4201,7 +4365,7 @@ function renderAdminExceptions() {
 }
 function renderAdminExceptionCharts(data) {
   charts.adminExceptionRisk?.destroy();charts.adminExceptionHealth?.destroy();if(typeof Chart==="undefined")return;const risks=["Low","Medium","High","Extreme"];
-  charts.adminExceptionRisk=new Chart($("#admin-exception-risk-chart"),{type:"doughnut",data:{labels:risks,datasets:[{data:risks.map(r=>data.records.filter(p=>p.risk_level===r).length),backgroundColor:["#6ca69b","#7f99af","#d1ad63","#d26066"],borderColor:"#102f49",borderWidth:4,cutout:"62%"}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:"bottom",labels:{color:EXECUTIVE_COLORS.text,usePointStyle:true,boxWidth:8,font: { size: 12 }}}}}});
+  charts.adminExceptionRisk=new Chart($("#admin-exception-risk-chart"),{type:"bar",data:{labels:risks,datasets:[{label:"Projects",data:risks.map(r=>data.records.filter(p=>p.risk_level===r).length),backgroundColor:["#6ca69b","#7f99af","#d1ad63","#d26066"],borderRadius:7,maxBarThickness:34}]},options:{responsive:true,maintainAspectRatio:false,indexAxis:"y",plugins:{legend:{display:false}},scales:{x:{beginAtZero:true,grid:{color:EXECUTIVE_COLORS.grid},ticks:{color:EXECUTIVE_COLORS.text,precision:0}},y:{grid:{display:false},ticks:{color:EXECUTIVE_COLORS.text}}}}});
   charts.adminExceptionHealth=new Chart($("#admin-exception-health-chart"),{type:"bar",data:{labels:["Risk","Low readiness","Overdue","HR","ICT","Evidence"],datasets:[{data:[data.risk.length,data.readiness.length,data.overdue.length,data.hrPending.length,data.ictPending.length,data.evidence.length],backgroundColor:["#d26066","#d1ad63","#b97859","#57999b","#7f99af","#6f86a0"],borderRadius:7}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{display:false},ticks:{color:EXECUTIVE_COLORS.text,font: { size: 12 }}},y:{beginAtZero:true,grid:{color:EXECUTIVE_COLORS.grid},ticks:{color:EXECUTIVE_COLORS.text,precision:0}}}}});
 }
 

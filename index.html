@@ -4,13 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; form-action 'self'; script-src 'self' https://cdn.jsdelivr.net https://cdn.sheetjs.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' https://*.supabase.co; img-src 'self' data:; upgrade-insecure-requests">
-  <meta name="description" content="HOME31 Enterprise Management Platform V7.9.4.6 — end-user action centre edition">
+  <meta name="description" content="HOME31 Enterprise Management Platform V7.9.4.7 — admin top navigation and clarity edition">
   <meta name="theme-color" content="#061b2b">
-  <title>HOME31 Enterprise Management Platform V7.9.4.6</title>
+  <title>HOME31 Enterprise Management Platform V7.9.4.7</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=7.9.4.6"> 
+    <link rel="stylesheet" href="styles.css?v=7.9.4.7"> 
 </head>
 <body>
 
@@ -92,7 +92,7 @@
 
     <div class="auth-card-wrap">
       <div id="configuration-warning" class="notice warning hidden">
-        Configure <code>SUPABASE_URL</code> and <code>SUPABASE_PUBLISHABLE_KEY</code> in <code>app.js?v=7.9.4.6</code>.
+        Configure <code>SUPABASE_URL</code> and <code>SUPABASE_PUBLISHABLE_KEY</code> in <code>app.js?v=7.9.4.7</code>.
       </div>
 
       <form id="login-form" class="auth-card">
@@ -209,7 +209,7 @@
           <span class="sidebar-logout-icon" aria-hidden="true">↪</span>
           <span class="sidebar-logout-label">Sign out</span>
         </button>
-        <span class="sidebar-version">HOME31 Platform V7.9.4.6</span>
+        <span class="sidebar-version">HOME31 Platform V7.9.4.7</span>
       </div>
     </aside>
 
@@ -218,8 +218,12 @@
     <main class="main">
       <header class="topbar">
         <div class="topbar-left">
+          <div id="admin-top-brand" class="admin-top-brand hidden" aria-label="HOME31 Enterprise Management Platform">
+            <span class="admin-top-brand-mark" aria-hidden="true">H31</span>
+            <span><strong>HOME31</strong><small>Enterprise Management Platform</small></span>
+          </div>
           <button id="menu-toggle" class="icon-button" type="button" aria-label="Toggle navigation" aria-expanded="true" aria-controls="sidebar" title="Toggle navigation">☰</button>
-          <div>
+          <div class="topbar-title-copy">
             <span class="eyebrow">LPPSA • HOME31 2027–2031</span>
             <h1 id="page-title">My Dashboard</h1>
           </div>
@@ -252,6 +256,20 @@
         <button class="nav-item user-top-nav-item" data-module="project-management" aria-label="Project Management"><span>◧</span><b>Project Management</b></button>
         <button class="nav-item user-top-nav-item" data-module="readiness" aria-label="Readiness and HR"><span>✓</span><b>Readiness &amp; HR</b></button>
         <button class="nav-item user-top-nav-item" data-module="account" aria-label="My Account"><span>⚙</span><b>My Account</b></button>
+      </nav>
+
+      <nav id="admin-top-nav" class="admin-top-navigation hidden" aria-label="Super admin workspace navigation">
+        <button class="nav-item admin-top-nav-item active" data-module="admin-overview" aria-label="Overview"><span>◫</span><b>Overview</b></button>
+        <button class="nav-item admin-top-nav-item" data-module="admin-portfolio" aria-label="Portfolio"><span>▦</span><b>Portfolio</b></button>
+        <button class="nav-item admin-top-nav-item" data-module="project-management" aria-label="Project Management"><span>◧</span><b>Project Management</b></button>
+        <button class="nav-item admin-top-nav-item" data-module="admin-exceptions" aria-label="Risks and Assurance"><span>!</span><b>Risks &amp; Assurance</b></button>
+        <button class="nav-item admin-top-nav-item" data-module="admin-users" aria-label="Users"><span>♙</span><b>Users</b></button>
+        <button class="nav-item admin-top-nav-item" data-module="admin-system" aria-label="System"><span>⚙</span><b>System</b></button>
+      </nav>
+
+      <nav id="admin-context-nav" class="admin-context-navigation hidden" aria-label="Current admin page sections">
+        <span id="admin-context-label" class="admin-context-label">Overview</span>
+        <div id="admin-context-actions" class="admin-context-actions"></div>
       </nav>
 
       <section class="content">
@@ -383,7 +401,8 @@
             <div>
               <span class="executive-kicker">HOME31 • ENTERPRISE COMMAND CENTRE</span>
               <h2>Executive Portfolio Overview</h2>
-              <p>One management view of strategic readiness, delivery load, cost challenge, priority, risk, HR impact, ICT dependency and evidence certainty.</p>
+              <p>One management view of portfolio position, management attention, decisions and data reliability.</p>
+              <div id="admin-overview-data-basis" class="admin-data-basis">Live portfolio data will appear after refresh.</div>
             </div>
             <div class="executive-hero-actions">
               <button id="admin-overview-refresh" class="executive-button ghost" type="button">↻ Refresh</button>
@@ -391,7 +410,7 @@
             </div>
           </div>
 
-          <section class="management-view-panel" aria-labelledby="management-view-title">
+          <section id="overview-management-views" class="management-view-panel admin-overview-group overview-summary" aria-labelledby="management-view-title">
             <div class="management-view-heading">
               <div>
                 <span class="executive-section-code">MANAGEMENT VIEWS</span>
@@ -440,36 +459,36 @@
             </div>
           </section>
 
-          <div class="executive-kpi-grid">
+          <div id="overview-kpis" class="executive-kpi-grid admin-overview-group overview-summary">
             <article class="executive-kpi-card featured">
               <div class="kpi-icon">▦</div>
-              <span>Portfolio items</span>
+              <span>Portfolio projects</span>
               <strong id="admin-kpi-total">0</strong>
               <small id="admin-kpi-total-note">Enterprise initiatives</small>
             </article>
             <article class="executive-kpi-card">
               <div class="kpi-icon">✓</div>
-              <span>Strategic readiness</span>
+              <span>Average readiness</span>
               <strong id="admin-kpi-health">0%</strong>
               <small id="admin-kpi-health-note">Completeness across seven checks</small>
             </article>
             <article class="executive-kpi-card">
               <div class="kpi-icon">RM</div>
-              <span id="admin-kpi-cost-label">Portfolio cost basis</span>
+              <span id="admin-kpi-cost-label">Approved Budget</span>
               <strong id="admin-kpi-effective-cost">RM0</strong>
               <small id="admin-kpi-effective-note">Approved Budget values</small>
             </article>
             <article class="executive-kpi-card positive">
-              <div class="kpi-icon">↓</div>
-              <span>Challenge movement</span>
-              <strong id="admin-kpi-reduction">RM0</strong>
-              <small id="admin-kpi-reduction-note">Original estimate versus post-challenge cost</small>
+              <div class="kpi-icon">%</div>
+              <span>Budget coverage</span>
+              <strong id="admin-kpi-reduction">0%</strong>
+              <small id="admin-kpi-reduction-note">Approved Budget fields populated</small>
             </article>
             <article class="executive-kpi-card priority">
-              <div class="kpi-icon">★</div>
-              <span>Strategic priority</span>
+              <div class="kpi-icon">▶</div>
+              <span>Active delivery</span>
               <strong id="admin-kpi-priority">0</strong>
-              <small>Corporate / strategic priority records</small>
+              <small>All non-completed initiatives</small>
             </article>
             <article class="executive-kpi-card danger">
               <div class="kpi-icon">!</div>
@@ -477,21 +496,21 @@
               <strong id="admin-kpi-risk">0</strong>
               <small>High, extreme or at-risk status</small>
             </article>
-            <article class="executive-kpi-card positive">
-              <div class="kpi-icon">RM</div>
-              <span>Post-challenge cost</span>
-              <strong id="admin-kpi-approved-budget">RM0</strong>
-              <small id="admin-kpi-approved-budget-note">Confirmed challenge-session position</small>
+            <article class="executive-kpi-card danger">
+              <div class="kpi-icon">⏱</div>
+              <span>Overdue</span>
+              <strong id="admin-kpi-approved-budget">0</strong>
+              <small id="admin-kpi-approved-budget-note">Past target date and not completed</small>
             </article>
-            <article class="executive-kpi-card">
-              <div class="kpi-icon">%</div>
-              <span>Budget coverage</span>
-              <strong id="admin-kpi-approved-coverage">0%</strong>
-              <small id="admin-kpi-approved-coverage-note">Approved budget fields populated</small>
+            <article class="executive-kpi-card priority">
+              <div class="kpi-icon">?</div>
+              <span>Decisions required</span>
+              <strong id="admin-kpi-approved-coverage">0</strong>
+              <small id="admin-kpi-approved-coverage-note">Projects with a decision or information gap</small>
             </article>
           </div>
 
-          <div class="executive-story-grid">
+          <div id="overview-story" class="executive-story-grid admin-overview-group overview-summary">
             <article class="executive-panel insight-panel">
               <div class="executive-panel-heading">
                 <div>
@@ -533,7 +552,7 @@
             </article>
           </div>
 
-          <div class="executive-dashboard-grid">
+          <div class="executive-dashboard-grid admin-overview-group overview-analytics">
             <article id="executive-budget-panel" class="executive-panel chart-panel">
               <div class="executive-panel-heading">
                 <div>
@@ -576,7 +595,7 @@
             </article>
           </div>
 
-          <div class="executive-dashboard-grid">
+          <div class="executive-dashboard-grid admin-overview-group overview-analytics">
             <article class="executive-panel chart-panel">
               <div class="executive-panel-heading">
                 <div>
@@ -602,7 +621,7 @@
             </article>
           </div>
 
-          <article class="executive-panel comparison-panel">
+          <article class="executive-panel comparison-panel admin-overview-group overview-analytics">
             <div class="executive-panel-heading">
               <div>
                 <span class="executive-section-code">COMPARISON SCOPE</span>
@@ -615,7 +634,7 @@
             <div id="admin-comparison-notes" class="comparison-notes"></div>
           </article>
 
-          <article class="executive-panel chart-panel full-width-panel">
+          <article class="executive-panel chart-panel full-width-panel admin-overview-group overview-analytics">
             <div class="executive-panel-heading">
               <div>
                 <span class="executive-section-code">COMPARISON 03</span>
@@ -627,7 +646,7 @@
             <div id="admin-cost-concentration-footnote" class="executive-chart-note"></div>
           </article>
 
-          <div class="executive-dashboard-grid">
+          <div class="executive-dashboard-grid admin-overview-group overview-analytics">
             <article class="executive-panel chart-panel">
               <div class="executive-panel-heading">
                 <div>
@@ -654,7 +673,7 @@
             </article>
           </div>
 
-          <div class="executive-decision-grid">
+          <div id="overview-decisions" class="executive-decision-grid admin-overview-group overview-decisions">
             <article class="executive-panel decision-panel">
               <div class="executive-panel-heading">
                 <div><span class="executive-section-code">DECISIONS</span><h3>Executive Decisions Required</h3></div>
@@ -677,7 +696,7 @@
             </article>
           </div>
 
-          <div class="executive-assurance-strip">
+          <div id="overview-data-quality" class="executive-assurance-strip admin-overview-group overview-quality">
             <article><strong id="admin-assurance-ownership">0%</strong><span>Ownership fields complete</span></article>
             <article><strong id="admin-assurance-evidence">0%</strong><span>Average evidence completeness</span></article>
             <article><strong id="admin-assurance-budget">0%</strong><span>Approved-budget coverage</span></article>
@@ -687,7 +706,7 @@
         </section>
 
         <section id="module-admin-portfolio" class="module admin-command-module">
-          <div class="admin-command-hero">
+          <div id="portfolio-heading" class="admin-command-hero compact-admin-heading">
             <div>
               <span class="admin-command-code">PORTFOLIO 01</span>
               <h2>Enterprise Portfolio</h2>
@@ -702,7 +721,7 @@
             </div>
           </div>
 
-          <div class="admin-command-kpi-grid six">
+          <div id="portfolio-summary" class="admin-command-kpi-grid six">
             <article class="admin-command-kpi featured">
               <span>Portfolio records</span>
               <strong id="portfolio-kpi-total">0</strong>
@@ -748,7 +767,7 @@
               <div id="portfolio-selection-facts" class="admin-command-facts"></div>
             </article>
 
-            <article class="admin-command-panel filter-command-panel">
+            <article id="portfolio-controls" class="admin-command-panel filter-command-panel">
               <div class="admin-command-panel-heading">
                 <div>
                   <span class="admin-command-section-code">CONTROL 02</span>
@@ -792,7 +811,7 @@
             </article>
           </div>
 
-          <article class="admin-command-panel portfolio-table-panel">
+          <article id="portfolio-register-panel" class="admin-command-panel portfolio-table-panel">
             <div class="admin-command-panel-heading">
               <div>
                 <span class="admin-command-section-code">REGISTER 03</span>
@@ -873,7 +892,7 @@
             </div>
           </article>
 
-          <div class="admin-command-assurance-strip">
+          <div id="portfolio-quality" class="admin-command-assurance-strip">
             <article><strong id="portfolio-assurance-ownership">0%</strong><span>Ownership completeness</span></article>
             <article><strong id="portfolio-assurance-evidence">0%</strong><span>Average evidence completeness</span></article>
             <article><strong id="portfolio-assurance-ict">0</strong><span>ICT assessments pending</span></article>
@@ -883,7 +902,7 @@
         </section>
 
         <section id="module-project-management" class="module admin-command-module project-management-module">
-          <div class="admin-command-hero project-management-hero">
+          <div id="pm-heading" class="admin-command-hero project-management-hero compact-admin-heading">
             <div>
               <span id="pm-workspace-kicker" class="admin-command-code">DELIVERY 01</span>
               <h2>Project Management</h2>
@@ -896,7 +915,7 @@
             </div>
           </div>
 
-          <div class="admin-command-kpi-grid six project-management-kpis">
+          <div id="pm-summary" class="admin-command-kpi-grid six project-management-kpis">
             <article class="admin-command-kpi featured">
               <span>Active projects</span>
               <strong id="pm-kpi-active">0</strong>
@@ -929,7 +948,7 @@
             </article>
           </div>
 
-          <article class="admin-command-panel pm-control-panel">
+          <article id="pm-controls" class="admin-command-panel pm-control-panel">
             <div class="admin-command-panel-heading">
               <div>
                 <span class="admin-command-section-code">CONTROL 02</span>
@@ -950,7 +969,7 @@
           </article>
 
           <div class="admin-command-grid pm-overview-grid">
-            <article class="admin-command-panel chart-panel">
+            <article id="pm-status-section" class="admin-command-panel chart-panel">
               <div class="admin-command-panel-heading">
                 <div>
                   <span class="admin-command-section-code">DELIVERY 03</span>
@@ -962,7 +981,7 @@
               <div id="pm-data-note" class="pm-data-note">Data basis: saved <code>status</code> values. No forecast status is inferred.</div>
             </article>
 
-            <article class="admin-command-panel pm-attention-panel">
+            <article id="pm-attention-section" class="admin-command-panel pm-attention-panel">
               <div class="admin-command-panel-heading">
                 <div>
                   <span class="admin-command-section-code">ATTENTION 04</span>
@@ -975,7 +994,7 @@
             </article>
           </div>
 
-          <article class="admin-command-panel pm-board-panel">
+          <article id="pm-board-section" class="admin-command-panel pm-board-panel">
             <div class="admin-command-panel-heading">
               <div>
                 <span class="admin-command-section-code">BOARD 05</span>
@@ -987,7 +1006,7 @@
             <div id="pm-delivery-board" class="pm-delivery-board"></div>
           </article>
 
-          <article class="admin-command-panel pm-register-panel">
+          <article id="pm-register-section" class="admin-command-panel pm-register-panel">
             <div class="admin-command-panel-heading">
               <div>
                 <span class="admin-command-section-code">REGISTER 06</span>
@@ -1016,7 +1035,7 @@
         </section>
 
         <section id="module-admin-users" class="module admin-command-module">
-          <div class="admin-command-hero">
+          <div id="users-heading" class="admin-command-hero compact-admin-heading">
             <div>
               <span class="admin-command-code">ACCESS 01</span>
               <h2>User Administration</h2>
@@ -1027,7 +1046,7 @@
             </div>
           </div>
 
-          <div class="admin-command-kpi-grid six">
+          <div id="users-summary" class="admin-command-kpi-grid six">
             <article class="admin-command-kpi featured">
               <span>Registered users</span>
               <strong id="users-kpi-total">0</strong>
@@ -1099,7 +1118,7 @@
               </div>
             </form>
 
-            <article class="admin-command-panel access-governance-panel">
+            <article id="users-access-assurance" class="admin-command-panel access-governance-panel">
               <div class="admin-command-panel-heading">
                 <div>
                   <span class="admin-command-section-code">GOVERNANCE 03</span>
@@ -1115,7 +1134,7 @@
             </article>
           </div>
 
-          <article class="admin-command-panel user-directory-panel">
+          <article id="users-directory" class="admin-command-panel user-directory-panel">
             <div class="admin-command-panel-heading">
               <div>
                 <span class="admin-command-section-code">DIRECTORY 04</span>
@@ -1162,7 +1181,7 @@
         </section>
 
         <section id="module-admin-exceptions" class="module admin-command-module">
-          <div class="admin-command-hero">
+          <div id="risks-heading" class="admin-command-hero compact-admin-heading">
             <div>
               <span class="admin-command-code">ASSURANCE 01</span>
               <h2>Risks & Exceptions</h2>
@@ -1173,7 +1192,7 @@
             </div>
           </div>
 
-          <div class="admin-command-kpi-grid six">
+          <div id="risks-summary" class="admin-command-kpi-grid six">
             <article class="admin-command-kpi danger">
               <span>High / extreme risk</span>
               <strong id="admin-exception-risk-count">0</strong>
@@ -1206,7 +1225,7 @@
             </article>
           </div>
 
-          <div class="admin-command-grid">
+          <div id="risks-exposure" class="admin-command-grid">
             <article class="admin-command-panel chart-panel">
               <div class="admin-command-panel-heading">
                 <div>
@@ -1230,7 +1249,7 @@
             </article>
           </div>
 
-          <div class="admin-exception-lanes">
+          <div id="risks-delivery-lanes" class="admin-exception-lanes">
             <article class="admin-exception-lane critical">
               <div class="admin-exception-lane-heading">
                 <div><span>LANE 01</span><h3>High / Extreme Risk</h3></div>
@@ -1256,7 +1275,7 @@
             </article>
           </div>
 
-          <article class="admin-command-panel cross-functional-panel">
+          <article id="risks-cross-functional" class="admin-command-panel cross-functional-panel">
             <div class="admin-command-panel-heading">
               <div>
                 <span class="admin-command-section-code">CROSS-FUNCTIONAL 04</span>
@@ -1291,7 +1310,7 @@
         </section>
 
         <section id="module-admin-system" class="module admin-command-module">
-          <div class="admin-command-hero">
+          <div id="system-heading" class="admin-command-hero compact-admin-heading">
             <div>
               <span class="admin-command-code">ARCHITECTURE 01</span>
               <h2>System & Future</h2>
@@ -1302,7 +1321,7 @@
             </div>
           </div>
 
-          <div class="admin-command-kpi-grid six">
+          <div id="system-summary" class="admin-command-kpi-grid six">
             <article class="admin-command-kpi positive">
               <span>Authentication</span>
               <strong>Active</strong>
@@ -1336,7 +1355,7 @@
           </div>
 
           <div class="admin-command-grid">
-            <article class="admin-command-panel system-foundation-panel">
+            <article id="system-foundation" class="admin-command-panel system-foundation-panel">
               <div class="admin-command-panel-heading">
                 <div>
                   <span class="admin-command-section-code">FOUNDATION 02</span>
@@ -1372,7 +1391,7 @@
             </article>
           </div>
 
-          <article class="admin-command-panel roadmap-panel">
+          <article id="system-roadmap" class="admin-command-panel roadmap-panel">
             <div class="admin-command-panel-heading">
               <div>
                 <span class="admin-command-section-code">ROADMAP 04</span>
@@ -1454,7 +1473,7 @@
             </article>
           </div>
 
-          <article class="admin-command-panel governance-checklist-panel">
+          <article id="system-production-readiness" class="admin-command-panel governance-checklist-panel">
             <div class="admin-command-panel-heading">
               <div>
                 <span class="admin-command-section-code">GOVERNANCE 05</span>
@@ -2253,6 +2272,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-    <script type="module" src="app.js?v=7.9.4.6"></script>
+    <script type="module" src="app.js?v=7.9.4.7"></script>
 </body>
 </html>
