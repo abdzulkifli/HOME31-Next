@@ -3,13 +3,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="description" content="HOME31 Enterprise Management Platform V7.9.4.1 — Visual Polish">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; form-action 'self'; script-src 'self' https://cdn.jsdelivr.net https://cdn.sheetjs.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' https://*.supabase.co; img-src 'self' data:; upgrade-insecure-requests">
+  <meta name="description" content="HOME31 Enterprise Management Platform V7.9.4 — portfolio continuity edition">
   <meta name="theme-color" content="#061b2b">
-  <title>HOME31 Enterprise Management Platform V7.9.4.1</title>
+  <title>HOME31 Enterprise Management Platform V7.9.4</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=7.9.4.1">
+    <link rel="stylesheet" href="styles.css?v=7.9.4"> 
 </head>
 <body>
 
@@ -37,22 +38,22 @@
         <div>
           <span class="display-settings-kicker">READABILITY</span>
           <h2 id="display-settings-title">Display Settings</h2>
-          <p>Choose a comfortable reading size. Your preference is remembered on this device.</p>
+          <p>Choose a standard reading size. Your preference is remembered on this device.</p>
         </div>
         <button id="display-settings-close" class="display-settings-close" type="button" aria-label="Close display settings">×</button>
       </div>
 
       <div class="display-mode-grid" role="radiogroup" aria-label="Display size">
-        <button class="display-mode-card" type="button" data-display-size="standard" role="radio" aria-checked="false">
+        <button class="display-mode-card recommended" type="button" data-display-size="standard" role="radio" aria-checked="true">
+          <span class="display-recommended-label">Recommended</span>
           <span class="display-preview standard">Aa</span>
           <strong>Standard</strong>
-          <small>Compact desktop view</small>
+          <small>Balanced everyday view</small>
         </button>
-        <button class="display-mode-card recommended" type="button" data-display-size="comfortable" role="radio" aria-checked="true">
-          <span class="display-recommended-label">Recommended</span>
+        <button class="display-mode-card" type="button" data-display-size="comfortable" role="radio" aria-checked="false">
           <span class="display-preview comfortable">Aa</span>
           <strong>Comfortable</strong>
-          <small>Best for daily reading</small>
+          <small>Slightly larger reading view</small>
         </button>
         <button class="display-mode-card" type="button" data-display-size="large" role="radio" aria-checked="false">
           <span class="display-preview large">Aa</span>
@@ -70,7 +71,7 @@
       </label>
 
       <div class="display-settings-footer">
-        <span id="display-settings-status" aria-live="polite">Comfortable display is active.</span>
+        <span id="display-settings-status" aria-live="polite">Standard display is active.</span>
         <button id="display-settings-reset" type="button">Reset</button>
       </div>
     </section>
@@ -91,7 +92,7 @@
 
     <div class="auth-card-wrap">
       <div id="configuration-warning" class="notice warning hidden">
-        Configure <code>SUPABASE_URL</code> and <code>SUPABASE_PUBLISHABLE_KEY</code> in <code>app.js</code>.
+        Configure <code>SUPABASE_URL</code> and <code>SUPABASE_PUBLISHABLE_KEY</code> in <code>app.js?v=7.9.4</code>.
       </div>
 
       <form id="login-form" class="auth-card">
@@ -156,49 +157,66 @@
   </section>
 
   <div id="platform" class="app-shell hidden">
-    <aside id="sidebar" class="sidebar">
-      <div class="brand">
+    <aside id="sidebar" class="sidebar" aria-label="Primary navigation">
+      <div class="brand sidebar-brand-row">
         <div class="brand-mark">H31</div>
-        <div>
+        <div class="sidebar-brand-copy">
           <strong>HOME31</strong>
           <span>Enterprise Management Platform</span>
         </div>
+        <button
+          id="sidebar-collapse-button"
+          class="sidebar-collapse-button"
+          type="button"
+          aria-label="Collapse navigation sidebar"
+          aria-expanded="true"
+          aria-controls="sidebar"
+          title="Collapse navigation"
+        >
+          <span aria-hidden="true">‹</span>
+        </button>
       </div>
 
       <div class="sidebar-user">
         <div id="sidebar-avatar" class="avatar">U</div>
-        <div>
+        <div class="sidebar-user-copy">
           <strong id="sidebar-name">User</strong>
           <span id="sidebar-role">Normal User</span>
         </div>
       </div>
 
       <nav id="user-nav" class="module-nav" aria-label="User navigation">
-        <button class="nav-item active" data-module="user-home"><span>⌂</span><b>My Dashboard</b></button>
-        <button class="nav-item" data-module="my-initiatives"><span>▤</span><b>My Initiatives</b></button>
-        <button class="nav-item" data-module="readiness"><span>✓</span><b>Readiness & HR</b></button>
-        <button class="nav-item" data-module="account"><span>⚙</span><b>My Account</b></button>
+        <button class="nav-item active" data-module="user-home" data-tooltip="My Dashboard" aria-label="My Dashboard"><span>⌂</span><b>My Dashboard</b></button>
+        <button class="nav-item" data-module="my-initiatives" data-tooltip="My Initiatives" aria-label="My Initiatives"><span>▤</span><b>My Initiatives</b></button>
+        <button class="nav-item" data-module="readiness" data-tooltip="Readiness & HR" aria-label="Readiness and HR"><span>✓</span><b>Readiness & HR</b></button>
+        <button class="nav-item" data-module="account" data-tooltip="My Account" aria-label="My Account"><span>⚙</span><b>My Account</b></button>
       </nav>
 
       <nav id="admin-nav" class="module-nav hidden" aria-label="Super admin navigation">
         <div class="nav-separator">SUPER ADMIN</div>
-        <button class="nav-item" data-module="admin-overview"><span>◫</span><b>Executive Overview</b></button>
-        <button class="nav-item" data-module="admin-portfolio"><span>▦</span><b>Enterprise Portfolio</b></button>
-        <button class="nav-item" data-module="admin-users"><span>♙</span><b>User Administration</b></button>
-        <button class="nav-item" data-module="admin-exceptions"><span>!</span><b>Risks & Exceptions</b></button>
-        <button class="nav-item" data-module="admin-system"><span>⚙</span><b>System & Future</b></button>
+        <button class="nav-item" data-module="admin-overview" data-tooltip="Executive Overview" aria-label="Executive Overview"><span>◫</span><b>Executive Overview</b></button>
+        <button class="nav-item" data-module="admin-portfolio" data-tooltip="Enterprise Portfolio" aria-label="Enterprise Portfolio"><span>▦</span><b>Enterprise Portfolio</b></button>
+        <button class="nav-item" data-module="admin-users" data-tooltip="User Administration" aria-label="User Administration"><span>♙</span><b>User Administration</b></button>
+        <button class="nav-item" data-module="admin-exceptions" data-tooltip="Risks & Exceptions" aria-label="Risks and Exceptions"><span>!</span><b>Risks & Exceptions</b></button>
+        <button class="nav-item" data-module="admin-system" data-tooltip="System & Future" aria-label="System and Future"><span>⚙</span><b>System & Future</b></button>
+        <button class="nav-item" data-module="account" data-tooltip="My Account" aria-label="My Account"><span>👤</span><b>My Account</b></button>
       </nav>
 
       <div class="sidebar-footer">
-        <button id="logout-button" class="sidebar-logout" type="button">Sign out</button>
-        <span>HOME31 V7.9.4.1</span>
+        <button id="logout-button" class="sidebar-logout" type="button" data-tooltip="Sign out" aria-label="Sign out">
+          <span class="sidebar-logout-icon" aria-hidden="true">↪</span>
+          <span class="sidebar-logout-label">Sign out</span>
+        </button>
+        <span class="sidebar-version">HOME31 Platform V7.9.4</span>
       </div>
     </aside>
+
+    <button id="sidebar-overlay" class="sidebar-overlay" type="button" aria-label="Close navigation menu" tabindex="-1"></button>
 
     <main class="main">
       <header class="topbar">
         <div class="topbar-left">
-          <button id="menu-toggle" class="icon-button" type="button">☰</button>
+          <button id="menu-toggle" class="icon-button" type="button" aria-label="Toggle navigation" aria-expanded="true" aria-controls="sidebar" title="Toggle navigation">☰</button>
           <div>
             <span class="eyebrow">LPPSA • HOME31 2027–2031</span>
             <h1 id="page-title">My Dashboard</h1>
@@ -206,7 +224,6 @@
         </div>
 
         <div class="topbar-actions">
-          <div id="display-settings-dock" class="display-settings-dock" aria-label="Display settings"></div>
           <div id="admin-year-control" class="admin-year-control hidden">
             <label>
               <span>Portfolio year</span>
@@ -215,7 +232,7 @@
             <small id="admin-year-source-badge">Live data</small>
           </div>
           <button id="top-new-initiative" class="button gold" type="button">+ New Initiative</button>
-          <button id="top-account-button" class="icon-button" type="button">👤</button>
+          <button id="top-account-button" class="icon-button" type="button" aria-label="Open my account">👤</button>
         </div>
       </header>
 
@@ -240,7 +257,7 @@
           <div class="dashboard-grid">
             <article class="panel chart-panel">
               <div class="panel-heading"><div><span class="section-label">My delivery</span><h3>Status distribution</h3></div></div>
-              <div class="chart-shell"><canvas id="user-status-chart"></canvas></div>
+              <div class="chart-shell"><canvas id="user-status-chart" role="img" tabindex="0" aria-label="Status distribution for the signed-in user’s initiatives"></canvas></div>
             </article>
 
             <article class="panel">
@@ -270,11 +287,11 @@
           </div>
 
           <div class="filter-bar">
-            <input id="user-search" type="search" placeholder="Search initiative">
-            <select id="user-status-filter">
+            <label class="visually-labelled-control"><span>Search initiatives</span><input id="user-search" type="search" placeholder="Search initiative"></label>
+            <label class="visually-labelled-control"><span>Status filter</span><select id="user-status-filter">
               <option value="">All status</option>
               <option>Planning</option><option>In Progress</option><option>At Risk</option><option>On Hold</option><option>Completed</option>
-            </select>
+            </select></label>
             <button id="user-clear-filters" class="button light small" type="button">Clear</button>
           </div>
 
@@ -332,18 +349,56 @@
             </div>
           </div>
 
-          <div class="executive-view-toolbar" aria-label="Executive overview display">
-            <div class="executive-view-heading">
-              <span class="executive-section-code">EXECUTIVE VIEW</span>
-              <strong id="executive-view-title">Management Summary</strong>
+          <section class="management-view-panel" aria-labelledby="management-view-title">
+            <div class="management-view-heading">
+              <div>
+                <span class="executive-section-code">MANAGEMENT VIEWS</span>
+                <h3 id="management-view-title">Start with the question you need to answer</h3>
+                <p>Each view opens the Enterprise Portfolio with a clear, reusable management filter.</p>
+              </div>
+              <button class="management-view-reset" type="button" data-management-view="executive">Reset view</button>
             </div>
-            <div class="executive-view-tabs" role="tablist" aria-label="Executive overview views">
-              <button class="active" type="button" role="tab" aria-selected="true" data-executive-tab="summary">Management Summary</button>
-              <button type="button" role="tab" aria-selected="false" data-executive-tab="visuals">Visual Analytics</button>
+            <div class="management-view-grid">
+              <button class="management-view-card active" type="button" data-management-view="executive">
+                <span class="management-view-icon">▦</span>
+                <strong>Executive Overview</strong>
+                <small>All initiatives and headline portfolio position</small>
+                <em id="management-view-count-executive">0 records</em>
+              </button>
+              <button class="management-view-card" type="button" data-management-view="finance">
+                <span class="management-view-icon">RM</span>
+                <strong>Finance Review</strong>
+                <small>Approved-budget or finance-review gaps</small>
+                <em id="management-view-count-finance">0 records</em>
+              </button>
+              <button class="management-view-card" type="button" data-management-view="ict">
+                <span class="management-view-icon">ICT</span>
+                <strong>ICT Review</strong>
+                <small>System initiatives awaiting ICT classification</small>
+                <em id="management-view-count-ict">0 records</em>
+              </button>
+              <button class="management-view-card" type="button" data-management-view="watchlist">
+                <span class="management-view-icon">!</span>
+                <strong>Watchlist</strong>
+                <small>Under-review, at-risk, high or extreme exposure</small>
+                <em id="management-view-count-watchlist">0 records</em>
+              </button>
+              <button class="management-view-card" type="button" data-management-view="missing">
+                <span class="management-view-icon">?</span>
+                <strong>Missing Information</strong>
+                <small>Records with incomplete management information</small>
+                <em id="management-view-count-missing">0 records</em>
+              </button>
+              <button class="management-view-card" type="button" data-management-view="readiness">
+                <span class="management-view-icon">✓</span>
+                <strong>Department Readiness</strong>
+                <small>Initiatives below the 70% readiness threshold</small>
+                <em id="management-view-count-readiness">0 records</em>
+              </button>
             </div>
-          </div>
+          </section>
 
-          <div class="executive-kpi-grid" data-executive-section="summary">
+          <div class="executive-kpi-grid">
             <article class="executive-kpi-card featured">
               <div class="kpi-icon">▦</div>
               <span>Portfolio items</span>
@@ -358,15 +413,15 @@
             </article>
             <article class="executive-kpi-card">
               <div class="kpi-icon">RM</div>
-              <span id="admin-kpi-cost-label">Selected portfolio cost</span>
+              <span id="admin-kpi-cost-label">Portfolio cost basis</span>
               <strong id="admin-kpi-effective-cost">RM0</strong>
-              <small id="admin-kpi-effective-note">Year-specific cost basis</small>
+              <small id="admin-kpi-effective-note">Approved Budget values</small>
             </article>
             <article class="executive-kpi-card positive">
               <div class="kpi-icon">↓</div>
-              <span>Challenge reduction</span>
+              <span>Challenge movement</span>
               <strong id="admin-kpi-reduction">RM0</strong>
-              <small id="admin-kpi-reduction-note">Versus original estimate</small>
+              <small id="admin-kpi-reduction-note">Original estimate versus post-challenge cost</small>
             </article>
             <article class="executive-kpi-card priority">
               <div class="kpi-icon">★</div>
@@ -380,21 +435,21 @@
               <strong id="admin-kpi-risk">0</strong>
               <small>High, extreme or at-risk status</small>
             </article>
-            <article class="executive-kpi-card">
-              <div class="kpi-icon">HR</div>
-              <span>HR dependent</span>
-              <strong id="admin-kpi-hr">0</strong>
-              <small>People or change collaboration</small>
+            <article class="executive-kpi-card positive">
+              <div class="kpi-icon">RM</div>
+              <span>Post-challenge cost</span>
+              <strong id="admin-kpi-approved-budget">RM0</strong>
+              <small id="admin-kpi-approved-budget-note">Confirmed challenge-session position</small>
             </article>
             <article class="executive-kpi-card">
-              <div class="kpi-icon">ICT</div>
-              <span>ICT dependent</span>
-              <strong id="admin-kpi-ict">0</strong>
-              <small>System or ICT review required</small>
+              <div class="kpi-icon">%</div>
+              <span>Budget coverage</span>
+              <strong id="admin-kpi-approved-coverage">0%</strong>
+              <small id="admin-kpi-approved-coverage-note">Approved budget fields populated</small>
             </article>
           </div>
 
-          <div class="executive-story-grid" data-executive-section="summary">
+          <div class="executive-story-grid">
             <article class="executive-panel insight-panel">
               <div class="executive-panel-heading">
                 <div>
@@ -436,8 +491,8 @@
             </article>
           </div>
 
-          <div class="executive-dashboard-grid hidden" data-executive-section="visuals">
-            <article class="executive-panel chart-panel">
+          <div class="executive-dashboard-grid">
+            <article id="executive-budget-panel" class="executive-panel chart-panel">
               <div class="executive-panel-heading">
                 <div>
                   <span class="executive-section-code">BUDGET 01</span>
@@ -445,7 +500,7 @@
                   <p>Original estimate, confirmed post-challenge position and downstream budget fields.</p>
                 </div>
               </div>
-              <div class="executive-chart-shell large"><canvas id="admin-budget-journey-chart"></canvas></div>
+              <div class="executive-chart-shell large"><canvas id="admin-budget-journey-chart" role="img" tabindex="0" aria-label="Budget journey and challenge impact chart"></canvas></div>
               <div id="admin-budget-metrics" class="executive-metric-row"></div>
               <div id="admin-budget-footnote" class="executive-chart-note"></div>
             </article>
@@ -455,24 +510,31 @@
                 <div>
                   <span class="executive-section-code teal">READINESS 02</span>
                   <h3>Strategic Register Readiness</h3>
-                  <p>Derived from description, dated plan, cost certainty, priority, ICT classification, pillar and HOME31 fit.</p>
+                  <p>Derived from description, dated plan, confirmed Approved Budget, priority, ICT classification, pillar and HOME31 fit.</p>
                 </div>
               </div>
-              <div class="readiness-composite">
-                <div class="readiness-gauge-wrap">
-                  <canvas id="admin-readiness-gauge-chart"></canvas>
-                  <div class="readiness-gauge-label">
-                    <strong id="admin-readiness-gauge-value">0%</strong>
-                    <span>Strategic readiness</span>
+              <div class="readiness-composite readiness-composite-modern">
+                <div class="readiness-score-card">
+                  <span>Strategic readiness</span>
+                  <strong id="admin-readiness-gauge-value">0%</strong>
+                  <div class="readiness-score-track" role="progressbar" aria-label="Strategic readiness" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                    <i id="admin-readiness-progress"></i>
                   </div>
+                  <small id="admin-readiness-status">Readiness status will appear after data is loaded.</small>
                 </div>
-                <div id="admin-department-readiness-bars" class="department-readiness-bars"></div>
+                <div>
+                  <div class="readiness-list-heading">
+                    <strong>Department readiness</strong>
+                    <span>Select a department to open its records</span>
+                  </div>
+                  <div id="admin-department-readiness-bars" class="department-readiness-bars"></div>
+                </div>
               </div>
               <div id="admin-readiness-footnote" class="executive-chart-note"></div>
             </article>
           </div>
 
-          <div class="executive-dashboard-grid hidden" data-executive-section="visuals">
+          <div class="executive-dashboard-grid">
             <article class="executive-panel chart-panel">
               <div class="executive-panel-heading">
                 <div>
@@ -481,7 +543,7 @@
                   <p>Initiatives active in each quarter using action-plan dates, start date and target completion date.</p>
                 </div>
               </div>
-              <div class="executive-chart-shell"><canvas id="admin-delivery-load-chart"></canvas></div>
+              <div class="executive-chart-shell"><canvas id="admin-delivery-load-chart" role="img" tabindex="0" aria-label="Quarterly delivery load chart"></canvas></div>
               <div id="admin-delivery-footnote" class="executive-chart-note"></div>
             </article>
 
@@ -490,20 +552,20 @@
                 <div>
                   <span class="executive-section-code">DECISION 04</span>
                   <h3>Cost–Benefit–Complexity Matrix</h3>
-                  <p>Effective cost versus CBA ratio. Bubble size reflects delivery complexity; colour represents priority status.</p>
+                  <p>Approved budget versus CBA ratio. Bubble size reflects delivery complexity; colour represents priority status.</p>
                 </div>
               </div>
-              <div class="executive-chart-shell"><canvas id="admin-cost-benefit-chart"></canvas></div>
+              <div class="executive-chart-shell"><canvas id="admin-cost-benefit-chart" role="img" tabindex="0" aria-label="Cost benefit and complexity matrix"></canvas></div>
               <div id="admin-matrix-footnote" class="executive-chart-note"></div>
             </article>
           </div>
 
-          <article class="executive-panel comparison-panel" data-executive-section="summary">
+          <article class="executive-panel comparison-panel">
             <div class="executive-panel-heading">
               <div>
                 <span class="executive-section-code">COMPARISON SCOPE</span>
                 <h3>AMP2026 vs AMP2027 Live Management Comparison</h3>
-                <p>Both years are calculated from Supabase records using their respective management cost basis.</p>
+                <p>Both years are calculated from live Supabase records using the same Approved Budget basis.</p>
               </div>
               <span id="admin-comparison-source-status" class="executive-status-chip neutral">Live year records</span>
             </div>
@@ -511,19 +573,19 @@
             <div id="admin-comparison-notes" class="comparison-notes"></div>
           </article>
 
-          <article class="executive-panel chart-panel full-width-panel hidden" data-executive-section="visuals">
+          <article class="executive-panel chart-panel full-width-panel">
             <div class="executive-panel-heading">
               <div>
                 <span class="executive-section-code">COMPARISON 03</span>
                 <h3>Department Cost Concentration</h3>
-                <p>Live AMP2026 approved-budget concentration compared with AMP2027 effective post-challenge cost.</p>
+                <p>Live AMP2026 and AMP2027 approved-budget concentration by department.</p>
               </div>
             </div>
-            <div class="executive-chart-shell wide"><canvas id="admin-department-cost-chart"></canvas></div>
+            <div class="executive-chart-shell wide"><canvas id="admin-department-cost-chart" role="img" tabindex="0" aria-label="Department cost concentration chart"></canvas></div>
             <div id="admin-cost-concentration-footnote" class="executive-chart-note"></div>
           </article>
 
-          <div class="executive-dashboard-grid hidden" data-executive-section="visuals">
+          <div class="executive-dashboard-grid">
             <article class="executive-panel chart-panel">
               <div class="executive-panel-heading">
                 <div>
@@ -535,7 +597,7 @@
                   <button type="button" data-pillar-metric="cost">Cost RM</button>
                 </div>
               </div>
-              <div class="executive-chart-shell"><canvas id="admin-pillar-chart"></canvas></div>
+              <div class="executive-chart-shell"><canvas id="admin-pillar-chart" role="img" tabindex="0" aria-label="Initiatives by strategic pillar chart"></canvas></div>
             </article>
 
             <article class="executive-panel chart-panel">
@@ -546,11 +608,11 @@
                   <p>Derived from initiative category, priority status, system dependency and completeness.</p>
                 </div>
               </div>
-              <div class="executive-chart-shell"><canvas id="admin-home31-fit-chart"></canvas></div>
+              <div class="executive-chart-shell"><canvas id="admin-home31-fit-chart" role="img" tabindex="0" aria-label="HOME31 fit classification chart"></canvas></div>
             </article>
           </div>
 
-          <div class="executive-decision-grid" data-executive-section="summary">
+          <div class="executive-decision-grid">
             <article class="executive-panel decision-panel">
               <div class="executive-panel-heading">
                 <div><span class="executive-section-code">DECISIONS</span><h3>Executive Decisions Required</h3></div>
@@ -573,7 +635,7 @@
             </article>
           </div>
 
-          <div class="executive-assurance-strip" data-executive-section="summary">
+          <div class="executive-assurance-strip">
             <article><strong id="admin-assurance-ownership">0%</strong><span>Ownership fields complete</span></article>
             <article><strong id="admin-assurance-evidence">0%</strong><span>Average evidence completeness</span></article>
             <article><strong id="admin-assurance-budget">0%</strong><span>Approved-budget coverage</span></article>
@@ -592,6 +654,8 @@
             <div class="admin-command-actions">
               <button id="admin-portfolio-refresh" class="admin-command-button ghost" type="button">↻ Refresh</button>
               <button id="admin-export-portfolio" class="admin-command-button ghost" type="button">⇩ Export CSV</button>
+              <button id="admin-download-template" class="admin-command-button ghost" type="button">⇩ Excel Template</button>
+              <button id="admin-import-excel" class="admin-command-button ghost" type="button">⇧ Import Excel</button>
               <button class="admin-command-button gold" type="button" data-open-initiative>+ Key In Initiative</button>
             </div>
           </div>
@@ -608,9 +672,9 @@
               <small>After active filters</small>
             </article>
             <article class="admin-command-kpi">
-              <span>Effective cost</span>
+              <span>Approved budget</span>
               <strong id="portfolio-kpi-cost">RM0</strong>
-              <small>Post-challenge cost basis</small>
+              <small>Confirmed portfolio cost basis</small>
             </article>
             <article class="admin-command-kpi">
               <span>Approved coverage</span>
@@ -657,6 +721,12 @@
                   <input id="admin-search" type="search" placeholder="Initiative, owner or department">
                 </label>
                 <label>
+                  <span>Department</span>
+                  <select id="admin-department-filter">
+                    <option value="">All departments</option>
+                  </select>
+                </label>
+                <label>
                   <span>Status</span>
                   <select id="admin-status-filter">
                     <option value="">All status</option>
@@ -673,6 +743,9 @@
                     <option value="">All risk</option><option>Low</option><option>Medium</option><option>High</option><option>Extreme</option>
                   </select>
                 </label>
+              </div>
+              <div id="portfolio-active-filters" class="portfolio-active-filters" aria-live="polite">
+                <span class="portfolio-filter-empty">No active filters. Showing the selected portfolio year.</span>
               </div>
             </article>
           </div>
@@ -691,11 +764,70 @@
               <table id="admin-portfolio-table" class="admin-command-table">
                 <thead>
                   <tr>
-                    <th>Year</th><th>Initiative</th><th>Owner</th><th>Department</th><th>Category</th><th>System</th><th>Priority Status</th><th>Pillar</th><th>Status</th><th>Risk</th><th>Approved Budget</th><th>Readiness</th><th>Progress</th><th>Action</th>
+                    <th>Year</th><th>Initiative</th><th>Project Owner Name</th><th>Department</th><th>Category</th><th>System</th><th>Priority Status</th><th>Pillar</th><th>Status</th><th>Risk</th><th>Approved Budget</th><th>Readiness</th><th>Progress</th><th>Action</th>
                   </tr>
                 </thead>
                 <tbody></tbody>
               </table>
+            </div>
+          </article>
+
+          <article id="portfolio-continuity-register" class="admin-command-panel continuity-register-panel">
+            <div class="continuity-heading-row">
+              <div>
+                <span class="admin-command-section-code">CONTINUITY 04</span>
+                <h3>Carry-Forward, Repeat and Evolution Register</h3>
+                <p>AMP2026 and AMP2027 initiatives are matched using source references, normalised titles, department, strategic pillar and description similarity. Approved Budget is the only cost-movement basis.</p>
+              </div>
+              <div class="continuity-controls" aria-label="Continuity register filters">
+                <label>
+                  <span class="sr-only">Continuity type</span>
+                  <select id="continuity-type-filter">
+                    <option value="">All continuity types</option>
+                    <option>Recurring annual activity</option>
+                    <option>Direct carry-forward</option>
+                    <option>Expanded continuation</option>
+                    <option>Evolved / reframed</option>
+                    <option>New / unmatched</option>
+                    <option>No identified continuation</option>
+                  </select>
+                </label>
+                <label>
+                  <span class="sr-only">Search continuity register</span>
+                  <input id="continuity-search" type="search" placeholder="Search theme or initiative">
+                </label>
+                <button id="continuity-clear-filters" class="admin-command-text-button" type="button">Clear</button>
+              </div>
+            </div>
+
+            <div class="continuity-kpi-grid">
+              <article><strong id="continuity-kpi-identified">0</strong><span>AMP2027 initiatives with identified continuity</span></article>
+              <article><strong id="continuity-kpi-new">0</strong><span>AMP2027 initiatives appearing new or unmatched</span></article>
+              <article><strong id="continuity-kpi-carried">0</strong><span>AMP2026 references carried or evolved</span></article>
+              <article><strong id="continuity-kpi-ended">0</strong><span>AMP2026 items without identified 2027 continuation</span></article>
+            </div>
+
+            <div class="continuity-method-note" role="note">
+              <strong>Management review required.</strong> Exact source-reference or title matches receive the highest confidence. Suggested similarity matches remain visible with a confidence percentage and should be confirmed by the portfolio owner.
+            </div>
+
+            <div class="admin-command-table-wrap continuity-table-wrap">
+              <table id="portfolio-continuity-table" class="admin-command-table continuity-table">
+                <thead>
+                  <tr>
+                    <th>Theme / Treatment</th>
+                    <th>AMP2026</th>
+                    <th>AMP2027</th>
+                    <th>Approved Budget Movement</th>
+                    <th>Continuity Type</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+            <div class="continuity-footer">
+              <span id="continuity-table-count">0 continuity rows</span>
+              <span>Department and CONTROL 02 filters also apply to this register.</span>
             </div>
           </article>
 
@@ -802,7 +934,7 @@
               </div>
 
               <div class="user-chart-grid">
-                <div class="admin-small-chart"><canvas id="admin-user-role-chart"></canvas></div>
+                <div class="admin-small-chart"><canvas id="admin-user-role-chart" role="img" tabindex="0" aria-label="User role distribution chart"></canvas></div>
                 <div id="admin-user-governance-list" class="admin-command-list"></div>
               </div>
             </article>
@@ -829,11 +961,6 @@
                   <option value="">All roles</option>
                   <option value="super_admin">Super Admin</option>
                   <option value="normal_user">Normal User</option>
-                  <option value="department_admin">Department Admin</option>
-                  <option value="hr_admin">HR Admin</option>
-                  <option value="finance_admin">Finance Admin</option>
-                  <option value="auditor">Auditor</option>
-                  <option value="viewer">Viewer</option>
                 </select>
               </label>
               <label>
@@ -913,7 +1040,7 @@
                   <p>Current distribution of Low, Medium, High and Extreme risk ratings.</p>
                 </div>
               </div>
-              <div class="admin-command-chart-shell"><canvas id="admin-exception-risk-chart"></canvas></div>
+              <div class="admin-command-chart-shell"><canvas id="admin-exception-risk-chart" role="img" tabindex="0" aria-label="Portfolio risk exposure chart"></canvas></div>
             </article>
 
             <article class="admin-command-panel chart-panel">
@@ -924,7 +1051,7 @@
                   <p>Number of initiatives requiring follow-up across key governance dimensions.</p>
                 </div>
               </div>
-              <div class="admin-command-chart-shell"><canvas id="admin-exception-health-chart"></canvas></div>
+              <div class="admin-command-chart-shell"><canvas id="admin-exception-health-chart" role="img" tabindex="0" aria-label="Exception concentration chart"></canvas></div>
             </article>
           </div>
 
@@ -996,7 +1123,7 @@
               <p>Translate the working prototype into a secure, integrated and governable enterprise platform roadmap.</p>
             </div>
             <div class="admin-command-actions">
-              <span class="admin-command-chip good">V7.4 foundation</span>
+              <span class="admin-command-chip good">V7.9.0 foundation</span>
             </div>
           </div>
 
@@ -1127,9 +1254,9 @@
               <ul><li>Version control</li><li>Document categories</li><li>Retention rules</li><li>Access restrictions</li></ul>
             </article>
             <article class="system-module-card">
-              <span class="system-module-status planned">PLANNED</span>
+              <span class="system-module-status next">ACTIVE FOUNDATION</span>
               <h3>Audit Trail</h3>
-              <p>Immutable record of changes, approval decisions and privileged administration.</p>
+              <p>Database audit records for initiative changes and privileged profile administration.</p>
               <ul><li>Old and new values</li><li>Actor and timestamp</li><li>Decision history</li><li>Exportable evidence</li></ul>
             </article>
             <article class="system-module-card">
@@ -1171,7 +1298,7 @@
           </article>
 
           <div class="admin-command-assurance-strip">
-            <article><strong>V7.4</strong><span>Unified admin experience</span></article>
+            <article><strong>V7.9.0</strong><span>Protected form & Excel import</span></article>
             <article><strong>Modular</strong><span>Expandable architecture</span></article>
             <article><strong>RBAC</strong><span>Controlled role model</span></article>
             <article><strong>RLS</strong><span>Database security</span></article>
@@ -1182,15 +1309,40 @@
     </main>
   </div>
 
-  <div id="initiative-modal" class="modal hidden">
+  <div id="initiative-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="initiative-modal-title" aria-describedby="initiative-modal-description" aria-hidden="true">
     <div class="modal-card comprehensive-modal">
       <div class="modal-heading">
         <div>
           <span class="section-label">Enterprise initiative record</span>
           <h2 id="initiative-modal-title">Create Initiative</h2>
-          <p class="muted">HOME31 management form aligned with the AMP Excel fields, ownership controls, HR impact and evidence requirements.</p>
+          <p id="initiative-modal-description" class="muted">HOME31 management form aligned with the AMP Excel fields, ownership controls, HR impact and evidence requirements.</p>
         </div>
-        <button id="close-initiative-modal" class="icon-button" type="button">×</button>
+        <button id="close-initiative-modal" class="icon-button" type="button" aria-label="Close initiative form">×</button>
+      </div>
+
+      <div class="initiative-draft-bar" role="status" aria-live="polite">
+        <div class="initiative-draft-state">
+          <span class="draft-shield" aria-hidden="true">✓</span>
+          <div>
+            <strong>Draft protection is on</strong>
+            <span id="initiative-draft-status">Changes will be saved automatically on this device.</span>
+          </div>
+        </div>
+        <div class="initiative-draft-actions">
+          <button id="initiative-save-draft" class="button light small" type="button">Save draft now</button>
+          <button id="initiative-clear-draft" class="text-button hidden" type="button">Discard saved draft</button>
+        </div>
+      </div>
+
+      <div id="initiative-draft-recovery" class="initiative-draft-recovery hidden">
+        <div>
+          <strong>Unfinished draft found</strong>
+          <span id="initiative-draft-recovery-copy">Restore your previous work or discard it and continue with the current record.</span>
+        </div>
+        <div>
+          <button id="initiative-restore-draft" class="button secondary small" type="button">Restore draft</button>
+          <button id="initiative-discard-recovery" class="button light small" type="button">Discard</button>
+        </div>
       </div>
 
       <div class="initiative-stepper seven-steps" aria-label="Initiative form progress">
@@ -1223,8 +1375,9 @@
 
           <div class="form-grid">
             <label id="initiative-owner-field" class="field full hidden">
-              <span>Record owner / submit on behalf of</span>
+              <span>Record account / submitter</span>
               <select id="initiative-created-by"></select>
+              <small>This controls which user account can access the record. It is separate from Project Owner Name.</small>
             </label>
 
             <label class="field">
@@ -1289,9 +1442,9 @@
             </label>
 
             <label class="field">
-              <span>Accountable owner *</span>
-              <input id="initiative-owner" required>
-              <small>Single person accountable for the outcome and management reporting.</small>
+              <span>Project owner name *</span>
+              <input id="initiative-owner" autocomplete="name" placeholder="Enter the full name of the project owner" required>
+              <small>Named person accountable for the initiative outcome, decisions and management reporting.</small>
             </label>
 
             <label class="field">
@@ -1344,6 +1497,21 @@
             <label class="field full">
               <span>HOME31 strategic pillar *</span>
               <select id="initiative-pillar" required></select>
+            </label>
+
+            <label class="field full">
+              <span>HOME31 fit decision</span>
+              <select id="initiative-home31-fit-override">
+                <option value="">Derived automatically</option>
+                <option>Core Initiative</option>
+                <option>Enabler</option>
+                <option>Supporting Activity</option>
+                <option>BAU · Supporting Enhancement</option>
+                <option>Duplicate / Consolidate</option>
+                <option>Policy Review</option>
+                <option>Needs Validation</option>
+              </select>
+              <small>Use an override only when management has formally determined the classification.</small>
             </label>
 
             <label class="field">
@@ -1485,12 +1653,12 @@
           <div class="form-grid finance-grid">
             <label class="field">
               <span>Initial estimated cost (RM)</span>
-              <input id="initiative-estimated-cost" type="number" min="0" step="0.01" value="0">
+              <input id="initiative-estimated-cost" type="number" min="0" step="0.01" inputmode="decimal" placeholder="Leave blank until assessed">
             </label>
 
             <label class="field">
               <span>Estimated cost post challenge (RM)</span>
-              <input id="initiative-estimated-cost-post-challenge" type="number" min="0" step="0.01" value="0">
+              <input id="initiative-estimated-cost-post-challenge" type="number" min="0" step="0.01" inputmode="decimal" placeholder="Leave blank until confirmed">
             </label>
 
             <label class="field">
@@ -1806,8 +1974,9 @@
 
         <div class="modal-actions form-navigation">
           <button id="initiative-previous-step" class="button light hidden" type="button">Previous</button>
+          <span id="initiative-current-step-label" class="initiative-current-step">Step 1 of 7</span>
           <div class="navigation-spacer"></div>
-          <button id="cancel-initiative-modal" class="button light" type="button">Cancel</button>
+          <button id="cancel-initiative-modal" class="button light" type="button">Save Draft & Close</button>
           <button id="initiative-next-step" class="button secondary" type="button">Next</button>
           <button id="save-initiative-button" class="button gold hidden" type="submit">Save Initiative</button>
         </div>
@@ -1815,9 +1984,95 @@
     </div>
   </div>
 
+
+  <div id="excel-import-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="excel-import-title" aria-describedby="excel-import-description" aria-hidden="true">
+    <div class="modal-card excel-import-modal-card">
+      <div class="modal-heading">
+        <div>
+          <span class="section-label">Admin bulk upload</span>
+          <h2 id="excel-import-title">Import initiatives from Excel</h2>
+          <p id="excel-import-description" class="muted">Upload the official HOME31 workbook or an AMP register, review mapped rows and import only records that pass validation.</p>
+        </div>
+        <button id="close-excel-import" class="icon-button" type="button" aria-label="Close Excel import">×</button>
+      </div>
+
+      <div class="excel-import-guidance">
+        <div><strong>1. Download template</strong><span>Download the official workbook with instructions, dropdown lists and the exact HOME31 import headings.</span></div>
+        <div><strong>2. Select workbook</strong><span>XLSX, XLS or CSV. The first worksheet will be read.</span></div>
+        <div><strong>3. Review and import</strong><span>Invalid rows are never uploaded.</span></div>
+      </div>
+
+      <div class="excel-import-control-grid">
+        <label class="field full">
+          <span>Excel or CSV file *</span>
+          <input id="excel-import-file" type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv">
+          <small>The workbook is parsed in your browser. Only validated rows are sent to Supabase when you confirm import.</small>
+        </label>
+
+        <label class="field">
+          <span>Record account / submitter *</span>
+          <select id="excel-import-created-by"></select>
+          <small>Controls which user account can access imported records.</small>
+        </label>
+
+        <label class="field">
+          <span>Fallback project owner name *</span>
+          <input id="excel-import-owner" placeholder="Used only when the workbook has no project owner">
+        </label>
+
+        <label class="field">
+          <span>Fallback strategic pillar *</span>
+          <select id="excel-import-pillar"></select>
+        </label>
+
+        <label class="field">
+          <span>Fallback implementation year *</span>
+          <input id="excel-import-year" type="number" min="2026" max="2100" value="2027">
+        </label>
+
+        <label class="excel-import-checkbox">
+          <input id="excel-import-skip-duplicates" type="checkbox" checked>
+          <span><strong>Skip likely duplicates</strong><small>Matches by source reference and year, or initiative name + department + year.</small></span>
+        </label>
+      </div>
+
+      <div class="excel-import-toolbar">
+        <button id="excel-download-template" class="button light" type="button">Download Official Template</button>
+        <button id="excel-validate-file" class="button secondary" type="button">Review File</button>
+        <span id="excel-import-file-name" class="muted">No file selected.</span>
+      </div>
+
+      <div id="excel-import-summary" class="excel-import-summary hidden" aria-live="polite">
+        <article><span>Total rows</span><strong id="excel-summary-total">0</strong></article>
+        <article class="good"><span>Ready to import</span><strong id="excel-summary-valid">0</strong></article>
+        <article class="warning"><span>Warnings</span><strong id="excel-summary-warning">0</strong></article>
+        <article class="danger"><span>Blocked rows</span><strong id="excel-summary-error">0</strong></article>
+      </div>
+
+      <div id="excel-import-preview-wrap" class="excel-import-preview-wrap hidden">
+        <div class="excel-import-preview-heading">
+          <div><strong>Import preview</strong><span>Showing up to the first 25 rows.</span></div>
+          <span id="excel-import-preview-status" class="admin-command-chip neutral">Awaiting review</span>
+        </div>
+        <div class="table-wrap">
+          <table id="excel-import-preview-table" class="excel-import-preview-table">
+            <thead><tr><th>Row</th><th>Status</th><th>Year</th><th>Initiative</th><th>Project Owner</th><th>Department</th><th>Approved Budget</th><th>Notes</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="modal-actions excel-import-actions">
+        <button id="cancel-excel-import" class="button light" type="button">Cancel</button>
+        <button id="confirm-excel-import" class="button gold" type="button" disabled>Import Valid Rows</button>
+      </div>
+    </div>
+  </div>
+
   <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
 
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
-  <script type="module" src="app.js?v=7.9.4.1"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+    <script type="module" src="app.js?v=7.9.4"></script>
 </body>
 </html>

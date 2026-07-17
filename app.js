@@ -1,4 +1,4 @@
-import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
+import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.8/+esm";
 
 const SUPABASE_URL = "https://ueuvavxdvclnfffujafz.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_AhkBD0Tcki8RECDar7_vkw_fsV_wxX0";
@@ -39,18 +39,86 @@ const EXECUTIVE_COLORS = {
   slate: "#7892a6"
 };
 
+const EXECUTIVE_SERIES_COLORS = {
+  neutral: "#7f99af",
+  gold: "#d1ad63",
+  teal: "#57999b",
+  green: "#6ca69b",
+  red: "#d26066",
+  blue: "#78a8c4",
+  slate: "#7892a6"
+};
+
+const EXECUTIVE_PANEL_STATE_KEY = "home31-executive-panel-state-v1";
+
+const QUADRANT_GUIDE_PLUGIN = {
+  id: "quadrantGuide",
+  beforeDatasetsDraw(chart, _args, options = {}) {
+    const { ctx, chartArea, scales } = chart;
+    if (!chartArea || !scales?.x || !scales?.y) return;
+    const { left, right, top, bottom } = chartArea;
+    const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+    const xSplit = clamp(scales.x.getPixelForValue(options.xThreshold || 0), left, right);
+    const ySplit = clamp(scales.y.getPixelForValue(options.yThreshold || 1), top, bottom);
+
+    ctx.save();
+    ctx.fillStyle = "rgba(87,153,155,.055)";
+    ctx.fillRect(left, top, xSplit - left, ySplit - top);
+    ctx.fillStyle = "rgba(209,173,99,.055)";
+    ctx.fillRect(xSplit, top, right - xSplit, ySplit - top);
+    ctx.fillStyle = "rgba(127,153,175,.04)";
+    ctx.fillRect(left, ySplit, xSplit - left, bottom - ySplit);
+    ctx.fillStyle = "rgba(210,96,102,.045)";
+    ctx.fillRect(xSplit, ySplit, right - xSplit, bottom - ySplit);
+
+    ctx.strokeStyle = "rgba(180,198,210,.34)";
+    ctx.setLineDash([5, 5]);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(xSplit, top);
+    ctx.lineTo(xSplit, bottom);
+    ctx.moveTo(left, ySplit);
+    ctx.lineTo(right, ySplit);
+    ctx.stroke();
+    ctx.restore();
+  },
+  afterDraw(chart) {
+    const { ctx, chartArea } = chart;
+    if (!chartArea) return;
+    const { left, right, top, bottom } = chartArea;
+    ctx.save();
+    ctx.fillStyle = "rgba(214,226,234,.72)";
+    ctx.font = "600 10px IBM Plex Sans, sans-serif";
+    ctx.fillText("HIGH BENEFIT · LOWER COST", left + 8, top + 16);
+    const highCost = "HIGH BENEFIT · HIGHER COST";
+    ctx.fillText(highCost, right - ctx.measureText(highCost).width - 8, top + 16);
+    ctx.fillStyle = "rgba(169,189,204,.62)";
+    ctx.fillText("LOWER BENEFIT · LOWER COST", left + 8, bottom - 8);
+    const review = "LOWER BENEFIT · HIGHER COST";
+    ctx.fillText(review, right - ctx.measureText(review).width - 8, bottom - 8);
+    ctx.restore();
+  }
+};
+
 let pillarMetric = "count";
 let selectedAdminYear = DEFAULT_ADMIN_YEAR;
 
-const DISPLAY_SETTINGS_KEY = "home31-display-settings-v1";
-const EXECUTIVE_VIEW_KEY = "home31-executive-view-v1";
-const ACTIVE_MODULE_KEY = "home31-active-module-v1";
+const DISPLAY_SETTINGS_KEY = "home31-display-settings-v2";
 const DISPLAY_MODES = ["standard", "comfortable", "large"];
-let currentDisplaySize = "comfortable";
+const SIDEBAR_STATE_KEY = "home31-sidebar-collapsed-v1";
+const MOBILE_NAVIGATION_QUERY = "(max-width: 850px)";
+let currentDisplaySize = "standard";
 let highContrastEnabled = false;
 let tableEnhancementScheduled = false;
 let responsiveTableObserver = null;
+let sidebarMediaQuery = null;
+let sidebarCollapsed = false;
+let adminQuickFilter = "";
 
+const CONTINUITY_STOP_WORDS = new Set([
+  "a","an","and","annual","amp","for","from","in","of","on","project","programme",
+  "the","to","with","implementation","initiative","initiatives","phase","year"
+]);
 
 let currentUser = null;
 let currentProfile = null;
@@ -59,14 +127,28 @@ let adminProjects = [];
 let adminProfiles = [];
 let charts = {};
 let currentInitiativeFormStep = 1;
-let activeExecutiveView = readLocalPreference(EXECUTIVE_VIEW_KEY, "summary");
+let lastModalTrigger = null;
 let authRouteTimer = null;
 let authRouteRevision = 0;
+
+const INITIATIVE_DRAFT_PREFIX = "home31-initiative-draft-v1";
+const INITIATIVE_DRAFT_DELAY = 800;
+let initiativeFormInitialising = false;
+let initiativeFormDirty = false;
+let initiativeDraftTimer = null;
+let activeInitiativeDraftKey = null;
+let pendingInitiativeDraft = null;
+
+let excelImportRawRows = [];
+let excelImportPreparedRows = [];
+let excelImportLastTrigger = null;
 
 document.addEventListener("DOMContentLoaded", initialise);
 
 async function initialise() {
   initialiseDisplaySettings();
+  initialiseNavigation();
+  initialiseExecutiveInteractions();
   bindEvents();
   populatePillars();
   handleResetLink();
@@ -77,46 +159,169 @@ async function initialise() {
     return;
   }
 
-  // Keep this callback synchronous. Awaiting database calls directly inside
-  // onAuthStateChange can stall authentication and first-login password flows.
-  supabase.auth.onAuthStateChange((event, session) => {
-    const sameOpenSession =
-      event === "TOKEN_REFRESHED" &&
-      session?.user?.id &&
-      currentUser?.id === session.user.id &&
-      !$("#platform").classList.contains("hidden");
-
-    if (sameOpenSession) {
-      currentUser = session.user;
-      return;
-    }
-
+  // Keep the auth callback synchronous. Supabase can deadlock when another
+  // Supabase API call is awaited directly inside onAuthStateChange.
+  supabase.auth.onAuthStateChange((_event, session) => {
     scheduleAuthRoute(session);
   });
 
   const { data, error } = await supabase.auth.getSession();
   if (error) {
-    showAuth();
     showToast(error.message || "Unable to restore your session.", true);
+    showAuth();
     return;
   }
   scheduleAuthRoute(data.session);
 }
 
-function scheduleAuthRoute(session) {
-  currentUser = session?.user ?? null;
-  const revision = ++authRouteRevision;
-  if (authRouteTimer) window.clearTimeout(authRouteTimer);
-  authRouteTimer = window.setTimeout(async () => {
-    if (revision !== authRouteRevision) return;
-    try {
-      await routeSession();
-    } catch (error) {
-      console.error("HOME31 session routing failed", error);
-      showAuth();
-      showToast(error?.message || "Unable to open HOME31. Please sign in again.", true);
+function initialiseNavigation() {
+  sidebarMediaQuery = window.matchMedia(MOBILE_NAVIGATION_QUERY);
+
+  try {
+    sidebarCollapsed = localStorage.getItem(SIDEBAR_STATE_KEY) === "true";
+  } catch (_error) {
+    sidebarCollapsed = false;
+  }
+
+  if (typeof sidebarMediaQuery.addEventListener === "function") {
+    sidebarMediaQuery.addEventListener("change", handleSidebarBreakpointChange);
+  } else if (typeof sidebarMediaQuery.addListener === "function") {
+    sidebarMediaQuery.addListener(handleSidebarBreakpointChange);
+  }
+
+  applySidebarState();
+}
+
+function isMobileNavigation() {
+  return sidebarMediaQuery?.matches ?? window.innerWidth <= 850;
+}
+
+function applySidebarState() {
+  const mobile = isMobileNavigation();
+  document.body.classList.toggle("sidebar-collapsed", !mobile && sidebarCollapsed);
+
+  if (mobile) {
+    closeSidebarDrawer();
+  } else {
+    document.body.classList.remove("sidebar-drawer-open", "navigation-scroll-locked");
+    $("#sidebar")?.classList.remove("open");
+    $("#sidebar-overlay")?.classList.remove("visible");
+    if ($("#sidebar")) $("#sidebar").inert = false;
+  }
+
+  updateSidebarControls();
+  window.setTimeout(() => Object.values(charts).forEach(chart => chart?.resize?.()), 220);
+}
+
+function toggleNavigation() {
+  if (isMobileNavigation()) {
+    if (document.body.classList.contains("sidebar-drawer-open")) {
+      closeSidebarDrawer({ restoreFocus: true });
+    } else {
+      openSidebarDrawer();
     }
-  }, 0);
+    return;
+  }
+
+  sidebarCollapsed = !sidebarCollapsed;
+  try {
+    localStorage.setItem(SIDEBAR_STATE_KEY, String(sidebarCollapsed));
+  } catch (_error) {
+    // The interface remains usable when browser storage is unavailable.
+  }
+  applySidebarState();
+}
+
+function openSidebarDrawer() {
+  if (!isMobileNavigation()) return;
+
+  const sidebar = $("#sidebar");
+  document.body.classList.add("sidebar-drawer-open", "navigation-scroll-locked");
+  sidebar?.classList.add("open");
+  $("#sidebar-overlay")?.classList.add("visible");
+  if (sidebar) sidebar.inert = false;
+  updateSidebarControls();
+
+  window.requestAnimationFrame(() => $("#sidebar-collapse-button")?.focus());
+}
+
+function closeSidebarDrawer({ restoreFocus = false } = {}) {
+  const sidebar = $("#sidebar");
+  const wasOpen = document.body.classList.contains("sidebar-drawer-open");
+
+  document.body.classList.remove("sidebar-drawer-open", "navigation-scroll-locked");
+  sidebar?.classList.remove("open");
+  $("#sidebar-overlay")?.classList.remove("visible");
+
+  if (sidebar) sidebar.inert = isMobileNavigation();
+  updateSidebarControls();
+
+  if (restoreFocus && wasOpen) $("#menu-toggle")?.focus();
+}
+
+function updateSidebarControls() {
+  const mobile = isMobileNavigation();
+  const drawerOpen = document.body.classList.contains("sidebar-drawer-open");
+  const expanded = mobile ? drawerOpen : !sidebarCollapsed;
+  const menuButton = $("#menu-toggle");
+  const sidebarButton = $("#sidebar-collapse-button");
+  const sidebarIcon = sidebarButton?.querySelector("span");
+
+  menuButton?.setAttribute("aria-expanded", String(expanded));
+  menuButton?.setAttribute("aria-label", mobile
+    ? (drawerOpen ? "Close navigation menu" : "Open navigation menu")
+    : (sidebarCollapsed ? "Expand navigation sidebar" : "Collapse navigation sidebar"));
+  if (menuButton) menuButton.title = menuButton.getAttribute("aria-label");
+
+  sidebarButton?.setAttribute("aria-expanded", String(expanded));
+  sidebarButton?.setAttribute("aria-label", mobile
+    ? "Close navigation menu"
+    : (sidebarCollapsed ? "Expand navigation sidebar" : "Collapse navigation sidebar"));
+  if (sidebarButton) sidebarButton.title = sidebarButton.getAttribute("aria-label");
+  if (sidebarIcon) sidebarIcon.textContent = mobile ? "×" : (sidebarCollapsed ? "›" : "‹");
+}
+
+function handleSidebarBreakpointChange() {
+  applySidebarState();
+}
+
+function handleNavigationKeydown(event) {
+  if (event.altKey && event.shiftKey && event.key.toLowerCase() === "m") {
+    event.preventDefault();
+    toggleNavigation();
+    return;
+  }
+
+  if (event.key === "Escape" && document.body.classList.contains("sidebar-drawer-open")) {
+    event.preventDefault();
+    closeSidebarDrawer({ restoreFocus: true });
+    return;
+  }
+
+  if (event.key === "Tab" && document.body.classList.contains("sidebar-drawer-open")) {
+    trapSidebarDrawerFocus(event);
+  }
+}
+
+function trapSidebarDrawerFocus(event) {
+  const sidebar = $("#sidebar");
+  if (!sidebar) return;
+
+  const focusable = [...sidebar.querySelectorAll(
+    'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+  )].filter(element => !element.closest(".hidden") && element.getClientRects().length > 0);
+
+  if (!focusable.length) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
 }
 
 function bindEvents() {
@@ -130,16 +335,31 @@ function bindEvents() {
   $("#force-logout-button").addEventListener("click", logout);
 
   $("#logout-button").addEventListener("click", logout);
-  $("#menu-toggle").addEventListener("click", () => $("#sidebar").classList.toggle("open"));
+  $("#menu-toggle").addEventListener("click", toggleNavigation);
+  $("#sidebar-collapse-button").addEventListener("click", toggleNavigation);
+  $("#sidebar-overlay").addEventListener("click", () => closeSidebarDrawer({ restoreFocus: true }));
+  document.addEventListener("keydown", handleNavigationKeydown);
   $("#top-account-button").addEventListener("click", () => showModule("account"));
   $("#top-new-initiative").addEventListener("click", () => openInitiativeModal());
   $("#admin-year-select").addEventListener("change", handleAdminYearChange);
 
   $$(".nav-item").forEach(button =>
-    button.addEventListener("click", () => showModule(button.dataset.module))
+    button.addEventListener("click", () => {
+      if (button.dataset.module === "admin-portfolio") {
+        adminQuickFilter = "";
+        resetAdminFilterControls();
+      }
+      showModule(button.dataset.module);
+    })
   );
   $$("[data-jump]").forEach(button =>
-    button.addEventListener("click", () => showModule(button.dataset.jump))
+    button.addEventListener("click", () => {
+      if (button.dataset.jump === "admin-portfolio") {
+        adminQuickFilter = "";
+        resetAdminFilterControls();
+      }
+      showModule(button.dataset.jump);
+    })
   );
   $$("[data-open-initiative]").forEach(button =>
     button.addEventListener("click", () => openInitiativeModal())
@@ -156,11 +376,24 @@ function bindEvents() {
     renderUserInitiatives();
   });
 
-  $("#admin-search").addEventListener("input", renderAdminPortfolio);
-  ["#admin-status-filter", "#admin-pillar-filter", "#admin-risk-filter"].forEach(selector =>
-    $(selector).addEventListener("change", renderAdminPortfolio)
+  $("#admin-search").addEventListener("input", () => {
+    adminQuickFilter = "";
+    renderAdminPortfolio();
+  });
+  ["#admin-department-filter", "#admin-status-filter", "#admin-pillar-filter", "#admin-risk-filter"].forEach(selector =>
+    $(selector).addEventListener("change", () => {
+      adminQuickFilter = "";
+      renderAdminPortfolio();
+    })
   );
   $("#admin-clear-filters").addEventListener("click", clearAdminFilters);
+  $("#continuity-type-filter").addEventListener("change", renderContinuityRegister);
+  $("#continuity-search").addEventListener("input", renderContinuityRegister);
+  $("#continuity-clear-filters").addEventListener("click", () => {
+    $("#continuity-type-filter").value = "";
+    $("#continuity-search").value = "";
+    renderContinuityRegister();
+  });
 
   $("#admin-create-user-form").addEventListener("submit", createUserAsAdmin);
   $("#generate-password-button").addEventListener("click", generateTemporaryPassword);
@@ -168,6 +401,11 @@ function bindEvents() {
   $("#admin-overview-refresh").addEventListener("click", loadAdminData);
   $("#admin-portfolio-refresh").addEventListener("click", loadAdminData);
   $("#admin-export-portfolio").addEventListener("click", exportAdminPortfolioCsv);
+  $("#admin-download-template").addEventListener("click", downloadExcelImportTemplate);
+  $("#admin-import-excel").addEventListener("click", openExcelImportModal);
+  $$('[data-management-view]').forEach(button =>
+    button.addEventListener('click', () => applyManagementView(button.dataset.managementView))
+  );
   $("#admin-user-search").addEventListener("input", renderAdminUsers);
   $("#admin-user-role-filter").addEventListener("change", renderAdminUsers);
   $("#admin-user-password-filter").addEventListener("change", renderAdminUsers);
@@ -180,13 +418,36 @@ function bindEvents() {
     })
   );
 
-  $$('[data-executive-tab]').forEach(button =>
-    button.addEventListener("click", () => applyExecutiveView(button.dataset.executiveTab))
-  );
-
   $("#initiative-form").addEventListener("submit", saveInitiative);
-  $("#close-initiative-modal").addEventListener("click", closeInitiativeModal);
-  $("#cancel-initiative-modal").addEventListener("click", closeInitiativeModal);
+  $("#close-initiative-modal").addEventListener("click", () => requestCloseInitiativeModal());
+  $("#cancel-initiative-modal").addEventListener("click", saveDraftAndCloseInitiativeModal);
+  $("#initiative-save-draft").addEventListener("click", () => saveInitiativeDraft({ announce: true }));
+  $("#initiative-clear-draft").addEventListener("click", discardActiveInitiativeDraft);
+  $("#initiative-restore-draft").addEventListener("click", restorePendingInitiativeDraft);
+  $("#initiative-discard-recovery").addEventListener("click", discardPendingInitiativeDraft);
+  $("#initiative-modal").addEventListener("mousedown", event => {
+    if (event.target === event.currentTarget) {
+      setInitiativeDraftStatus("The form remains open. Use Save Draft & Close when you are finished.", "safe");
+    }
+  });
+  document.addEventListener("keydown", handleInitiativeModalKeydown);
+  window.addEventListener("beforeunload", handleInitiativeBeforeUnload);
+
+  $("#close-excel-import").addEventListener("click", closeExcelImportModal);
+  $("#cancel-excel-import").addEventListener("click", closeExcelImportModal);
+  $("#excel-import-modal").addEventListener("mousedown", event => {
+    if (event.target === event.currentTarget) closeExcelImportModal();
+  });
+  $("#excel-import-file").addEventListener("change", handleExcelImportFileSelection);
+  $("#excel-download-template").addEventListener("click", downloadExcelImportTemplate);
+  $("#excel-validate-file").addEventListener("click", reviewExcelImportFile);
+  $("#confirm-excel-import").addEventListener("click", importPreparedExcelRows);
+  ["#excel-import-created-by", "#excel-import-owner", "#excel-import-pillar", "#excel-import-year", "#excel-import-skip-duplicates"].forEach(selector =>
+    $(selector).addEventListener("change", () => {
+      if (excelImportRawRows.length) prepareExcelImportRows();
+    })
+  );
+  document.addEventListener("keydown", handleExcelImportKeydown);
   $("#initiative-next-step").addEventListener("click", nextInitiativeStep);
   $("#initiative-previous-step").addEventListener("click", previousInitiativeStep);
   $$(".initiative-step").forEach(button =>
@@ -196,10 +457,12 @@ function bindEvents() {
     element.addEventListener("input", () => {
       updateInitiativeFormMetrics();
       renderBudgetSummary();
+      markInitiativeFormChanged();
     });
     element.addEventListener("change", () => {
       updateInitiativeFormMetrics();
       renderBudgetSummary();
+      markInitiativeFormChanged();
     });
   });
   $$(".evidence-status").forEach(element =>
@@ -207,8 +470,61 @@ function bindEvents() {
   );
 }
 
-async function routeSession() {
-  if (!currentUser) {
+function scheduleAuthRoute(session) {
+  const revision = ++authRouteRevision;
+  const user = session?.user ?? null;
+
+  if (authRouteTimer) window.clearTimeout(authRouteTimer);
+
+  // Defer database work until the auth state-change callback has fully returned.
+  authRouteTimer = window.setTimeout(async () => {
+    authRouteTimer = null;
+    if (revision !== authRouteRevision) return;
+
+    currentUser = user;
+
+    try {
+      await routeSession(revision);
+    } catch (error) {
+      console.error("HOME31 session routing failed", error);
+      if (revision !== authRouteRevision) return;
+      resetSessionState();
+      showAuth();
+      showToast(error?.message || "Unable to open your HOME31 workspace. Please sign in again.", true);
+    }
+  }, 0);
+}
+
+function isCurrentAuthRoute(revision, userId = null) {
+  return revision === authRouteRevision &&
+    (!userId || currentUser?.id === userId);
+}
+
+function resetSessionState() {
+  currentUser = null;
+  currentProfile = null;
+  userProjects = [];
+  adminProjects = [];
+  adminProfiles = [];
+  destroyCharts();
+  document.body.classList.remove("super-admin-shell", "admin-command-active");
+  closeSidebarDrawer();
+  $("#initiative-modal")?.classList.add("hidden");
+  $("#excel-import-modal")?.classList.add("hidden");
+  if (initiativeDraftTimer) window.clearTimeout(initiativeDraftTimer);
+  initiativeDraftTimer = null;
+  initiativeFormDirty = false;
+  activeInitiativeDraftKey = null;
+  pendingInitiativeDraft = null;
+  excelImportRawRows = [];
+  excelImportPreparedRows = [];
+}
+
+async function routeSession(revision = authRouteRevision) {
+  const routeUser = currentUser;
+
+  if (!routeUser) {
+    resetSessionState();
     showAuth();
     return;
   }
@@ -216,8 +532,10 @@ async function routeSession() {
   const { data: profile, error } = await supabase
     .from("profiles")
     .select("*")
-    .eq("id", currentUser.id)
+    .eq("id", routeUser.id)
     .maybeSingle();
+
+  if (!isCurrentAuthRoute(revision, routeUser.id)) return;
 
   if (error || !profile) {
     showToast(error?.message || "Unable to load your user profile.", true);
@@ -225,57 +543,61 @@ async function routeSession() {
     return;
   }
 
-  const platformAlreadyOpen = !$("#platform").classList.contains("hidden");
-  const sameRole = !currentProfile || currentProfile.role === profile.role;
   currentProfile = profile;
+
+  if (profile.account_status !== "active") {
+    showToast(`This account is ${profile.account_status || "not active"}. Contact a HOME31 administrator.`, true);
+    await supabase.auth.signOut();
+    return;
+  }
 
   if (profile.must_change_password) {
     showForcedPassword();
     return;
   }
 
-  if (platformAlreadyOpen && sameRole) {
-    renderIdentity();
-    setDisplaySettingsContext("platform");
-    return;
-  }
-
-  await openPlatform();
+  await openPlatform(revision, routeUser.id);
 }
 
 function showAuth() {
-  setDisplaySettingsContext("auth");
   $("#auth-screen").classList.remove("hidden");
   $("#force-password-screen").classList.add("hidden");
   $("#platform").classList.add("hidden");
+  toggleAuthCard("login");
 }
 
 function showForcedPassword() {
-  setDisplaySettingsContext("auth");
   $("#auth-screen").classList.add("hidden");
   $("#force-password-screen").classList.remove("hidden");
   $("#platform").classList.add("hidden");
 }
 
-async function openPlatform() {
-  setDisplaySettingsContext("platform");
-  $("#auth-screen").classList.add("hidden");
-  $("#force-password-screen").classList.add("hidden");
-  $("#platform").classList.remove("hidden");
+async function openPlatform(revision = authRouteRevision, userId = currentUser?.id) {
+  if (!isCurrentAuthRoute(revision, userId) || !currentProfile) return;
 
   renderIdentity();
   await loadUserProjects();
+  if (!isCurrentAuthRoute(revision, userId)) return;
 
-  if (currentProfile.role === "super_admin") {
+  const isSuperAdmin = currentProfile.role === "super_admin";
+  document.body.classList.toggle("super-admin-shell", isSuperAdmin);
+
+  if (isSuperAdmin) {
+    $("#user-nav").classList.add("hidden");
     $("#admin-nav").classList.remove("hidden");
     $("#initiative-owner-field").classList.remove("hidden");
     await loadAdminData();
-    showModule(resolveInitialModule("admin-overview"), { scroll: false });
+    if (!isCurrentAuthRoute(revision, userId)) return;
   } else {
+    $("#user-nav").classList.remove("hidden");
     $("#admin-nav").classList.add("hidden");
     $("#initiative-owner-field").classList.add("hidden");
-    showModule(resolveInitialModule("user-home"), { scroll: false });
   }
+
+  $("#auth-screen").classList.add("hidden");
+  $("#force-password-screen").classList.add("hidden");
+  $("#platform").classList.remove("hidden");
+  showModule(isSuperAdmin ? "admin-overview" : "user-home");
 }
 
 function renderIdentity() {
@@ -294,40 +616,34 @@ async function login(event) {
   event.preventDefault();
   if (!configured) return showToast("Configure Supabase in app.js first.", true);
 
-  const button = event.submitter || event.currentTarget.querySelector('button[type="submit"]');
-  if (button) {
-    button.disabled = true;
-    button.textContent = "Signing in...";
-  }
+  const button = event.submitter;
+  button.disabled = true;
+  button.textContent = "Signing in...";
 
-  const { error } = await supabase.auth.signInWithPassword({
+  const { data, error } = await supabase.auth.signInWithPassword({
     email: $("#login-email").value.trim(),
     password: $("#login-password").value
   });
 
-  if (button) {
-    button.disabled = false;
-    button.textContent = "Sign in";
-  }
+  button.disabled = false;
+  button.textContent = "Sign in";
 
   if (error) return showToast(error.message, true);
   $("#login-form").reset();
+  scheduleAuthRoute(data.session);
 }
 
 async function logout() {
+  const { error } = await supabase.auth.signOut();
+  if (error) return showToast(error.message || "Unable to sign out.", true);
+
   authRouteRevision += 1;
   if (authRouteTimer) {
     window.clearTimeout(authRouteTimer);
     authRouteTimer = null;
   }
-  await supabase.auth.signOut();
-  currentUser = null;
-  currentProfile = null;
-  userProjects = [];
-  adminProjects = [];
-  adminProfiles = [];
-  destroyCharts();
-  removeLocalPreference(ACTIVE_MODULE_KEY);
+
+  resetSessionState();
   showAuth();
 }
 
@@ -368,26 +684,11 @@ async function completeForcedPasswordChange(event) {
   button.disabled = true;
   button.textContent = "Updating...";
 
-  const { error: authError } = await supabase.auth.updateUser({ password });
-  if (authError) {
-    button.disabled = false;
-    button.textContent = "Change Password & Continue";
-    return showToast(authError.message, true);
-  }
-
-  const { error: profileError } = await supabase
-    .from("profiles")
-    .update({
-      must_change_password: false,
-      password_changed_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    })
-    .eq("id", currentUser.id);
+  const error = await changeOwnPassword(password);
 
   button.disabled = false;
   button.textContent = "Change Password & Continue";
-
-  if (profileError) return showToast(profileError.message, true);
+  if (error) return showToast(error, true);
 
   currentProfile.must_change_password = false;
   currentProfile.password_changed_at = new Date().toISOString();
@@ -440,118 +741,61 @@ async function updatePasswordFromAccount(event) {
     return showToast("Use at least 10 characters with uppercase, lowercase, number and symbol.", true);
   }
 
-  const { error } = await supabase.auth.updateUser({ password });
-  if (error) return showToast(error.message, true);
+  const button = event.submitter;
+  button.disabled = true;
+  button.textContent = "Updating...";
+  const error = await changeOwnPassword(password);
+  button.disabled = false;
+  button.textContent = "Update Password";
 
-  await supabase.from("profiles").update({
-    password_changed_at: new Date().toISOString(),
-    updated_at: new Date().toISOString()
-  }).eq("id", currentUser.id);
-
+  if (error) return showToast(error, true);
   $("#change-password-form").reset();
   showToast("Password updated successfully.");
 }
 
+async function changeOwnPassword(password) {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) return "Your session has expired. Sign in again.";
 
-function readLocalPreference(key, fallback = "") {
   try {
-    const value = window.localStorage.getItem(key);
-    return value === null ? fallback : value;
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/change-own-password`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${session.access_token}`,
+        "apikey": SUPABASE_PUBLISHABLE_KEY
+      },
+      body: JSON.stringify({ password })
+    });
+    const payload = await response.json().catch(() => ({}));
+    return response.ok ? null : (payload.error || `Password update failed with HTTP ${response.status}.`);
   } catch (_error) {
-    return fallback;
+    return "Unable to reach the protected password service.";
   }
 }
 
-function writeLocalPreference(key, value) {
-  try {
-    window.localStorage.setItem(key, value);
-  } catch (_error) {
-    // The platform remains usable when browser storage is restricted.
-  }
-}
-
-function removeLocalPreference(key) {
-  try {
-    window.localStorage.removeItem(key);
-  } catch (_error) {
-    // No action required.
-  }
-}
-
-function resolveInitialModule(fallback) {
-  const saved = readLocalPreference(ACTIVE_MODULE_KEY, fallback);
-  const adminModules = new Set(["admin-overview", "admin-portfolio", "admin-users", "admin-exceptions", "admin-system", "account"]);
-  const userModules = new Set(["user-home", "my-initiatives", "readiness", "account"]);
-  const allowed = currentProfile?.role === "super_admin" ? adminModules : userModules;
-  return allowed.has(saved) ? saved : fallback;
-}
-
-function setDisplaySettingsContext(context) {
-  const settings = $("#display-settings");
-  if (!settings) return;
-  const dock = $("#display-settings-dock");
-
-  if (context === "platform" && dock) {
-    if (settings.parentElement !== dock) dock.appendChild(settings);
-    settings.classList.add("docked");
-    return;
-  }
-
-  settings.classList.remove("docked");
-  if (settings.parentElement !== document.body) {
-    document.body.insertBefore(settings, document.body.firstChild);
-  }
-}
-
-function applyExecutiveView(view, persist = true) {
-  const safeView = view === "visuals" ? "visuals" : "summary";
-  activeExecutiveView = safeView;
-
-  $$('[data-executive-section]').forEach(section => {
-    section.classList.toggle("hidden", section.dataset.executiveSection !== safeView);
-  });
-
-  $$('[data-executive-tab]').forEach(button => {
-    const active = button.dataset.executiveTab === safeView;
-    button.classList.toggle("active", active);
-    button.setAttribute("aria-selected", String(active));
-  });
-
-  const title = $("#executive-view-title");
-  if (title) title.textContent = safeView === "visuals" ? "Visual Analytics" : "Management Summary";
-  if (persist) writeLocalPreference(EXECUTIVE_VIEW_KEY, safeView);
-
-  if (safeView === "visuals") {
-    window.setTimeout(() => Object.values(charts).forEach(chart => chart?.resize?.()), 80);
-  }
-}
-
-function showModule(name, options = {}) {
-  const { scroll = true } = options;
+function showModule(name) {
   $$(".module").forEach(module => module.classList.remove("active"));
   $$(".nav-item").forEach(button => button.classList.remove("active"));
 
   const module = $(`#module-${name}`);
-  const nav = $(`.nav-item[data-module="${name}"]`);
+  const matchingNavItems = $$(`.nav-item[data-module="${name}"]`);
+  const nav = matchingNavItems.find(button => !button.closest(".hidden")) || matchingNavItems[0];
   if (!module) return;
 
   module.classList.add("active");
   nav?.classList.add("active");
   $("#page-title").textContent = nav?.querySelector("b")?.textContent || "HOME31";
-  $("#sidebar").classList.remove("open");
+  if (isMobileNavigation()) closeSidebarDrawer();
   document.body.classList.toggle("admin-command-active", name.startsWith("admin-"));
   const yearAwareModules = ["admin-overview", "admin-portfolio", "admin-exceptions"];
   $("#admin-year-control").classList.toggle("hidden", !yearAwareModules.includes(name));
-  writeLocalPreference(ACTIVE_MODULE_KEY, name);
-  if (scroll) window.scrollTo({ top: 0, behavior: "smooth" });
+  window.scrollTo({ top: 0, behavior: "smooth" });
 
   if (name === "user-home") renderUserDashboard();
   if (name === "my-initiatives") renderUserInitiatives();
   if (name === "readiness") renderReadiness();
-  if (name === "admin-overview") {
-    renderAdminOverview();
-    applyExecutiveView(activeExecutiveView, false);
-  }
+  if (name === "admin-overview") renderAdminOverview();
   if (name === "admin-portfolio") renderAdminPortfolio();
   if (name === "admin-users") renderAdminUsers();
   if (name === "admin-exceptions") renderAdminExceptions();
@@ -690,6 +934,7 @@ async function loadAdminData() {
   adminProfiles = profilesResponse.data || [];
   populateAdminYearOptions();
   populateOwnerOptions();
+  populateAdminDepartmentOptions();
   renderAdminOverview();
   renderAdminPortfolio();
   renderAdminUsers();
@@ -698,10 +943,24 @@ async function loadAdminData() {
 
 
 
+function populateAdminDepartmentOptions() {
+  const select = $("#admin-department-filter");
+  if (!select) return;
+  const current = select.value;
+  const departments = [...new Set(adminProjects
+    .map(project => String(project.department || "").trim())
+    .filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, "en", { sensitivity: "base" }));
+  select.innerHTML = [
+    '<option value="">All departments</option>',
+    ...departments.map(department => `<option value="${escapeHtml(department)}">${escapeHtml(department)}</option>`)
+  ].join("");
+  if (departments.includes(current)) select.value = current;
+}
 
 function deriveHome31Fit(project) {
   if (!project.strategic_pillar || !project.project_description) return "Needs Validation";
-  if (project.status === "On Hold") return "Duplicate / Consolidate";
+  if (project.home31_fit_override) return project.home31_fit_override;
   if (project.initiative_category === "Business as usual") return "BAU · Supporting Enhancement";
   if (["Strategic Priority", "Corporate Priority"].includes(project.priority_status) || project.priority === "Strategic") {
     return "Core Initiative";
@@ -728,6 +987,223 @@ function bindExecutiveRecordButtons() {
   );
 }
 
+function initialiseExecutiveInteractions() {
+  $$('[data-kpi-action]').forEach(card => {
+    const activate = () => handleExecutiveNavigation(card.dataset.kpiAction);
+    card.addEventListener('click', activate);
+    card.addEventListener('keydown', event => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        activate();
+      }
+    });
+  });
+
+  $$('[data-executive-route]').forEach(button =>
+    button.addEventListener('click', () => handleExecutiveNavigation(button.dataset.executiveRoute))
+  );
+
+  let stored = [];
+  try {
+    stored = JSON.parse(localStorage.getItem(EXECUTIVE_PANEL_STATE_KEY) || '[]');
+  } catch (_error) {
+    stored = [];
+  }
+  const collapsed = new Set(Array.isArray(stored) ? stored : []);
+
+  $$('#module-admin-overview .chart-panel').forEach((panel, index) => {
+    const key = panel.id || panel.querySelector('canvas')?.id || `executive-panel-${index + 1}`;
+    panel.dataset.panelKey = key;
+    const heading = panel.querySelector('.executive-panel-heading');
+    if (!heading || heading.querySelector('.executive-panel-collapse')) return;
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'executive-panel-collapse';
+    button.setAttribute('aria-controls', key);
+    if (collapsed.has(key)) panel.classList.add('panel-collapsed');
+    updateExecutivePanelButton(panel, button);
+    button.addEventListener('click', () => {
+      panel.classList.toggle('panel-collapsed');
+      const active = new Set();
+      $$('#module-admin-overview .chart-panel.panel-collapsed').forEach(item => active.add(item.dataset.panelKey));
+      try {
+        localStorage.setItem(EXECUTIVE_PANEL_STATE_KEY, JSON.stringify([...active]));
+      } catch (_error) {
+        // The interaction still works when storage is unavailable.
+      }
+      updateExecutivePanelButton(panel, button);
+      if (!panel.classList.contains('panel-collapsed')) {
+        window.setTimeout(() => Object.values(charts).forEach(chart => chart?.resize?.()), 80);
+      }
+    });
+    heading.appendChild(button);
+  });
+}
+
+function updateExecutivePanelButton(panel, button) {
+  const collapsed = panel.classList.contains('panel-collapsed');
+  button.textContent = collapsed ? 'Show chart' : 'Hide chart';
+  button.setAttribute('aria-expanded', String(!collapsed));
+}
+
+function resetAdminFilterControls() {
+  $('#admin-search').value = '';
+  $('#admin-department-filter').value = '';
+  $('#admin-status-filter').value = '';
+  $('#admin-pillar-filter').value = '';
+  $('#admin-risk-filter').value = '';
+}
+
+function handleExecutiveNavigation(action) {
+  if (currentProfile?.role !== 'super_admin') return;
+
+  if (action === 'scroll-budget') {
+    $('#executive-budget-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    return;
+  }
+
+  const map = {
+    all: '',
+    budget: 'cost-populated',
+    readiness: 'readiness-followup',
+    delivery: 'active',
+    matrix: 'cost-benefit',
+    'readiness-followup': 'readiness-followup',
+    'cost-populated': 'cost-populated',
+    priority: 'priority',
+    risk: 'risk',
+    'approved-populated': 'approved-populated',
+    'budget-gaps': 'budget-gaps'
+  };
+
+  adminQuickFilter = map[action] ?? '';
+  resetAdminFilterControls();
+  showModule('admin-portfolio');
+}
+
+function matchesAdminQuickFilter(project) {
+  switch (adminQuickFilter) {
+    case 'readiness-followup':
+      return calculateProjectReadiness(project).score < 100;
+    case 'cost-populated':
+      return hasPortfolioCost(project);
+    case 'priority':
+      return normalizePriorityGroup(project) === 'Strategic Priority';
+    case 'risk':
+      return project.status === 'At Risk' || ['High', 'Extreme'].includes(project.risk_level);
+    case 'approved-populated':
+      return financialFieldConfirmed(project, 'approved_budget');
+    case 'budget-gaps':
+      return !financialFieldConfirmed(project, 'approved_budget');
+    case 'active':
+      return project.status !== 'Completed';
+    case 'cost-benefit':
+      return hasPortfolioCost(project) && numericValue(project.cba_ratio) !== null;
+    case 'finance-review':
+      return managementViewMatches(project, 'finance');
+    case 'ict-review':
+      return managementViewMatches(project, 'ict');
+    case 'watchlist':
+      return managementViewMatches(project, 'watchlist');
+    case 'missing-information':
+      return managementViewMatches(project, 'missing');
+    case 'department-readiness':
+      return managementViewMatches(project, 'readiness');
+    default:
+      return true;
+  }
+}
+
+function adminQuickFilterLabel() {
+  return {
+    'readiness-followup': 'Readiness follow-up',
+    'cost-populated': 'Cost populated',
+    priority: 'Strategic priority',
+    risk: 'Risk attention',
+    'approved-populated': 'Approved budget populated',
+    'budget-gaps': 'Approved budget gaps',
+    active: 'Active delivery',
+    'cost-benefit': 'Cost-benefit assessed',
+    'finance-review': 'Finance review',
+    'ict-review': 'ICT review',
+    watchlist: 'Watchlist',
+    'missing-information': 'Missing information',
+    'department-readiness': 'Department readiness'
+  }[adminQuickFilter] || '';
+}
+
+function applyManagementView(view) {
+  if (currentProfile?.role !== 'super_admin') return;
+  const map = {
+    executive: '',
+    finance: 'finance-review',
+    ict: 'ict-review',
+    watchlist: 'watchlist',
+    missing: 'missing-information',
+    readiness: 'department-readiness'
+  };
+  adminQuickFilter = map[view] ?? '';
+  resetAdminFilterControls();
+  showModule('admin-portfolio');
+}
+
+function managementViewMatches(project, view) {
+  const readiness = Number(project.readiness_score || 0);
+  const systemDependent = Boolean(project.system_type && project.system_type !== 'Non System');
+  const ictPending = project.ict_classification === 'New - Pending ICT review' || (systemDependent && (!project.ict_classification || ['N/A', 'None'].includes(project.ict_classification)));
+  const financePending = !financialFieldConfirmed(project, 'approved_budget') || (financialFieldConfirmed(project, 'approved_budget') && !String(project.finance_remarks || '').trim());
+  const watch = ['Watchlist / Under Review', 'Not Assessed'].includes(project.priority_status) || project.status === 'At Risk' || ['High', 'Extreme'].includes(project.risk_level);
+  const missing = calculateProjectReadiness(project).score < 100 || !String(project.accountable_owner || '').trim() || !String(project.department || '').trim();
+  if (view === 'finance') return financePending;
+  if (view === 'ict') return ictPending;
+  if (view === 'watchlist') return watch;
+  if (view === 'missing') return missing;
+  if (view === 'readiness') return readiness < 70;
+  return true;
+}
+
+function renderManagementViews(records = projectsForYear()) {
+  const counts = {
+    executive: records.length,
+    finance: records.filter(project => managementViewMatches(project, 'finance')).length,
+    ict: records.filter(project => managementViewMatches(project, 'ict')).length,
+    watchlist: records.filter(project => managementViewMatches(project, 'watchlist')).length,
+    missing: records.filter(project => managementViewMatches(project, 'missing')).length,
+    readiness: records.filter(project => managementViewMatches(project, 'readiness')).length
+  };
+  Object.entries(counts).forEach(([key, value]) => {
+    const target = $(`#management-view-count-${key}`);
+    if (target) target.textContent = `${value} record${value === 1 ? '' : 's'}`;
+  });
+}
+
+function renderPortfolioActiveFilters() {
+  const container = $('#portfolio-active-filters');
+  if (!container) return;
+  const chips = [];
+  if (adminQuickFilter) chips.push({ key: 'quick', label: adminQuickFilterLabel() });
+  const query = $('#admin-search').value.trim();
+  if (query) chips.push({ key: 'search', label: `Search: ${query}` });
+  if ($('#admin-department-filter').value) chips.push({ key: 'department', label: `Department: ${$('#admin-department-filter').value}` });
+  if ($('#admin-status-filter').value) chips.push({ key: 'status', label: `Status: ${$('#admin-status-filter').value}` });
+  if ($('#admin-pillar-filter').value) chips.push({ key: 'pillar', label: `Pillar: ${shortPillar($('#admin-pillar-filter').value)}` });
+  if ($('#admin-risk-filter').value) chips.push({ key: 'risk', label: `Risk: ${$('#admin-risk-filter').value}` });
+  if (!chips.length) {
+    container.innerHTML = '<span class="portfolio-filter-empty">No active filters. Showing the selected portfolio year.</span>';
+    return;
+  }
+  container.innerHTML = chips.map(chip => `<button class="portfolio-filter-chip" type="button" data-clear-portfolio-filter="${chip.key}"><span>${escapeHtml(chip.label)}</span><b aria-hidden="true">×</b><span class="sr-only">Remove filter</span></button>`).join('');
+  $$('[data-clear-portfolio-filter]').forEach(button => button.addEventListener('click', () => {
+    const key = button.dataset.clearPortfolioFilter;
+    if (key === 'quick') adminQuickFilter = '';
+    if (key === 'search') $('#admin-search').value = '';
+    if (key === 'department') $('#admin-department-filter').value = '';
+    if (key === 'status') $('#admin-status-filter').value = '';
+    if (key === 'pillar') $('#admin-pillar-filter').value = '';
+    if (key === 'risk') $('#admin-risk-filter').value = '';
+    renderAdminPortfolio();
+  }));
+}
 
 
 function executiveChartOptions() {
@@ -796,12 +1272,27 @@ function normalizePriorityGroup(project) {
   return "Not Classified";
 }
 
-function effectiveProjectCost(project) {
-  const challenged = project.estimated_cost_post_challenge;
-  if (challenged !== null && challenged !== undefined && challenged !== "") {
-    return Number(challenged) || 0;
+function financialFieldConfirmed(project, field) {
+  const confirmationField = {
+    estimated_cost: "estimated_cost_confirmed",
+    estimated_cost_post_challenge: "post_challenge_cost_confirmed",
+    proposed_budget_post_retreat: "proposed_budget_confirmed",
+    approved_budget: "approved_budget_confirmed"
+  }[field];
+  if (confirmationField && typeof project?.[confirmationField] === "boolean") {
+    return project[confirmationField];
   }
-  return Number(project.estimated_cost || 0);
+  return numericValue(project?.[field]) !== null;
+}
+
+function effectiveProjectCost(project) {
+  if (financialFieldConfirmed(project, "estimated_cost_post_challenge")) {
+    return Number(project.estimated_cost_post_challenge) || 0;
+  }
+  if (financialFieldConfirmed(project, "estimated_cost")) {
+    return Number(project.estimated_cost) || 0;
+  }
+  return 0;
 }
 
 
@@ -868,6 +1359,7 @@ function aggregateFiltered(records, labelFn, valueFn) {
 }
 
 function clearAdminFilters() {
+  adminQuickFilter = "";
   $("#admin-search").value = "";
   $("#admin-status-filter").value = "";
   $("#admin-pillar-filter").value = "";
@@ -923,7 +1415,7 @@ function renderAdminUsers() {
         <div>
           <strong>${escapeHtml(profile.full_name || profile.email)}</strong>
           <span>${escapeHtml(profile.email)}</span>
-          <span>${escapeHtml(profile.department || "No department")} · Password change: ${profile.must_change_password ? "Required" : "Completed"}</span>
+          <span>${escapeHtml(profile.department || "No department")} · Account: ${escapeHtml(profile.account_status || "active")} · Password change: ${profile.must_change_password ? "Required" : "Completed"}</span>
         </div>
         <div>
           <span class="role-pill">${labelRole(profile.role)}</span>
@@ -931,6 +1423,7 @@ function renderAdminUsers() {
             <button class="text-button" data-toggle-role="${profile.id}" type="button">
               ${profile.role === "super_admin" ? "Make Normal User" : "Make Super Admin"}
             </button>
+            <button class="text-button" data-reset-password="${profile.id}" type="button">Reset temporary password</button>
           ` : '<span>Current account</span>'}
         </div>
       </article>
@@ -940,6 +1433,9 @@ function renderAdminUsers() {
   $$("[data-toggle-role]").forEach(button =>
     button.addEventListener("click", () => toggleRole(button.dataset.toggleRole))
   );
+  $$("[data-reset-password]").forEach(button =>
+    button.addEventListener("click", () => resetUserPassword(button.dataset.resetPassword))
+  );
 
   renderAdminUserGovernance();
 }
@@ -947,13 +1443,19 @@ function renderAdminUsers() {
 function renderAdminUserGovernance() {
   charts.adminUserRole?.destroy();
   if (typeof Chart !== "undefined") {
-    const roles = ["super_admin", "normal_user", "department_admin", "hr_admin", "finance_admin", "auditor", "viewer"];
+    const roles = ["super_admin", "normal_user"];
+    const roleLabels = ["Super Admin", "Normal User", "Legacy / unimplemented role"];
+    const roleCounts = [
+      adminProfiles.filter(profile => profile.role === "super_admin").length,
+      adminProfiles.filter(profile => profile.role === "normal_user").length,
+      adminProfiles.filter(profile => !roles.includes(profile.role)).length
+    ];
     charts.adminUserRole = new Chart($("#admin-user-role-chart"), {
       type: "doughnut",
       data: {
-        labels: roles.map(labelRole),
+        labels: roleLabels,
         datasets: [{
-          data: roles.map(role => adminProfiles.filter(profile => profile.role === role).length),
+          data: roleCounts,
           backgroundColor: ["#d1ad63", "#57999b", "#7f99af", "#6ca69b", "#7892a6", "#a76a6f", "#58768b"],
           borderColor: "#102f49",
           borderWidth: 4,
@@ -1033,11 +1535,72 @@ async function createUserAsAdmin(event) {
   await loadAdminData();
 }
 
+function secureRandomCharacter(characters) {
+  const value = new Uint32Array(1);
+  crypto.getRandomValues(value);
+  return characters[value[0] % characters.length];
+}
+
+function createStrongTemporaryPassword(length = 16) {
+  const groups = [
+    "ABCDEFGHJKLMNPQRSTUVWXYZ",
+    "abcdefghijkmnopqrstuvwxyz",
+    "23456789",
+    "!@#$%&*?"
+  ];
+  const all = groups.join("");
+  const characters = groups.map(secureRandomCharacter);
+  while (characters.length < Math.max(10, length)) characters.push(secureRandomCharacter(all));
+
+  for (let index = characters.length - 1; index > 0; index -= 1) {
+    const value = new Uint32Array(1);
+    crypto.getRandomValues(value);
+    const swapIndex = value[0] % (index + 1);
+    [characters[index], characters[swapIndex]] = [characters[swapIndex], characters[index]];
+  }
+  return characters.join("");
+}
+
 function generateTemporaryPassword() {
-  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%";
-  const random = new Uint32Array(14);
-  crypto.getRandomValues(random);
-  $("#admin-user-password").value = Array.from(random, value => alphabet[value % alphabet.length]).join("");
+  $("#admin-user-password").value = createStrongTemporaryPassword();
+}
+
+async function resetUserPassword(profileId) {
+  const profile = adminProfiles.find(item => item.id === profileId);
+  if (!profile) return;
+
+  const suggested = createStrongTemporaryPassword();
+  const password = window.prompt(
+    `Temporary password for ${profile.full_name || profile.email}. You may edit it before continuing:`,
+    suggested
+  );
+  if (password === null) return;
+  if (!isStrongPassword(password)) {
+    return showToast("Temporary password must contain at least 10 characters with uppercase, lowercase, number and symbol.", true);
+  }
+
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) return showToast("Your session has expired. Sign in again.", true);
+
+  try {
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/admin-reset-password`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${session.access_token}`,
+        "apikey": SUPABASE_PUBLISHABLE_KEY
+      },
+      body: JSON.stringify({ user_id: profileId, password })
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) return showToast(payload.error || `Password reset failed with HTTP ${response.status}.`, true);
+
+    window.prompt("Password reset completed. Copy this temporary password and share it securely:", password);
+    showToast("Temporary password assigned. The user must change it at next login.");
+    await loadAdminData();
+  } catch (_error) {
+    showToast("Unable to reach the protected password reset service.", true);
+  }
 }
 
 async function toggleRole(profileId) {
@@ -1071,7 +1634,187 @@ function renderExceptionList(records, detailBuilder) {
 }
 
 
+
+function initiativeDraftStorageKey(recordId = "new") {
+  return `${INITIATIVE_DRAFT_PREFIX}:${currentUser?.id || "anonymous"}:${recordId || "new"}`;
+}
+
+function serializeInitiativeForm() {
+  const values = {};
+  const form = $("#initiative-form");
+  [...form.elements].forEach(element => {
+    if (!element.id || element.type === "submit" || element.type === "button") return;
+    if (element.type === "checkbox" || element.type === "radio") {
+      values[element.id] = Boolean(element.checked);
+    } else {
+      values[element.id] = element.value;
+    }
+  });
+  return values;
+}
+
+function applyInitiativeDraftValues(values = {}) {
+  initiativeFormInitialising = true;
+  Object.entries(values).forEach(([id, value]) => {
+    const element = document.getElementById(id);
+    if (!element) return;
+    if (element.type === "checkbox" || element.type === "radio") {
+      element.checked = Boolean(value);
+    } else {
+      element.value = value ?? "";
+    }
+  });
+  initiativeFormInitialising = false;
+  updateEvidencePresentation();
+  renderBudgetSummary();
+  updateInitiativeFormMetrics();
+}
+
+function markInitiativeFormChanged() {
+  if (initiativeFormInitialising || $("#initiative-modal").classList.contains("hidden")) return;
+  initiativeFormDirty = true;
+  setInitiativeDraftStatus("Unsaved changes — saving draft…", "saving");
+  if (initiativeDraftTimer) window.clearTimeout(initiativeDraftTimer);
+  initiativeDraftTimer = window.setTimeout(() => saveInitiativeDraft(), INITIATIVE_DRAFT_DELAY);
+}
+
+function saveInitiativeDraft({ announce = false } = {}) {
+  if (!activeInitiativeDraftKey || initiativeFormInitialising) return false;
+  if (initiativeDraftTimer) window.clearTimeout(initiativeDraftTimer);
+  initiativeDraftTimer = null;
+
+  const payload = {
+    version: 1,
+    savedAt: new Date().toISOString(),
+    recordId: $("#initiative-id").value || null,
+    step: currentInitiativeFormStep,
+    values: serializeInitiativeForm()
+  };
+
+  try {
+    localStorage.setItem(activeInitiativeDraftKey, JSON.stringify(payload));
+    $("#initiative-clear-draft").classList.remove("hidden");
+    setInitiativeDraftStatus(`Draft saved ${formatDraftTimestamp(payload.savedAt)}.`, "saved");
+    if (announce) showToast("Initiative draft saved on this device.");
+    return true;
+  } catch (error) {
+    console.error("Unable to save initiative draft", error);
+    setInitiativeDraftStatus("Draft could not be saved on this device.", "error");
+    if (announce) showToast("Unable to save the draft in this browser.", true);
+    return false;
+  }
+}
+
+function readInitiativeDraft(key = activeInitiativeDraftKey) {
+  if (!key) return null;
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const draft = JSON.parse(raw);
+    return draft?.values ? draft : null;
+  } catch (_error) {
+    return null;
+  }
+}
+
+function removeInitiativeDraft(key = activeInitiativeDraftKey) {
+  if (!key) return;
+  try {
+    localStorage.removeItem(key);
+  } catch (_error) {
+    // Browser storage can be unavailable in restricted environments.
+  }
+}
+
+function checkForInitiativeDraft(project = null) {
+  const draft = readInitiativeDraft();
+  if (!draft) {
+    $("#initiative-clear-draft").classList.add("hidden");
+    return;
+  }
+
+  if (project?.updated_at && new Date(draft.savedAt).getTime() <= new Date(project.updated_at).getTime()) {
+    removeInitiativeDraft();
+    $("#initiative-clear-draft").classList.add("hidden");
+    return;
+  }
+
+  pendingInitiativeDraft = draft;
+  $("#initiative-clear-draft").classList.remove("hidden");
+  $("#initiative-draft-recovery-copy").textContent =
+    `A draft saved ${formatDraftTimestamp(draft.savedAt)} is available. Restore it or continue with the current record.`;
+  $("#initiative-draft-recovery").classList.remove("hidden");
+  setInitiativeDraftStatus("Saved draft available for recovery.", "recovery");
+}
+
+function restorePendingInitiativeDraft() {
+  if (!pendingInitiativeDraft) return;
+  applyInitiativeDraftValues(pendingInitiativeDraft.values);
+  currentInitiativeFormStep = Math.max(1, Math.min(7, Number(pendingInitiativeDraft.step || 1)));
+  renderInitiativeFormStep();
+  initiativeFormDirty = true;
+  $("#initiative-draft-recovery").classList.add("hidden");
+  setInitiativeDraftStatus(`Draft restored from ${formatDraftTimestamp(pendingInitiativeDraft.savedAt)}.`, "saved");
+  pendingInitiativeDraft = null;
+  showToast("Your unfinished initiative draft has been restored.");
+}
+
+function discardPendingInitiativeDraft() {
+  removeInitiativeDraft();
+  pendingInitiativeDraft = null;
+  $("#initiative-draft-recovery").classList.add("hidden");
+  $("#initiative-clear-draft").classList.add("hidden");
+  setInitiativeDraftStatus("Previous draft discarded. New changes will continue to save automatically.", "safe");
+}
+
+function discardActiveInitiativeDraft() {
+  removeInitiativeDraft();
+  pendingInitiativeDraft = null;
+  $("#initiative-draft-recovery").classList.add("hidden");
+  $("#initiative-clear-draft").classList.add("hidden");
+  setInitiativeDraftStatus(
+    initiativeFormDirty
+      ? "Saved copy discarded. Current unsaved changes remain in the open form."
+      : "Saved draft discarded.",
+    "safe"
+  );
+}
+
+function setInitiativeDraftStatus(message, tone = "safe") {
+  const status = $("#initiative-draft-status");
+  if (!status) return;
+  status.textContent = message;
+  status.dataset.tone = tone;
+}
+
+function formatDraftTimestamp(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "recently";
+  return date.toLocaleString("en-MY", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+}
+
+function handleInitiativeBeforeUnload(event) {
+  if (!initiativeFormDirty || $("#initiative-modal")?.classList.contains("hidden")) return;
+  saveInitiativeDraft();
+  event.preventDefault();
+  event.returnValue = "";
+}
+
 function openInitiativeModal(projectId = null) {
+  initiativeFormInitialising = true;
+  initiativeFormDirty = false;
+  pendingInitiativeDraft = null;
+  if (initiativeDraftTimer) window.clearTimeout(initiativeDraftTimer);
+  initiativeDraftTimer = null;
+  $("#initiative-draft-recovery").classList.add("hidden");
+  $("#initiative-clear-draft").classList.add("hidden");
+  setInitiativeDraftStatus("Changes will be saved automatically on this device.", "safe");
   $("#initiative-form").reset();
   $("#initiative-id").value = "";
   $("#initiative-year").value = selectedAdminYear === "all" ? "2027" : String(selectedAdminYear);
@@ -1082,10 +1825,13 @@ function openInitiativeModal(projectId = null) {
   $("#initiative-risk").value = "Medium";
   $("#initiative-system-type").value = "Non System";
   $("#initiative-ict-classification").value = "N/A";
+  $("#initiative-home31-fit-override").value = "";
   $("#initiative-progress").value = "0";
   $("#initiative-readiness").value = "50";
-  $("#initiative-estimated-cost").value = "0";
-  $("#initiative-estimated-cost-post-challenge").value = "0";
+  $("#initiative-estimated-cost").value = "";
+  $("#initiative-estimated-cost-post-challenge").value = "";
+  $("#initiative-proposed-budget").value = "";
+  $("#initiative-approved-budget").value = "";
   $("#initiative-hr").value = "Not required";
   $("#initiative-people-impact").value = "Medium";
   $("#initiative-training-required").value = "To be assessed";
@@ -1095,10 +1841,14 @@ function openInitiativeModal(projectId = null) {
   $("#initiative-communication-plan-status").value = "Not started";
   $("#initiative-hr-review-status").value = "Not submitted";
   $("#initiative-created-by").value = currentUser.id;
+  if (!projectId && currentProfile?.role !== "super_admin") {
+    $("#initiative-owner").value = currentProfile?.full_name || currentUser?.email || "";
+  }
   $("#initiative-modal-title").textContent = projectId ? "Edit Initiative" : "Create Initiative";
 
   const source = currentProfile?.role === "super_admin" ? adminProjects : userProjects;
   const project = source.find(item => String(item.id) === String(projectId));
+  activeInitiativeDraftKey = initiativeDraftStorageKey(project?.id || projectId || "new");
 
   if (project) {
     $("#initiative-id").value = project.id;
@@ -1120,6 +1870,7 @@ function openInitiativeModal(projectId = null) {
     $("#initiative-risk").value = project.risk_level || "Medium";
 
     $("#initiative-pillar").value = project.strategic_pillar || pillars[0];
+    $("#initiative-home31-fit-override").value = project.home31_fit_override || "";
     $("#initiative-strategic-thrust").value = project.strategic_thrust || "Operational Excellence";
     $("#initiative-strategic-priority-area").value = project.strategic_priority_area || "Improving Productivity, Efficiency and Delivery of Service (PEDS)";
     $("#initiative-system-type").value = project.system_type || "Non System";
@@ -1139,10 +1890,10 @@ function openInitiativeModal(projectId = null) {
     $("#initiative-action-plan").value = project.action_plan || "";
     $("#initiative-next-action").value = project.next_action || "";
 
-    $("#initiative-estimated-cost").value = project.estimated_cost ?? 0;
-    $("#initiative-estimated-cost-post-challenge").value = project.estimated_cost_post_challenge ?? 0;
-    $("#initiative-proposed-budget").value = project.proposed_budget_post_retreat ?? "";
-    $("#initiative-approved-budget").value = project.approved_budget ?? "";
+    $("#initiative-estimated-cost").value = financialFieldConfirmed(project, "estimated_cost") ? (project.estimated_cost ?? 0) : "";
+    $("#initiative-estimated-cost-post-challenge").value = financialFieldConfirmed(project, "estimated_cost_post_challenge") ? (project.estimated_cost_post_challenge ?? 0) : "";
+    $("#initiative-proposed-budget").value = financialFieldConfirmed(project, "proposed_budget_post_retreat") ? (project.proposed_budget_post_retreat ?? 0) : "";
+    $("#initiative-approved-budget").value = financialFieldConfirmed(project, "approved_budget") ? (project.approved_budget ?? 0) : "";
     $("#initiative-post-challenge-remarks").value = project.post_challenge_remarks || "";
     $("#initiative-finance-remarks").value = project.finance_remarks || "";
     $("#initiative-general-remarks").value = project.general_remarks || "";
@@ -1183,11 +1934,77 @@ function openInitiativeModal(projectId = null) {
   updateEvidencePresentation();
   renderBudgetSummary();
   updateInitiativeFormMetrics();
-  $("#initiative-modal").classList.remove("hidden");
+  lastModalTrigger = document.activeElement;
+  const modal = $("#initiative-modal");
+  modal.classList.remove("hidden");
+  modal.setAttribute("aria-hidden", "false");
+  document.body.classList.add("modal-open");
+  initiativeFormInitialising = false;
+  checkForInitiativeDraft(project);
+  window.setTimeout(() => $("#close-initiative-modal")?.focus(), 20);
 }
 
-function closeInitiativeModal() {
-  $("#initiative-modal").classList.add("hidden");
+function closeInitiativeModal({ clearDraft = false } = {}) {
+  const modal = $("#initiative-modal");
+  if (modal.classList.contains("hidden")) return;
+  if (initiativeDraftTimer) window.clearTimeout(initiativeDraftTimer);
+  initiativeDraftTimer = null;
+  if (clearDraft) removeInitiativeDraft(activeInitiativeDraftKey);
+  modal.classList.add("hidden");
+  modal.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("modal-open");
+  initiativeFormDirty = false;
+  initiativeFormInitialising = false;
+  pendingInitiativeDraft = null;
+  activeInitiativeDraftKey = null;
+  const trigger = lastModalTrigger;
+  lastModalTrigger = null;
+  if (trigger instanceof HTMLElement && document.contains(trigger)) trigger.focus();
+}
+
+function requestCloseInitiativeModal() {
+  if (!initiativeFormDirty) {
+    closeInitiativeModal();
+    return;
+  }
+
+  saveInitiativeDraft();
+  const shouldClose = window.confirm(
+    "Your changes have been saved as a draft on this device. Close the form now? You can restore the draft when you reopen it."
+  );
+  if (shouldClose) closeInitiativeModal();
+}
+
+function saveDraftAndCloseInitiativeModal() {
+  if (initiativeFormDirty) saveInitiativeDraft({ announce: true });
+  closeInitiativeModal();
+}
+
+function handleInitiativeModalKeydown(event) {
+  const modal = $("#initiative-modal");
+  if (!modal || modal.classList.contains("hidden")) return;
+
+  if (event.key === "Escape") {
+    event.preventDefault();
+    requestCloseInitiativeModal();
+    return;
+  }
+
+  if (event.key !== "Tab") return;
+  const focusable = [...modal.querySelectorAll(
+    'button:not([disabled]):not(.hidden), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'
+  )].filter(element => element.offsetParent !== null);
+  if (!focusable.length) return;
+
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
 }
 
 function goToInitiativeStep(step) {
@@ -1221,6 +2038,7 @@ function renderInitiativeFormStep() {
   $("#initiative-previous-step").classList.toggle("hidden", currentInitiativeFormStep === 1);
   $("#initiative-next-step").classList.toggle("hidden", currentInitiativeFormStep === 7);
   $("#save-initiative-button").classList.toggle("hidden", currentInitiativeFormStep !== 7);
+  $("#initiative-current-step-label").textContent = `Step ${currentInitiativeFormStep} of 7`;
 
   if (currentInitiativeFormStep === 4) renderBudgetSummary();
   if (currentInitiativeFormStep === 7) renderInitiativeReviewSummary();
@@ -1327,12 +2145,12 @@ function formatRinggit(value) {
 }
 
 function renderBudgetSummary() {
-  const initial = numberValue("#initiative-estimated-cost") || 0;
-  const challenged = numberValue("#initiative-estimated-cost-post-challenge") || 0;
+  const initial = numberValue("#initiative-estimated-cost");
+  const challenged = numberValue("#initiative-estimated-cost-post-challenge");
   const proposed = numberValue("#initiative-proposed-budget");
   const approved = numberValue("#initiative-approved-budget");
-  const challengeVariance = challenged - initial;
-  const approvalVariance = approved === null ? null : approved - challenged;
+  const challengeVariance = initial === null || challenged === null ? null : challenged - initial;
+  const approvalVariance = approved === null || challenged === null ? null : approved - challenged;
 
   $("#initiative-budget-summary").innerHTML = `
     <article><span>Initial estimate</span><strong>${formatRinggit(initial)}</strong></article>
@@ -1365,7 +2183,7 @@ function renderInitiativeReviewSummary() {
       <strong>${escapeHtml($("#initiative-executive-sponsor").value || "Not completed")}</strong>
     </article>
     <article class="review-card">
-      <span>Accountable owner / Delivery lead</span>
+      <span>Project owner / Delivery lead</span>
       <strong>${escapeHtml($("#initiative-owner").value || "Not completed")} / ${escapeHtml($("#initiative-delivery-lead").value || "Not completed")}</strong>
     </article>
     <article class="review-card">
@@ -1442,6 +2260,7 @@ async function saveInitiative(event) {
     risk_level: $("#initiative-risk").value,
 
     strategic_pillar: $("#initiative-pillar").value,
+    home31_fit_override: $("#initiative-home31-fit-override").value || null,
     strategic_thrust: $("#initiative-strategic-thrust").value,
     strategic_priority_area: $("#initiative-strategic-priority-area").value,
     system_type: $("#initiative-system-type").value,
@@ -1461,10 +2280,14 @@ async function saveInitiative(event) {
     action_plan: $("#initiative-action-plan").value.trim(),
     next_action: $("#initiative-next-action").value.trim() || null,
 
-    estimated_cost: numberValue("#initiative-estimated-cost") || 0,
-    estimated_cost_post_challenge: numberValue("#initiative-estimated-cost-post-challenge") || 0,
+    estimated_cost: numberValue("#initiative-estimated-cost"),
+    estimated_cost_confirmed: $("#initiative-estimated-cost").value !== "",
+    estimated_cost_post_challenge: numberValue("#initiative-estimated-cost-post-challenge"),
+    post_challenge_cost_confirmed: $("#initiative-estimated-cost-post-challenge").value !== "",
     proposed_budget_post_retreat: numberValue("#initiative-proposed-budget"),
+    proposed_budget_confirmed: $("#initiative-proposed-budget").value !== "",
     approved_budget: numberValue("#initiative-approved-budget"),
+    approved_budget_confirmed: $("#initiative-approved-budget").value !== "",
     post_challenge_remarks: $("#initiative-post-challenge-remarks").value.trim() || null,
     finance_remarks: $("#initiative-finance-remarks").value.trim() || null,
     general_remarks: $("#initiative-general-remarks").value.trim() || null,
@@ -1510,8 +2333,10 @@ async function saveInitiative(event) {
 
   if (response.error) return showToast(response.error.message, true);
 
-  closeInitiativeModal();
-  showToast(id ? "Excel-aligned comprehensive initiative updated." : "Excel-aligned comprehensive initiative created.");
+  removeInitiativeDraft(activeInitiativeDraftKey);
+  initiativeFormDirty = false;
+  closeInitiativeModal({ clearDraft: true });
+  showToast(id ? "Comprehensive initiative updated." : "Comprehensive initiative created.");
 
   await loadUserProjects();
   if (currentProfile.role === "super_admin") await loadAdminData();
@@ -1529,13 +2354,517 @@ async function deleteInitiative(projectId) {
   await loadUserProjects();
 }
 
+
+const EXCEL_IMPORT_ALIASES = {
+  source_reference_no: ["No.", "No", "Source Reference", "Source Reference No", "Legacy Reference"],
+  implementation_year: ["YEAR", "Year", "Implementation Year"],
+  department: ["Departments", "Department", "Lead Department"],
+  initiative_name: ["Initiative", "Initiative Name", "Project Name"],
+  project_description: ["Project Description", "Description"],
+  accountable_owner: ["Project Owner Name", "Project Owner", "Accountable Owner", "Owner"],
+  executive_sponsor: ["Executive Sponsor", "Sponsor"],
+  delivery_lead: ["Delivery Lead", "Project Lead"],
+  action_plan: ["Action Plan Date", "Action Plan", "Milestones"],
+  start_date: ["Start Date"],
+  target_date: ["Target Date", "Target Completion Date"],
+  initiative_category: ["Category", "Initiative Category"],
+  system_type: ["System", "System Type"],
+  strategic_thrust: ["Strategic Thrust"],
+  strategic_priority_area: ["Strategic Priority Area"],
+  strategic_pillar: ["HOME31 Strategic Pillar", "Strategic Pillar", "HOME31 Pillar"],
+  estimated_cost: ["Estimated Cost", "Initial Estimated Cost"],
+  cba_ratio: ["CBA Ratio", "Cost Benefit Ratio"],
+  post_challenge_remarks: ["Remarks (Post Challenge Session)", "Post Challenge Remarks", "Challenge Session Remarks"],
+  estimated_cost_post_challenge: ["Estimated Cost (Post Challenge)", "Estimated Cost Post Challenge", "Post Challenge Cost"],
+  ict_classification: ["ICT Classification"],
+  ict_remarks: ["ICT Remarks", "Architecture Considerations"],
+  priority_status: ["Priority Status"],
+  proposed_budget_post_retreat: ["Proposed Budget (Post Retreat)", "Proposed Budget Post Retreat"],
+  approved_budget: ["Approved Budget"],
+  finance_remarks: ["Remarks from Finance (Approved Budget 2027)", "Finance Remarks"],
+  general_remarks: ["Remarks", "General Remarks"],
+  status: ["Status", "Delivery Status"],
+  risk_level: ["Risk Level", "Risk"],
+  progress: ["Progress", "Progress %"],
+  readiness_score: ["Readiness Score", "Readiness %"],
+  problem_opportunity: ["Problem / Opportunity", "Problem Opportunity"],
+  expected_outcome: ["Expected Outcome", "Outcome"],
+  value_measure: ["Value Measure"],
+  value_baseline: ["Value Baseline", "Baseline"],
+  value_target: ["Value Target", "Target"],
+  value_owner: ["Value Owner"],
+  next_action: ["Next Action"],
+  hr_collaboration_status: ["HR Collaboration Status", "HR Collaboration"],
+  people_impact_level: ["People Impact Level", "People Impact"]
+};
+
+function openExcelImportModal() {
+  if (currentProfile?.role !== "super_admin") return;
+  excelImportLastTrigger = document.activeElement;
+  excelImportRawRows = [];
+  excelImportPreparedRows = [];
+  $("#excel-import-file").value = "";
+  $("#excel-import-file-name").textContent = "No file selected.";
+  $("#excel-import-owner").value = "";
+  $("#excel-import-year").value = selectedAdminYear === "all" ? "2027" : String(selectedAdminYear || 2027);
+  $("#excel-import-skip-duplicates").checked = true;
+  $("#excel-import-summary").classList.add("hidden");
+  $("#excel-import-preview-wrap").classList.add("hidden");
+  $("#excel-import-preview-table tbody").innerHTML = "";
+  $("#confirm-excel-import").disabled = true;
+  $("#confirm-excel-import").textContent = "Import Valid Rows";
+
+  if ([...$("#excel-import-created-by").options].some(option => option.value === currentUser?.id)) {
+    $("#excel-import-created-by").value = currentUser.id;
+  }
+
+  const modal = $("#excel-import-modal");
+  modal.classList.remove("hidden");
+  modal.setAttribute("aria-hidden", "false");
+  document.body.classList.add("modal-open");
+  window.setTimeout(() => $("#close-excel-import")?.focus(), 20);
+}
+
+function closeExcelImportModal() {
+  const modal = $("#excel-import-modal");
+  if (!modal || modal.classList.contains("hidden")) return;
+  modal.classList.add("hidden");
+  modal.setAttribute("aria-hidden", "true");
+  if ($("#initiative-modal")?.classList.contains("hidden")) document.body.classList.remove("modal-open");
+  const trigger = excelImportLastTrigger;
+  excelImportLastTrigger = null;
+  if (trigger instanceof HTMLElement && document.contains(trigger)) trigger.focus();
+}
+
+function handleExcelImportKeydown(event) {
+  const modal = $("#excel-import-modal");
+  if (!modal || modal.classList.contains("hidden")) return;
+
+  if (event.key === "Escape") {
+    event.preventDefault();
+    closeExcelImportModal();
+    return;
+  }
+
+  if (event.key !== "Tab") return;
+  const focusable = [...modal.querySelectorAll(
+    'button:not([disabled]):not(.hidden), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'
+  )].filter(element => element.offsetParent !== null);
+  if (!focusable.length) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
+}
+
+function handleExcelImportFileSelection() {
+  const file = $("#excel-import-file").files?.[0];
+  excelImportRawRows = [];
+  excelImportPreparedRows = [];
+  $("#excel-import-file-name").textContent = file
+    ? `${file.name} · ${(file.size / 1024).toLocaleString("en-MY", { maximumFractionDigits: 1 })} KB`
+    : "No file selected.";
+  $("#excel-import-summary").classList.add("hidden");
+  $("#excel-import-preview-wrap").classList.add("hidden");
+  $("#confirm-excel-import").disabled = true;
+}
+
+async function reviewExcelImportFile() {
+  const file = $("#excel-import-file").files?.[0];
+  if (!file) return showToast("Select an Excel or CSV file first.", true);
+  if (!window.XLSX) return showToast("Excel processing library is unavailable. Refresh the page and try again.", true);
+
+  const button = $("#excel-validate-file");
+  button.disabled = true;
+  button.textContent = "Reading workbook…";
+
+  try {
+    const data = await file.arrayBuffer();
+    const workbook = window.XLSX.read(data, { cellDates: true });
+    const firstSheet = workbook.SheetNames[0];
+    if (!firstSheet) throw new Error("The workbook does not contain a worksheet.");
+    const worksheet = workbook.Sheets[firstSheet];
+    excelImportRawRows = window.XLSX.utils.sheet_to_json(worksheet, {
+      defval: "",
+      raw: false,
+      blankrows: false
+    });
+    if (!excelImportRawRows.length) throw new Error("No data rows were found in the first worksheet.");
+    prepareExcelImportRows();
+  } catch (error) {
+    console.error("Excel import review failed", error);
+    excelImportRawRows = [];
+    excelImportPreparedRows = [];
+    $("#excel-import-summary").classList.add("hidden");
+    $("#excel-import-preview-wrap").classList.add("hidden");
+    $("#confirm-excel-import").disabled = true;
+    showToast(error?.message || "Unable to read the selected workbook.", true);
+  } finally {
+    button.disabled = false;
+    button.textContent = "Review File";
+  }
+}
+
+function prepareExcelImportRows() {
+  if (!excelImportRawRows.length) return;
+  const settings = {
+    createdBy: $("#excel-import-created-by").value,
+    fallbackOwner: $("#excel-import-owner").value.trim(),
+    fallbackPillar: $("#excel-import-pillar").value,
+    fallbackYear: Number($("#excel-import-year").value || 2027),
+    skipDuplicates: $("#excel-import-skip-duplicates").checked
+  };
+
+  excelImportPreparedRows = excelImportRawRows.map((rawRow, index) =>
+    mapExcelImportRow(rawRow, index + 2, settings)
+  );
+  renderExcelImportPreview();
+}
+
+function mapExcelImportRow(rawRow, worksheetRow, settings) {
+  const row = normalizeExcelRow(rawRow);
+  const get = field => excelFieldValue(row, EXCEL_IMPORT_ALIASES[field] || []);
+  const warnings = [];
+  const errors = [];
+
+  const yearValue = parseExcelNumber(get("implementation_year"));
+  const implementationYear = Number.isInteger(yearValue) ? yearValue : settings.fallbackYear;
+  if (!yearValue) warnings.push(`Implementation year defaulted to ${settings.fallbackYear}.`);
+  if (!Number.isInteger(implementationYear) || implementationYear < 2026 || implementationYear > 2100) {
+    errors.push("Implementation year must be between 2026 and 2100.");
+  }
+
+  const initiativeName = cleanExcelText(get("initiative_name"));
+  const department = cleanExcelText(get("department"));
+  const rowOwner = cleanExcelText(get("accountable_owner"));
+  const accountableOwner = rowOwner || settings.fallbackOwner;
+  if (!rowOwner && accountableOwner) warnings.push("Fallback project owner used.");
+
+  const rowPillar = cleanExcelText(get("strategic_pillar"));
+  let strategicPillar = rowPillar || settings.fallbackPillar;
+  if (rowPillar && !pillars.includes(rowPillar)) {
+    warnings.push(`Unrecognised pillar “${rowPillar}”; fallback pillar used.`);
+    strategicPillar = settings.fallbackPillar;
+  } else if (!rowPillar && strategicPillar) {
+    warnings.push("Fallback strategic pillar used.");
+  }
+
+  if (!initiativeName) errors.push("Initiative name is required.");
+  if (initiativeName.length > 150) errors.push("Initiative name must not exceed 150 characters.");
+  if (!department) errors.push("Department is required.");
+  if (!accountableOwner) errors.push("Project owner name is required.");
+  if (!strategicPillar || !pillars.includes(strategicPillar)) errors.push("A valid HOME31 strategic pillar is required.");
+  if (!settings.createdBy) errors.push("Record account / submitter is required.");
+
+  const estimatedCost = parseExcelNumber(get("estimated_cost"));
+  const challengedCost = parseExcelNumber(get("estimated_cost_post_challenge"));
+  const proposedBudget = parseExcelNumber(get("proposed_budget_post_retreat"));
+  const approvedBudget = parseExcelNumber(get("approved_budget"));
+  const cbaRatio = parseExcelRatio(get("cba_ratio"));
+  if (!cleanExcelText(get("project_description"))) warnings.push("Project description is blank.");
+  if (approvedBudget === null) warnings.push("Approved Budget is blank; portfolio cost basis will remain unconfirmed.");
+  [
+    ["Estimated cost", estimatedCost],
+    ["Post-challenge cost", challengedCost],
+    ["Proposed budget", proposedBudget],
+    ["Approved budget", approvedBudget],
+    ["CBA ratio", cbaRatio]
+  ].forEach(([label, value]) => {
+    if (value !== null && (!Number.isFinite(value) || value < 0)) errors.push(`${label} must be zero or greater.`);
+  });
+
+  const status = normalizeExcelEnum(get("status"), ["Planning", "In Progress", "At Risk", "On Hold", "Completed"], "Planning", warnings, "status");
+  const riskLevel = normalizeExcelEnum(get("risk_level"), ["Low", "Medium", "High", "Extreme"], "Medium", warnings, "risk level");
+  const hrStatus = normalizeExcelEnum(get("hr_collaboration_status"), ["Not required", "Required", "To be confirmed"], "Not required", warnings, "HR collaboration status");
+  const progress = clampExcelPercent(parseExcelNumber(get("progress")), 0, warnings, "Progress");
+  const readiness = clampExcelPercent(parseExcelNumber(get("readiness_score")), 0, warnings, "Readiness");
+
+  const record = {
+    source_reference_no: cleanExcelText(get("source_reference_no")) || null,
+    implementation_year: implementationYear,
+    initiative_name: initiativeName,
+    project_description: cleanExcelText(get("project_description")) || null,
+    department,
+    initiative_category: cleanExcelText(get("initiative_category")) || "New Initiative",
+    priority: "High",
+    priority_status: cleanExcelText(get("priority_status")) || "Not Assessed",
+    executive_sponsor: cleanExcelText(get("executive_sponsor")) || null,
+    accountable_owner: accountableOwner,
+    delivery_lead: cleanExcelText(get("delivery_lead")) || null,
+    start_date: parseExcelDate(get("start_date")),
+    target_date: parseExcelDate(get("target_date")),
+    status,
+    risk_level: riskLevel,
+    strategic_pillar: strategicPillar,
+    strategic_thrust: cleanExcelText(get("strategic_thrust")) || null,
+    strategic_priority_area: cleanExcelText(get("strategic_priority_area")) || null,
+    system_type: cleanExcelText(get("system_type")) || "Non System",
+    ict_classification: cleanExcelText(get("ict_classification")) || "N/A",
+    ict_remarks: cleanExcelText(get("ict_remarks")) || null,
+    problem_opportunity: cleanExcelText(get("problem_opportunity")) || null,
+    expected_outcome: cleanExcelText(get("expected_outcome")) || null,
+    value_measure: cleanExcelText(get("value_measure")) || null,
+    value_baseline: cleanExcelText(get("value_baseline")) || null,
+    value_target: cleanExcelText(get("value_target")) || null,
+    value_frequency: "Quarterly",
+    value_owner: cleanExcelText(get("value_owner")) || null,
+    cba_ratio: cbaRatio,
+    progress,
+    readiness_score: readiness,
+    action_plan: cleanExcelText(get("action_plan")) || null,
+    next_action: cleanExcelText(get("next_action")) || null,
+    estimated_cost: estimatedCost,
+    estimated_cost_confirmed: estimatedCost !== null,
+    estimated_cost_post_challenge: challengedCost,
+    post_challenge_cost_confirmed: challengedCost !== null,
+    proposed_budget_post_retreat: proposedBudget,
+    proposed_budget_confirmed: proposedBudget !== null,
+    approved_budget: approvedBudget,
+    approved_budget_confirmed: approvedBudget !== null,
+    post_challenge_remarks: cleanExcelText(get("post_challenge_remarks")) || null,
+    finance_remarks: cleanExcelText(get("finance_remarks")) || null,
+    general_remarks: cleanExcelText(get("general_remarks")) || null,
+    hr_collaboration_status: hrStatus,
+    people_impact_level: cleanExcelText(get("people_impact_level")) || "Medium",
+    roles_affected_count: 0,
+    new_roles_required: false,
+    redeployment_required: false,
+    training_required: "To be assessed",
+    training_plan_status: "Not started",
+    change_management_required: "Yes",
+    change_plan_status: "Not started",
+    communication_plan_status: "Not started",
+    hr_review_status: "Not submitted",
+    evidence_problem_status: "Not available",
+    evidence_baseline_status: "Not available",
+    evidence_business_case_status: "Not available",
+    evidence_financial_status: "Not available",
+    evidence_risk_status: "Not available",
+    evidence_implementation_status: "Not available",
+    evidence_hr_status: "Not available",
+    evidence_ict_status: "Not available",
+    evidence_stakeholder_status: "Not available",
+    evidence_challenge_status: "Not available",
+    evidence_completeness: 0,
+    created_by: settings.createdBy,
+    updated_at: new Date().toISOString()
+  };
+
+  const duplicate = errors.length ? false : isLikelyExcelDuplicate(record);
+  if (duplicate) warnings.push(settings.skipDuplicates ? "Likely duplicate — excluded from import." : "Likely duplicate — will be imported because duplicate skipping is off.");
+
+  const importable = errors.length === 0 && !(duplicate && settings.skipDuplicates);
+  const statusType = errors.length ? "error" : (warnings.length ? "warning" : "valid");
+
+  return {
+    worksheetRow,
+    record,
+    errors,
+    warnings,
+    duplicate,
+    importable,
+    status: statusType
+  };
+}
+
+function normalizeExcelRow(rawRow) {
+  const normalized = {};
+  Object.entries(rawRow || {}).forEach(([key, value]) => {
+    normalized[normalizeExcelHeader(key)] = value;
+  });
+  return normalized;
+}
+
+function normalizeExcelHeader(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/[^a-z0-9]+/g, "");
+}
+
+function excelFieldValue(normalizedRow, aliases) {
+  for (const alias of aliases) {
+    const key = normalizeExcelHeader(alias);
+    if (Object.prototype.hasOwnProperty.call(normalizedRow, key)) return normalizedRow[key];
+  }
+  return "";
+}
+
+function cleanExcelText(value) {
+  if (value === null || value === undefined) return "";
+  return String(value).trim();
+}
+
+function parseExcelNumber(value) {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  const text = String(value).trim();
+  if (!text) return null;
+  const cleaned = text.replace(/\s/g, "").replace(/RM/gi, "").replace(/,/g, "").replace(/%$/, "");
+  const number = Number(cleaned);
+  return Number.isFinite(number) ? number : NaN;
+}
+
+function parseExcelRatio(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const text = String(value).trim();
+  const ratio = text.match(/^\s*([\d.]+)\s*:\s*([\d.]+)\s*$/);
+  if (ratio) {
+    const left = Number(ratio[1]);
+    const right = Number(ratio[2]);
+    return left > 0 && Number.isFinite(right / left) ? right / left : NaN;
+  }
+  return parseExcelNumber(value);
+}
+
+function parseExcelDate(value) {
+  if (!value) return null;
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value.toISOString().slice(0, 10);
+  const text = String(value).trim();
+  if (!text) return null;
+  const iso = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  const dmy = text.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
+  if (dmy) return `${dmy[3]}-${String(dmy[2]).padStart(2, "0")}-${String(dmy[1]).padStart(2, "0")}`;
+  const parsed = new Date(text);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString().slice(0, 10);
+}
+
+function normalizeExcelEnum(value, allowed, fallback, warnings, label) {
+  const text = cleanExcelText(value);
+  if (!text) return fallback;
+  const match = allowed.find(item => item.toLowerCase() === text.toLowerCase());
+  if (match) return match;
+  warnings.push(`Unrecognised ${label} “${text}”; ${fallback} used.`);
+  return fallback;
+}
+
+function clampExcelPercent(value, fallback, warnings, label) {
+  if (value === null) return fallback;
+  if (!Number.isFinite(value)) {
+    warnings.push(`${label} was invalid; ${fallback}% used.`);
+    return fallback;
+  }
+  if (value < 0 || value > 100) {
+    warnings.push(`${label} was limited to the 0–100 range.`);
+    return Math.max(0, Math.min(100, Math.round(value)));
+  }
+  return Math.round(value);
+}
+
+function isLikelyExcelDuplicate(record) {
+  return adminProjects.some(project => {
+    const sameYear = projectImplementationYear(project) === Number(record.implementation_year);
+    if (!sameYear) return false;
+    const sourceReference = String(record.source_reference_no || "").trim().toLowerCase();
+    if (sourceReference && String(project.source_reference_no || "").trim().toLowerCase() === sourceReference) return true;
+    return String(project.initiative_name || "").trim().toLowerCase() === String(record.initiative_name || "").trim().toLowerCase() &&
+      String(project.department || "").trim().toLowerCase() === String(record.department || "").trim().toLowerCase();
+  });
+}
+
+function renderExcelImportPreview() {
+  const ready = excelImportPreparedRows.filter(row => row.importable);
+  const warnings = excelImportPreparedRows.filter(row => row.warnings.length).length;
+  const blocked = excelImportPreparedRows.filter(row => !row.importable).length;
+
+  $("#excel-summary-total").textContent = excelImportPreparedRows.length;
+  $("#excel-summary-valid").textContent = ready.length;
+  $("#excel-summary-warning").textContent = warnings;
+  $("#excel-summary-error").textContent = blocked;
+  $("#excel-import-summary").classList.remove("hidden");
+  $("#excel-import-preview-wrap").classList.remove("hidden");
+
+  $("#excel-import-preview-table tbody").innerHTML = excelImportPreparedRows.slice(0, 25).map(row => {
+    const notes = [...row.errors, ...row.warnings].join(" ") || "Ready to import.";
+    const label = row.status === "valid" ? "Ready" : (row.status === "warning" ? (row.importable ? "Review" : "Skipped") : "Blocked");
+    return `
+      <tr>
+        <td>${row.worksheetRow}</td>
+        <td><span class="excel-row-status ${row.status}">${label}</span></td>
+        <td>${escapeHtml(String(row.record.implementation_year || ""))}</td>
+        <td><strong>${escapeHtml(row.record.initiative_name || "Not provided")}</strong></td>
+        <td>${escapeHtml(row.record.accountable_owner || "Not provided")}</td>
+        <td>${escapeHtml(row.record.department || "Not provided")}</td>
+        <td>${row.record.approved_budget_confirmed ? escapeHtml(compactRinggit(row.record.approved_budget)) : "Not recorded"}</td>
+        <td>${escapeHtml(notes)}</td>
+      </tr>`;
+  }).join("");
+
+  const previewStatus = $("#excel-import-preview-status");
+  previewStatus.textContent = ready.length ? `${ready.length} ready` : "No valid rows";
+  previewStatus.classList.toggle("good", ready.length > 0);
+  $("#confirm-excel-import").disabled = ready.length === 0;
+  $("#confirm-excel-import").textContent = ready.length ? `Import ${ready.length} Valid Row${ready.length === 1 ? "" : "s"}` : "Import Valid Rows";
+}
+
+async function importPreparedExcelRows() {
+  if (currentProfile?.role !== "super_admin") return;
+  const records = excelImportPreparedRows.filter(row => row.importable).map(row => row.record);
+  if (!records.length) return showToast("There are no validated rows to import.", true);
+
+  const button = $("#confirm-excel-import");
+  button.disabled = true;
+  button.textContent = `Importing 0 of ${records.length}…`;
+  let imported = 0;
+
+  try {
+    for (let index = 0; index < records.length; index += 100) {
+      const batch = records.slice(index, index + 100);
+      const { error } = await supabase.from("initiatives").insert(batch);
+      if (error) throw error;
+      imported += batch.length;
+      button.textContent = `Importing ${imported} of ${records.length}…`;
+    }
+
+    showToast(`${imported} initiative${imported === 1 ? "" : "s"} imported successfully.`);
+    closeExcelImportModal();
+    await loadAdminData();
+  } catch (error) {
+    console.error("Excel import failed", error);
+    if (imported) {
+      showToast(
+        `${imported} row${imported === 1 ? " was" : "s were"} imported before the error. Reopen Excel Import to review the remaining rows: ${error.message}`,
+        true
+      );
+      closeExcelImportModal();
+      await loadAdminData();
+      return;
+    }
+
+    showToast(error.message || "Excel import failed.", true);
+    button.disabled = false;
+    button.textContent = `Retry ${records.length} Row${records.length === 1 ? "" : "s"}`;
+  }
+}
+
+function downloadExcelImportTemplate() {
+  const link = document.createElement('a');
+  link.href = 'HOME31-Initiative-Import-Template.xlsx?v=7.9.0';
+  link.download = 'HOME31-Initiative-Import-Template.xlsx';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  showToast('Official HOME31 Excel template download started.');
+}
+
 function populatePillars() {
-  ["#initiative-pillar", "#admin-pillar-filter"].forEach(selector => {
+  ["#initiative-pillar", "#admin-pillar-filter", "#excel-import-pillar"].forEach(selector => {
     const element = $(selector);
     if (!element) return;
 
     if (selector === "#admin-pillar-filter") {
       element.innerHTML = '<option value="">All pillars</option>';
+    } else if (selector === "#excel-import-pillar") {
+      element.innerHTML = '<option value="">Select fallback pillar</option>';
+    } else {
+      element.innerHTML = "";
     }
 
     element.insertAdjacentHTML(
@@ -1548,11 +2877,15 @@ function populatePillars() {
 function populateOwnerOptions() {
   if (currentProfile?.role !== "super_admin") return;
 
-  $("#initiative-created-by").innerHTML = adminProfiles.map(profile => `
+  const activeProfiles = adminProfiles.filter(profile => profile.account_status === "active");
+  const options = activeProfiles.map(profile => `
     <option value="${profile.id}">
       ${escapeHtml(profile.full_name || profile.email)} — ${escapeHtml(profile.department || "No department")}
     </option>
   `).join("");
+
+  $("#initiative-created-by").innerHTML = options;
+  $("#excel-import-created-by").innerHTML = options;
 }
 
 function profileFor(userId) {
@@ -1570,7 +2903,7 @@ function initiativeCard(project) {
         <span class="status-pill">${escapeHtml(project.status)}</span>
       </div>
       <span>${escapeHtml(project.initiative_category || "Unclassified")} · ${escapeHtml(project.system_type || "System not recorded")} · ${escapeHtml(project.priority_status || "Not assessed")}</span>
-      <span>Sponsor: ${escapeHtml(project.executive_sponsor || "Not recorded")} · Delivery lead: ${escapeHtml(project.delivery_lead || "Not recorded")}</span>
+      <span>Project owner: ${escapeHtml(project.accountable_owner || "Not recorded")} · Sponsor: ${escapeHtml(project.executive_sponsor || "Not recorded")} · Delivery lead: ${escapeHtml(project.delivery_lead || "Not recorded")}</span>
       <span>Risk: ${escapeHtml(project.risk_level)} · Readiness: ${Number(project.readiness_score || 0)}% · HR: ${escapeHtml(project.hr_collaboration_status || "Not required")} · Evidence: ${Number(project.evidence_completeness || 0)}%</span>
       <div class="progress-track"><span style="width:${Number(project.progress || 0)}%"></span></div>
       <div class="initiative-actions">
@@ -1695,19 +3028,20 @@ function projectsForYear(year=selectedAdminYear) {
   return adminProjects.filter(project => projectImplementationYear(project)===Number(year));
 }
 function selectedYearLabel(year=selectedAdminYear) { return String(year)==="all" ? "All Years" : `AMP${year}`; }
-function costBasisLabel(year=selectedAdminYear) {
-  if (String(year)==="all") return "Year-specific portfolio cost";
-  return Number(year)<=2026 ? "Approved budget" : "Effective post-challenge cost";
+function costBasisLabel() {
+  return "Approved budget";
 }
 function numericValue(value) {
   if (value===null || value===undefined || value==="") return null;
   const n=Number(value); return Number.isFinite(n) ? n : null;
 }
 function projectPortfolioCost(project) {
-  return projectImplementationYear(project)<=2026 ? (numericValue(project.approved_budget)||0) : (numericValue(project.estimated_cost_post_challenge)||0);
+  return financialFieldConfirmed(project, "approved_budget")
+    ? (numericValue(project.approved_budget) || 0)
+    : 0;
 }
 function hasPortfolioCost(project) {
-  return projectImplementationYear(project)<=2026 ? numericValue(project.approved_budget)!==null : numericValue(project.estimated_cost_post_challenge)!==null;
+  return financialFieldConfirmed(project, "approved_budget");
 }
 function calculateProjectReadiness(project) {
   const checks=[
@@ -1724,19 +3058,25 @@ function calculateProjectReadiness(project) {
 }
 function calculateExecutiveMetrics(records=projectsForYear()) {
   const today=new Date().toISOString().slice(0,10), total=records.length;
-  const sum=field=>records.reduce((s,p)=>s+(numericValue(p[field])||0),0);
-  const originalCost=sum("estimated_cost"), effectiveCost=sum("estimated_cost_post_challenge"), proposedBudget=sum("proposed_budget_post_retreat"), approvedBudget=sum("approved_budget");
-  const portfolioCost=records.reduce((s,p)=>s+projectPortfolioCost(p),0);
-  const proposedBudgetCount=records.filter(p=>numericValue(p.proposed_budget_post_retreat)!==null).length;
-  const approvedBudgetCount=records.filter(p=>numericValue(p.approved_budget)!==null).length;
+  const confirmedSum=field=>records.reduce((sum,project)=>
+    sum + (financialFieldConfirmed(project, field) ? (numericValue(project[field]) || 0) : 0), 0);
+  const originalCost=confirmedSum("estimated_cost");
+  const effectiveCost=confirmedSum("estimated_cost_post_challenge");
+  const proposedBudget=confirmedSum("proposed_budget_post_retreat");
+  const approvedBudget=confirmedSum("approved_budget");
+  const portfolioCost=approvedBudget;
+  const originalCostCount=records.filter(p=>financialFieldConfirmed(p,"estimated_cost")).length;
+  const effectiveCostCount=records.filter(p=>financialFieldConfirmed(p,"estimated_cost_post_challenge")).length;
+  const proposedBudgetCount=records.filter(p=>financialFieldConfirmed(p,"proposed_budget_post_retreat")).length;
+  const approvedBudgetCount=records.filter(p=>financialFieldConfirmed(p,"approved_budget")).length;
   const readinessScores=records.map(calculateProjectReadiness);
   const strategicReadiness=total?Math.round(readinessScores.reduce((s,i)=>s+i.score,0)/total):0;
   const fullyReady=readinessScores.filter(i=>i.checksMet===i.totalChecks).length;
   const critical=records.filter(p=>p.risk_level==="Extreme"||p.status==="At Risk"||(p.target_date&&p.target_date<today&&p.status!=="Completed")||!p.accountable_owner);
   const watch=records.filter(p=>!critical.includes(p)&&(p.risk_level==="High"||Number(p.readiness_score||0)<70||Number(p.evidence_completeness||0)<70||p.ict_classification==="New - Pending ICT review"||(["Required","To be confirmed"].includes(p.hr_collaboration_status)&&!["Supported","Not required"].includes(p.hr_review_status))));
   const decisionCounts={
-    selectedCost:records.filter(p=>!hasPortfolioCost(p)).length,
-    approvedBudget:records.filter(p=>numericValue(p.approved_budget)===null).length,
+    approvedBudget:records.filter(p=>!financialFieldConfirmed(p,"approved_budget")).length,
+    postChallengeCost:records.filter(p=>!financialFieldConfirmed(p,"estimated_cost_post_challenge")).length,
     ict:records.filter(p=>p.ict_classification==="New - Pending ICT review"||((p.system_type&&p.system_type!=="Non System")&&!p.ict_classification)).length,
     hr:records.filter(p=>["Required","To be confirmed"].includes(p.hr_collaboration_status)&&!["Supported","Not required"].includes(p.hr_review_status)).length,
     evidence:records.filter(p=>Number(p.evidence_completeness||0)<70).length,
@@ -1744,12 +3084,10 @@ function calculateExecutiveMetrics(records=projectsForYear()) {
   };
   return {
     records,total,originalCost,effectiveCost,proposedBudget,approvedBudget,portfolioCost,challengeReduction:originalCost-effectiveCost,
-    portfolioCostCount:records.filter(hasPortfolioCost).length,proposedBudgetCount,approvedBudgetCount,
+    originalCostCount,effectiveCostCount,portfolioCostCount:approvedBudgetCount,proposedBudgetCount,approvedBudgetCount,
     strategicPriority:records.filter(p=>["Strategic Priority","Corporate Priority"].includes(p.priority_status)||p.priority==="Strategic").length,
     watchlist:records.filter(p=>["Watchlist / Under Review","Not Assessed"].includes(p.priority_status)).length,
     atRisk:records.filter(p=>p.status==="At Risk"||["High","Extreme"].includes(p.risk_level)).length,
-    hrDependent:records.filter(p=>["Required","To be confirmed"].includes(p.hr_collaboration_status)).length,
-    ictDependent:records.filter(p=>(p.system_type&&p.system_type!=="Non System")||!["N/A","None",null,undefined,""].includes(p.ict_classification)).length,
     overdue:records.filter(p=>p.target_date&&p.target_date<today&&p.status!=="Completed").length,
     departments:[...new Set(records.map(p=>p.department).filter(Boolean))],strategicReadiness,fullyReady,followUp:total-fullyReady,
     ownershipCompleteness:total?Math.round(records.filter(p=>p.executive_sponsor&&p.accountable_owner&&p.delivery_lead).length/total*100):0,
@@ -1765,20 +3103,31 @@ function renderAdminOverview() {
   $("#admin-kpi-total-note").textContent=`${selectedYearLabel()} · ${metrics.departments.length} departments`;
   $("#admin-kpi-health").textContent=`${metrics.strategicReadiness}%`;
   $("#admin-kpi-health-note").textContent=`${metrics.fullyReady} initiatives meet all seven checks`;
-  $("#admin-kpi-cost-label").textContent=costBasisLabel();
-  $("#admin-kpi-effective-cost").textContent=compactRinggit(metrics.portfolioCost);
-  $("#admin-kpi-effective-note").textContent=`${metrics.portfolioCostCount}/${metrics.total||0} records populated · ${selectedYearLabel()}`;
-  $("#admin-kpi-reduction").textContent=compactRinggit(metrics.challengeReduction);
-  $("#admin-kpi-reduction-note").textContent=metrics.originalCost?`${formatPercent(metrics.challengeReduction/metrics.originalCost*100)} challenge movement`:"Original estimate not yet populated";
+  $("#admin-kpi-cost-label").textContent="Portfolio cost basis";
+  $("#admin-kpi-effective-cost").textContent=compactRinggit(metrics.approvedBudget);
+  $("#admin-kpi-effective-note").textContent=`Approved Budget · ${metrics.approvedBudgetCount}/${metrics.total||0} records populated`;
+  const challengeMovement=metrics.challengeReduction;
+  $("#admin-kpi-reduction").textContent=compactRinggit(Math.abs(challengeMovement));
+  $("#admin-kpi-reduction-note").textContent=metrics.originalCost
+    ? `${formatPercent(Math.abs(challengeMovement)/metrics.originalCost*100)} ${challengeMovement>=0?"reduction":"increase"} versus original estimate`
+    : "Original estimate not yet populated";
+  const challengeCard=$("#admin-kpi-reduction").closest(".executive-kpi-card");
+  challengeCard?.classList.toggle("positive", challengeMovement>=0);
+  challengeCard?.classList.toggle("danger", challengeMovement<0);
   $("#admin-kpi-priority").textContent=metrics.strategicPriority;
   $("#admin-kpi-risk").textContent=metrics.atRisk;
-  $("#admin-kpi-hr").textContent=metrics.hrDependent;
-  $("#admin-kpi-ict").textContent=metrics.ictDependent;
+  $("#admin-kpi-approved-budget").textContent=compactRinggit(metrics.effectiveCost);
+  $("#admin-kpi-approved-budget-note").textContent=metrics.effectiveCostCount
+    ? `${metrics.effectiveCostCount}/${metrics.total || 0} records with confirmed post-challenge cost`
+    : "Post-challenge cost not yet populated";
+  $("#admin-kpi-approved-coverage").textContent=`${metrics.approvedBudgetCoverage}%`;
+  $("#admin-kpi-approved-coverage-note").textContent=`${metrics.approvedBudgetCount}/${metrics.total || 0} records populated`;
   $("#admin-kpi-users").textContent=adminProfiles.length;
   $("#admin-assurance-ownership").textContent=`${metrics.ownershipCompleteness}%`;
   $("#admin-assurance-evidence").textContent=`${metrics.evidenceAverage}%`;
   $("#admin-assurance-budget").textContent=`${metrics.approvedBudgetCoverage}%`;
   $("#admin-assurance-overdue").textContent=metrics.overdue;
+  renderManagementViews(metrics.records);
   renderExecutiveNarrative(metrics); renderExecutiveAttention(metrics); renderExecutiveBudget(metrics); renderExecutiveReadiness(metrics); renderExecutiveComparison(); renderExecutiveLists(metrics); renderAdminCharts(metrics); bindExecutiveRecordButtons();
 }
 function renderExecutiveNarrative(metrics) {
@@ -1790,7 +3139,7 @@ function renderExecutiveNarrative(metrics) {
 }
 function renderExecutiveAttention(metrics) {
   $("#admin-attention-critical").textContent=metrics.critical.length; $("#admin-attention-watch").textContent=metrics.watch.length; $("#admin-attention-stable").textContent=metrics.stable;
-  const rows=[[`${costBasisLabel()} still blank`,metrics.decisionCounts.selectedCost],["Approved budget still blank",metrics.decisionCounts.approvedBudget],["ICT review / classification pending",metrics.decisionCounts.ict],["HR review or collaboration pending",metrics.decisionCounts.hr],["Evidence completeness below 70%",metrics.decisionCounts.evidence],["Priority decision outstanding",metrics.decisionCounts.priority]];
+  const rows=[["Approved budget still blank",metrics.decisionCounts.approvedBudget],["Post-challenge cost still blank",metrics.decisionCounts.postChallengeCost],["ICT review / classification pending",metrics.decisionCounts.ict],["HR review or collaboration pending",metrics.decisionCounts.hr],["Evidence completeness below 70%",metrics.decisionCounts.evidence],["Priority decision outstanding",metrics.decisionCounts.priority]];
   $("#admin-attention-summary").innerHTML=rows.map(([l,v])=>`<div class="attention-row"><span>${escapeHtml(l)}</span><strong>${v}</strong></div>`).join("");
 }
 function renderExecutiveBudget(metrics) {
@@ -1798,10 +3147,27 @@ function renderExecutiveBudget(metrics) {
   $("#admin-budget-footnote").textContent=`${selectedYearLabel()} contains ${metrics.total} records. The headline KPI uses ${costBasisLabel().toLowerCase()}; the chart displays all four financial stages where populated.`;
 }
 function renderExecutiveReadiness(metrics) {
-  $("#admin-readiness-gauge-value").textContent=`${metrics.strategicReadiness}%`;
-  const departments=departmentReadinessData(metrics.records).slice(0,10);
-  $("#admin-department-readiness-bars").innerHTML=departments.length?departments.map(i=>`<div class="department-readiness-row"><span>${escapeHtml(i.label)}</span><div class="department-readiness-track"><i style="width:${i.value}%"></i></div><strong>${i.value}%</strong></div>`).join(""):'<div class="executive-empty">No departmental readiness data for this year.</div>';
-  $("#admin-readiness-footnote").innerHTML=`<strong>${metrics.fullyReady}</strong> ${selectedYearLabel()} initiatives meet all seven checks; <strong>${metrics.followUp}</strong> have at least one follow-up.`;
+  const score = metrics.strategicReadiness;
+  $("#admin-readiness-gauge-value").textContent = `${score}%`;
+  $("#admin-readiness-progress").style.width = `${score}%`;
+  const track = $("#admin-readiness-progress").closest('[role="progressbar"]');
+  track?.setAttribute("aria-valuenow", String(score));
+  const status = score >= 85 ? "Strong register readiness" : score >= 70 ? "Readiness follow-up required" : "Management intervention required";
+  $("#admin-readiness-status").textContent = `${status} · ${metrics.fullyReady}/${metrics.total || 0} records meet all checks`;
+
+  const departments = departmentReadinessData(metrics.records).slice(0, 10);
+  $("#admin-department-readiness-bars").innerHTML = departments.length
+    ? departments.map(item => `<button class="department-readiness-row" type="button" data-readiness-department="${escapeHtml(item.label)}"><span>${escapeHtml(item.label)}</span><div class="department-readiness-track"><i style="width:${item.value}%"></i></div><strong>${item.value}%</strong></button>`).join("")
+    : '<div class="executive-empty">No departmental readiness data for this year.</div>';
+
+  $$('[data-readiness-department]').forEach(button => button.addEventListener('click', () => {
+    adminQuickFilter = 'readiness-followup';
+    resetAdminFilterControls();
+    $("#admin-search").value = button.dataset.readinessDepartment;
+    showModule('admin-portfolio');
+  }));
+
+  $("#admin-readiness-footnote").innerHTML = `<strong>${metrics.fullyReady}</strong> ${selectedYearLabel()} initiatives meet all seven checks; <strong>${metrics.followUp}</strong> have at least one follow-up.`;
 }
 function comparisonMetricsForYear(year) {
   const records=projectsForYear(String(year));
@@ -1809,67 +3175,478 @@ function comparisonMetricsForYear(year) {
 }
 function renderExecutiveComparison() {
   const a=comparisonMetricsForYear(2026), b=comparisonMetricsForYear(2027);
-  const cards=[["Portfolio items","portfolioItems",String],["Portfolio cost basis","portfolioCost",compactRinggit],["Priority / corporate priority","strategicPriority",String],["Watchlist / under review","watchlist",String],["Zero / unconfirmed cost","zeroBudgetOrConfirmedCost",String],["Departments represented","departments",String]];
+  const cards=[["Portfolio items","portfolioItems",String],["Portfolio cost basis","portfolioCost",compactRinggit],["Priority / corporate priority","strategicPriority",String],["Watchlist / under review","watchlist",String],["Zero / unconfirmed approved budget","zeroBudgetOrConfirmedCost",String],["Departments represented","departments",String]];
   $("#admin-comparison-grid").innerHTML=cards.map(([label,key,fmt])=>{const old=a[key],now=b[key],d=now-old,p=old?d/old*100:0;return `<article class="comparison-card"><span>${escapeHtml(label)}</span><div class="comparison-values"><div><span>AMP2026</span><strong>${fmt(old)}</strong></div><div><span>AMP2027</span><strong>${fmt(now)}</strong></div></div><div class="comparison-delta ${d>0?"negative":""}">${d>=0?"+":""}${key==="portfolioCost"?compactRinggit(d):d.toLocaleString("en-MY")} (${d>=0?"+":""}${p.toFixed(1)}%)</div></article>`;}).join("");
   const badge=$("#admin-comparison-source-status");
   if(!a.records.length&&!b.records.length){badge.textContent="No live year data";badge.className="executive-status-chip critical";}else if(!a.records.length){badge.textContent="AMP2026 data pending";badge.className="executive-status-chip watch";}else if(!b.records.length){badge.textContent="AMP2027 data pending";badge.className="executive-status-chip watch";}else{badge.textContent="Live Supabase comparison";badge.className="executive-status-chip good";}
-  $("#admin-comparison-notes").innerHTML=`<div class="comparison-note"><strong>AMP2026 source:</strong> ${a.records.length} live records. Portfolio cost uses Approved Budget.</div><div class="comparison-note"><strong>AMP2027 source:</strong> ${b.records.length} live records. Portfolio cost uses Estimated Cost Post Challenge.</div><div class="comparison-note"><strong>No fixed baseline:</strong> Adding, editing or deleting year records updates this comparison automatically.</div>`;
+  $("#admin-comparison-notes").innerHTML=`<div class="comparison-note"><strong>AMP2026 source:</strong> ${a.records.length} live records. Portfolio cost uses Approved Budget.</div><div class="comparison-note"><strong>AMP2027 source:</strong> ${b.records.length} live records. Portfolio cost also uses Approved Budget.</div><div class="comparison-note"><strong>Consistent basis:</strong> Both years use confirmed Approved Budget values; adding, editing or deleting records updates the comparison automatically.</div>`;
 }
 function renderExecutiveLists(metrics) {
   const records=metrics.records;
-  const decisions=[[`${costBasisLabel()} coverage`,metrics.decisionCounts.selectedCost],["Budget approval coverage",metrics.decisionCounts.approvedBudget],["ICT assessment",metrics.decisionCounts.ict],["HR and workforce review",metrics.decisionCounts.hr],["Evidence closure",metrics.decisionCounts.evidence],["Priority determination",metrics.decisionCounts.priority]].filter(x=>x[1]>0);
+  const decisions=[["Approved budget coverage",metrics.decisionCounts.approvedBudget],["Post-challenge cost confirmation",metrics.decisionCounts.postChallengeCost],["ICT assessment",metrics.decisionCounts.ict],["HR and workforce review",metrics.decisionCounts.hr],["Evidence closure",metrics.decisionCounts.evidence],["Priority determination",metrics.decisionCounts.priority]].filter(x=>x[1]>0);
   $("#admin-decision-queue").innerHTML=decisions.length?decisions.map(([t,c])=>`<div class="executive-list-item"><div><strong>${escapeHtml(t)}</strong><span>${c} initiatives require follow-up in ${selectedYearLabel()}.</span></div><em>${c}</em></div>`).join(""):'<div class="executive-empty">No executive decision queue is currently outstanding.</div>';
   const top=records.slice().sort((a,b)=>projectPortfolioCost(b)-projectPortfolioCost(a)).filter(p=>projectPortfolioCost(p)>0).slice(0,5);
   $("#admin-top-cost-list").innerHTML=top.length?top.map(p=>`<div class="executive-list-item"><div><strong>${escapeHtml(p.initiative_name)}</strong><span>AMP${projectImplementationYear(p)} · ${escapeHtml(p.department||"No department")}</span></div><button data-executive-open="${p.id}" type="button">${compactRinggit(projectPortfolioCost(p))}</button></div>`).join(""):'<div class="executive-empty">No selected-year cost records are available.</div>';
   const order={Extreme:4,High:3,Medium:2,Low:1}, risk=records.slice().sort((a,b)=>(order[b.risk_level]||0)-(order[a.risk_level]||0)||Number(a.readiness_score||0)-Number(b.readiness_score||0)).slice(0,5);
   $("#admin-top-risk-list").innerHTML=risk.length?risk.map(p=>`<div class="executive-list-item"><div><strong>${escapeHtml(p.initiative_name)}</strong><span>AMP${projectImplementationYear(p)} · ${escapeHtml(p.department||"No department")} · ${Number(p.readiness_score||0)}% readiness</span></div><button data-executive-open="${p.id}" type="button">${escapeHtml(p.risk_level||"Not rated")}</button></div>`).join(""):'<div class="executive-empty">No risk records are available.</div>';
 }
-function renderAdminCharts(metrics=calculateExecutiveMetrics()) {
-  ["adminBudgetJourney","adminReadinessGauge","adminDeliveryLoad","adminCostBenefit","adminPillar","adminHome31Fit","adminDepartmentCost"].forEach(k=>charts[k]?.destroy());
-  if(typeof Chart==="undefined") return;
-  const records=metrics.records, common=executiveChartOptions();
-  charts.adminBudgetJourney=new Chart($("#admin-budget-journey-chart"),{type:"bar",data:{labels:["Original Estimate","Post-Challenge Cost","Proposed Budget","Approved Budget"],datasets:[{data:[metrics.originalCost,metrics.effectiveCost,metrics.proposedBudget,metrics.approvedBudget],backgroundColor:[EXECUTIVE_COLORS.blue,EXECUTIVE_COLORS.gold,EXECUTIVE_COLORS.teal,EXECUTIVE_COLORS.green],borderRadius:8,maxBarThickness:88}]},options:{...common,plugins:{...common.plugins,legend:{display:false},tooltip:{callbacks:{label:c=>formatRinggit(c.raw)}}},scales:executiveMoneyScales()}});
-  charts.adminReadinessGauge=new Chart($("#admin-readiness-gauge-chart"),{type:"doughnut",data:{datasets:[{data:[metrics.strategicReadiness,Math.max(0,100-metrics.strategicReadiness)],backgroundColor:[EXECUTIVE_COLORS.teal,"#294a62"],borderWidth:0,circumference:230,rotation:245,cutout:"78%"}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{enabled:false}}}});
-  const delivery=quarterlyDeliveryData(records);
-  charts.adminDeliveryLoad=new Chart($("#admin-delivery-load-chart"),{data:{labels:delivery.labels,datasets:[{type:"bar",label:"All Active",data:delivery.active,backgroundColor:"rgba(87,153,155,.85)",borderRadius:5},{type:"line",label:"Strategic Priority",data:delivery.priority,borderColor:EXECUTIVE_COLORS.gold,backgroundColor:EXECUTIVE_COLORS.gold,pointRadius:4,borderWidth:2,tension:.25}]},options:{...common,scales:executiveCountScales()}});
-  const groups=["Strategic Priority","Watchlist / Under Review","Recommended","Not Classified"],colors={"Strategic Priority":"#5978c7","Watchlist / Under Review":"#7fae71",Recommended:EXECUTIVE_COLORS.gold,"Not Classified":EXECUTIVE_COLORS.red};
-  charts.adminCostBenefit=new Chart($("#admin-cost-benefit-chart"),{type:"bubble",data:{datasets:groups.map(g=>({label:g,data:records.filter(p=>normalizePriorityGroup(p)===g).map(p=>({x:projectPortfolioCost(p),y:Number(p.cba_ratio||0),r:p.ict_classification==="High"||p.people_impact_level==="Enterprise-wide"?22:p.ict_classification==="Medium"||p.people_impact_level==="High"?16:10,project:p})),backgroundColor:colors[g]+"cc",borderColor:colors[g],borderWidth:1}))},options:{...common,onClick:(_e,elements,chart)=>{if(elements.length){const point=chart.data.datasets[elements[0].datasetIndex].data[elements[0].index];if(point?.project?.id)openInitiativeModal(point.project.id);}},scales:{x:{beginAtZero:true,grid:{color:EXECUTIVE_COLORS.grid},ticks:{color:EXECUTIVE_COLORS.text,callback:v=>compactRinggit(v)},title:{display:true,text:`${selectedYearLabel()} portfolio cost basis`,color:EXECUTIVE_COLORS.text}},y:{beginAtZero:true,grid:{color:EXECUTIVE_COLORS.grid},ticks:{color:EXECUTIVE_COLORS.text},title:{display:true,text:"CBA ratio",color:EXECUTIVE_COLORS.text}}}}});
+function renderAdminCharts(metrics = calculateExecutiveMetrics()) {
+  ["adminBudgetJourney", "adminDeliveryLoad", "adminCostBenefit", "adminPillar", "adminHome31Fit", "adminDepartmentCost"].forEach(key => charts[key]?.destroy());
+  if (typeof Chart === "undefined") return;
+
+  const records = metrics.records;
+  const common = executiveChartOptions();
+  const reduction = metrics.challengeReduction;
+  const reductionRange = [Math.min(metrics.originalCost, metrics.effectiveCost), Math.max(metrics.originalCost, metrics.effectiveCost)];
+
+  charts.adminBudgetJourney = new Chart($("#admin-budget-journey-chart"), {
+    type: "bar",
+    data: {
+      labels: ["Original estimate", "Challenge movement", "Post-challenge", "Proposed budget", "Approved budget"],
+      datasets: [
+        {
+          label: "Financial stage",
+          data: [metrics.originalCost, null, metrics.effectiveCost, metrics.proposedBudget, metrics.approvedBudget],
+          backgroundColor: [EXECUTIVE_SERIES_COLORS.blue, null, EXECUTIVE_SERIES_COLORS.gold, EXECUTIVE_SERIES_COLORS.teal, EXECUTIVE_SERIES_COLORS.green],
+          borderRadius: 8,
+          borderSkipped: false,
+          maxBarThickness: 72
+        },
+        {
+          label: reduction >= 0 ? "Challenge reduction" : "Challenge increase",
+          data: [null, reductionRange, null, null, null],
+          backgroundColor: reduction >= 0 ? EXECUTIVE_SERIES_COLORS.green : EXECUTIVE_SERIES_COLORS.red,
+          borderRadius: 8,
+          borderSkipped: false,
+          maxBarThickness: 72
+        }
+      ]
+    },
+    options: {
+      ...common,
+      interaction: { mode: "index", intersect: false },
+      plugins: {
+        ...common.plugins,
+        legend: { display: false },
+        tooltip: {
+          ...common.plugins.tooltip,
+          callbacks: {
+            label: context => context.dataIndex === 1
+              ? `${reduction >= 0 ? "Reduction" : "Increase"}: ${formatRinggit(Math.abs(reduction))}`
+              : formatRinggit(context.parsed.y)
+          }
+        }
+      },
+      scales: {
+        x: { grid: { display: false }, ticks: { color: EXECUTIVE_COLORS.text, maxRotation: 0, minRotation: 0 } },
+        y: { beginAtZero: true, grid: { color: EXECUTIVE_COLORS.grid }, ticks: { color: EXECUTIVE_COLORS.text, callback: value => compactRinggit(value) } }
+      }
+    }
+  });
+
+  const delivery = quarterlyDeliveryData(records);
+  charts.adminDeliveryLoad = new Chart($("#admin-delivery-load-chart"), {
+    data: {
+      labels: delivery.labels,
+      datasets: [
+        { type: "bar", label: "Planning / On Hold", data: delivery.planning, backgroundColor: "rgba(127,153,175,.78)", borderRadius: 4, stack: "delivery" },
+        { type: "bar", label: "In Progress", data: delivery.inProgress, backgroundColor: "rgba(87,153,155,.88)", borderRadius: 4, stack: "delivery" },
+        { type: "bar", label: "At Risk", data: delivery.atRisk, backgroundColor: "rgba(210,96,102,.9)", borderRadius: 4, stack: "delivery" },
+        { type: "bar", label: "Completed", data: delivery.completed, backgroundColor: "rgba(108,166,155,.78)", borderRadius: 4, stack: "delivery" },
+        { type: "line", label: "Strategic Priority", data: delivery.priority, borderColor: EXECUTIVE_SERIES_COLORS.gold, backgroundColor: EXECUTIVE_SERIES_COLORS.gold, pointRadius: 3, pointHoverRadius: 5, borderWidth: 2, tension: .28, yAxisID: "y" }
+      ]
+    },
+    options: {
+      ...common,
+      plugins: { ...common.plugins, legend: { ...common.plugins.legend, position: "bottom" } },
+      scales: {
+        x: { stacked: true, grid: { display: false }, ticks: { color: EXECUTIVE_COLORS.text } },
+        y: { stacked: true, beginAtZero: true, grid: { color: EXECUTIVE_COLORS.grid }, ticks: { color: EXECUTIVE_COLORS.text, precision: 0 } }
+      }
+    }
+  });
+
+  const matrixRecords = records.filter(project => hasPortfolioCost(project) && numericValue(project.cba_ratio) !== null);
+  const costs = matrixRecords.map(projectPortfolioCost).filter(value => value > 0).sort((a, b) => a - b);
+  const medianCost = costs.length ? costs[Math.floor(costs.length / 2)] : 0;
+  const groups = ["Strategic Priority", "Watchlist / Under Review", "Recommended", "Not Classified"];
+  const colors = {
+    "Strategic Priority": EXECUTIVE_SERIES_COLORS.gold,
+    "Watchlist / Under Review": EXECUTIVE_SERIES_COLORS.blue,
+    Recommended: EXECUTIVE_SERIES_COLORS.teal,
+    "Not Classified": EXECUTIVE_SERIES_COLORS.red
+  };
+
+  charts.adminCostBenefit = new Chart($("#admin-cost-benefit-chart"), {
+    type: "bubble",
+    plugins: [QUADRANT_GUIDE_PLUGIN],
+    data: {
+      datasets: groups.map(group => ({
+        label: group,
+        data: matrixRecords.filter(project => normalizePriorityGroup(project) === group).map(project => ({
+          x: projectPortfolioCost(project),
+          y: Number(project.cba_ratio || 0),
+          r: project.people_impact_level === "Enterprise-wide" ? 14 : project.people_impact_level === "High" ? 11 : 8,
+          project
+        })),
+        backgroundColor: `${colors[group]}cc`,
+        borderColor: colors[group],
+        borderWidth: 1.5
+      }))
+    },
+    options: {
+      ...common,
+      onClick: (_event, elements, chart) => {
+        if (!elements.length) return;
+        const point = chart.data.datasets[elements[0].datasetIndex].data[elements[0].index];
+        if (point?.project?.id) openInitiativeModal(point.project.id);
+      },
+      plugins: {
+        ...common.plugins,
+        legend: { ...common.plugins.legend, position: "bottom" },
+        quadrantGuide: { xThreshold: medianCost, yThreshold: 1 },
+        tooltip: {
+          ...common.plugins.tooltip,
+          callbacks: {
+            title: items => items[0]?.raw?.project?.initiative_name || "Initiative",
+            label: context => [
+              `Approved budget: ${formatRinggit(context.raw.x)}`,
+              `CBA ratio: ${Number(context.raw.y).toFixed(2)}`,
+              `Priority: ${normalizePriorityGroup(context.raw.project)}`
+            ]
+          }
+        }
+      },
+      scales: {
+        x: { beginAtZero: true, grid: { color: EXECUTIVE_COLORS.grid }, ticks: { color: EXECUTIVE_COLORS.text, callback: value => compactRinggit(value) }, title: { display: true, text: `${selectedYearLabel()} approved budget`, color: EXECUTIVE_COLORS.text } },
+        y: { beginAtZero: true, grid: { color: EXECUTIVE_COLORS.grid }, ticks: { color: EXECUTIVE_COLORS.text }, title: { display: true, text: "CBA ratio", color: EXECUTIVE_COLORS.text } }
+      }
+    }
+  });
+
   renderExecutivePillarChart(records);
-  const fits=["Enabler","Supporting Activity","Core Initiative","Duplicate / Consolidate","Needs Validation","BAU · Supporting Enhancement","Policy Review"];
-  charts.adminHome31Fit=new Chart($("#admin-home31-fit-chart"),{type:"doughnut",data:{labels:fits,datasets:[{data:fits.map(f=>records.filter(p=>deriveHome31Fit(p)===f).length),backgroundColor:["#d1ad63","#7f99af","#57999b","#6f86a0","#d9b769","#a76a6f","#8aa1b1"],borderColor:"#102f49",borderWidth:4,cutout:"62%"}]},options:common});
+
+  const fitOrder = ["Core Initiative", "Enabler", "Supporting Activity", "BAU · Supporting Enhancement", "Policy Review", "Duplicate / Consolidate", "Needs Validation"];
+  const fitPalette = [EXECUTIVE_SERIES_COLORS.gold, EXECUTIVE_SERIES_COLORS.teal, EXECUTIVE_SERIES_COLORS.blue, EXECUTIVE_SERIES_COLORS.slate, EXECUTIVE_SERIES_COLORS.green, "#9a7c6f", EXECUTIVE_SERIES_COLORS.red];
+  const fitData = fitOrder.map((label, index) => ({ label, value: records.filter(project => deriveHome31Fit(project) === label).length, color: fitPalette[index] })).filter(item => item.value > 0);
+  const safeFitData = fitData.length ? fitData : [{ label: "No classified records", value: 1, color: "#47667c" }];
+
+  charts.adminHome31Fit = new Chart($("#admin-home31-fit-chart"), {
+    type: "doughnut",
+    data: {
+      labels: safeFitData.map(item => item.label),
+      datasets: [{ data: safeFitData.map(item => item.value), backgroundColor: safeFitData.map(item => item.color), borderColor: "#102f49", borderWidth: 3, cutout: "66%" }]
+    },
+    options: { ...common, plugins: { ...common.plugins, legend: { ...common.plugins.legend, position: "bottom" } } }
+  });
+
   renderLiveDepartmentComparison();
-  $("#admin-delivery-footnote").textContent=`${selectedYearLabel()} quarter load uses action-plan, start and target dates. Undated initiatives are excluded.`;
-  $("#admin-matrix-footnote").textContent=`Click a bubble to open its record. Cost follows ${costBasisLabel().toLowerCase()}.`;
+  $("#admin-delivery-footnote").textContent = `${selectedYearLabel()} quarter load uses action-plan, start and target dates. Undated initiatives are excluded.`;
+  $("#admin-matrix-footnote").textContent = matrixRecords.length
+    ? `Quadrants use median approved budget ${compactRinggit(medianCost)} and CBA ratio 1.00 as decision guides. Click a bubble to open its record.`
+    : `Add both ${costBasisLabel().toLowerCase()} and CBA ratio to display initiatives in the matrix.`;
 }
 function renderLiveDepartmentComparison() {
   charts.adminDepartmentCost?.destroy(); if(typeof Chart==="undefined") return;
   const d26=departmentCostData(projectsForYear("2026")),d27=departmentCostData(projectsForYear("2027")),m26=new Map(d26.map(i=>[i.label,i.value])),m27=new Map(d27.map(i=>[i.label,i.value]));
   const labels=[...new Set([...m26.keys(),...m27.keys()])].map(label=>({label,total:(m26.get(label)||0)+(m27.get(label)||0)})).sort((a,b)=>b.total-a.total).slice(0,12).map(i=>i.label);
-  charts.adminDepartmentCost=new Chart($("#admin-department-cost-chart"),{type:"bar",data:{labels,datasets:[{label:"AMP2026 Approved Budget",data:labels.map(l=>m26.get(l)||0),backgroundColor:EXECUTIVE_COLORS.blue,borderRadius:6},{label:"AMP2027 Post-Challenge Cost",data:labels.map(l=>m27.get(l)||0),backgroundColor:EXECUTIVE_COLORS.gold,borderRadius:6}]},options:{...executiveChartOptions(),indexAxis:"y",onClick:(_e,elements)=>{if(!elements.length)return;selectedAdminYear=elements[0].datasetIndex===0?"2026":"2027";$("#admin-year-select").value=selectedAdminYear;updateAdminYearBadge();$("#admin-search").value=labels[elements[0].index];showModule("admin-portfolio");renderAdminPortfolio();},scales:executiveMoneyScales()}});
+  charts.adminDepartmentCost=new Chart($("#admin-department-cost-chart"),{type:"bar",data:{labels,datasets:[{label:"AMP2026 Approved Budget",data:labels.map(l=>m26.get(l)||0),backgroundColor:EXECUTIVE_COLORS.blue,borderRadius:6},{label:"AMP2027 Approved Budget",data:labels.map(l=>m27.get(l)||0),backgroundColor:EXECUTIVE_COLORS.gold,borderRadius:6}]},options:{...executiveChartOptions(),indexAxis:"y",onClick:(_e,elements)=>{if(!elements.length)return;selectedAdminYear=elements[0].datasetIndex===0?"2026":"2027";$("#admin-year-select").value=selectedAdminYear;updateAdminYearBadge();$("#admin-search").value=labels[elements[0].index];showModule("admin-portfolio");renderAdminPortfolio();},scales:executiveMoneyScales()}});
   const t26=projectsForYear("2026").reduce((s,p)=>s+projectPortfolioCost(p),0),t27=projectsForYear("2027").reduce((s,p)=>s+projectPortfolioCost(p),0);
-  $("#admin-cost-concentration-footnote").textContent=`Live sources: AMP2026 approved budget ${formatRinggit(t26)}; AMP2027 post-challenge cost ${formatRinggit(t27)}. Click a bar to open that year and department.`;
+  $("#admin-cost-concentration-footnote").textContent=`Live sources: AMP2026 approved budget ${formatRinggit(t26)}; AMP2027 approved budget ${formatRinggit(t27)}. Click a bar to open that year and department.`;
 }
-function renderExecutivePillarChart(records=projectsForYear()) {
-  charts.adminPillar?.destroy(); if(typeof Chart==="undefined")return;
-  const data=pillarData(pillarMetric,records);
-  charts.adminPillar=new Chart($("#admin-pillar-chart"),{type:"bar",data:{labels:data.map(i=>shortPillar(i.label)),datasets:[{label:pillarMetric==="count"?"Initiatives":"Portfolio cost",data:data.map(i=>i.value),backgroundColor:EXECUTIVE_COLORS.gold,borderRadius:7}]},options:{...executiveChartOptions(),indexAxis:"y",onClick:(_e,elements)=>{if(!elements.length)return;$("#admin-pillar-filter").value=data[elements[0].index].label;showModule("admin-portfolio");renderAdminPortfolio();},plugins:{...executiveChartOptions().plugins,legend:{display:false}},scales:pillarMetric==="cost"?executiveMoneyScales():executiveCountScales()}});
+function renderExecutivePillarChart(records = projectsForYear()) {
+  charts.adminPillar?.destroy();
+  if (typeof Chart === "undefined") return;
+  const data = pillarData(pillarMetric, records);
+  const palette = ["#d1ad63", "#57999b", "#78a8c4", "#6ca69b", "#7892a6"];
+  charts.adminPillar = new Chart($("#admin-pillar-chart"), {
+    type: "bar",
+    data: {
+      labels: data.map(item => shortPillar(item.label)),
+      datasets: [{
+        label: pillarMetric === "count" ? "Initiatives" : "Portfolio cost",
+        data: data.map(item => item.value),
+        backgroundColor: data.map((_item, index) => palette[index % palette.length]),
+        borderRadius: 7,
+        borderSkipped: false,
+        maxBarThickness: 34
+      }]
+    },
+    options: {
+      ...executiveChartOptions(),
+      indexAxis: "y",
+      onClick: (_event, elements) => {
+        if (!elements.length) return;
+        adminQuickFilter = "";
+        resetAdminFilterControls();
+        $("#admin-pillar-filter").value = data[elements[0].index].label;
+        showModule("admin-portfolio");
+      },
+      plugins: { ...executiveChartOptions().plugins, legend: { display: false } },
+      scales: pillarMetric === "cost" ? executiveMoneyScales() : executiveCountScales()
+    }
+  });
 }
 function pillarData(metric="count",records=projectsForYear()) {return pillars.map(p=>{const related=records.filter(r=>r.strategic_pillar===p);return{label:p,value:metric==="cost"?related.reduce((s,r)=>s+projectPortfolioCost(r),0):related.length};}).sort((a,b)=>b.value-a.value);}
 function departmentCostData(records=projectsForYear()) {const map=new Map();records.forEach(p=>{const d=p.department||"Not recorded";map.set(d,(map.get(d)||0)+projectPortfolioCost(p));});return[...map.entries()].map(([label,value])=>({label,value})).sort((a,b)=>b.value-a.value);}
 function departmentReadinessData(records=projectsForYear()) {const map=new Map();records.forEach(p=>{const d=p.department||"Not recorded",c=map.get(d)||{total:0,count:0};c.total+=calculateProjectReadiness(p).score;c.count++;map.set(d,c);});return[...map.entries()].map(([label,d])=>({label,value:Math.round(d.total/d.count)})).sort((a,b)=>a.value-b.value);}
-function quarterlyDeliveryData(records=projectsForYear()) {const ranges=records.map(project=>({project,range:extractProjectDateRange(project)})).filter(i=>i.range);const fallback=selectedAdminYear==="all"?new Date().getFullYear():Number(selectedAdminYear);const min=ranges.length?Math.min(...ranges.map(i=>i.range.start.getFullYear())):fallback,max=ranges.length?Math.max(...ranges.map(i=>i.range.end.getFullYear())):fallback,quarters=[];for(let year=min;year<=Math.min(min+4,Math.max(min,max));year++)for(let q=1;q<=4;q++){const sm=(q-1)*3;quarters.push({label:`${year} Q${q}`,start:new Date(year,sm,1),end:new Date(year,sm+3,0,23,59,59)});}return{labels:quarters.map(q=>q.label),active:quarters.map(q=>ranges.filter(i=>i.range.start<=q.end&&i.range.end>=q.start).length),priority:quarters.map(q=>ranges.filter(i=>i.range.start<=q.end&&i.range.end>=q.start&&normalizePriorityGroup(i.project)==="Strategic Priority").length)};}
-function getFilteredAdminPortfolioRecords() {const query=($("#admin-search").value||"").toLowerCase(),status=$("#admin-status-filter").value||"",pillar=$("#admin-pillar-filter").value||"",risk=$("#admin-risk-filter").value||"";return projectsForYear().filter(p=>{const profile=profileFor(p.created_by),hay=[projectImplementationYear(p),p.initiative_name,p.accountable_owner,p.executive_sponsor,p.delivery_lead,p.department,p.initiative_category,p.system_type,p.priority_status,profile?.full_name,profile?.email].join(" ").toLowerCase();return(!query||hay.includes(query))&&(!status||p.status===status)&&(!pillar||p.strategic_pillar===pillar)&&(!risk||p.risk_level===risk);});}
+function quarterlyDeliveryData(records = projectsForYear()) {
+  const ranges = records.map(project => ({ project, range: extractProjectDateRange(project) })).filter(item => item.range);
+  const fallback = selectedAdminYear === "all" ? new Date().getFullYear() : Number(selectedAdminYear);
+  const min = ranges.length ? Math.min(...ranges.map(item => item.range.start.getFullYear())) : fallback;
+  const max = ranges.length ? Math.max(...ranges.map(item => item.range.end.getFullYear())) : fallback;
+  const quarters = [];
+  for (let year = min; year <= Math.min(min + 4, Math.max(min, max)); year += 1) {
+    for (let quarter = 1; quarter <= 4; quarter += 1) {
+      const startMonth = (quarter - 1) * 3;
+      quarters.push({ label: `${year} Q${quarter}`, start: new Date(year, startMonth, 1), end: new Date(year, startMonth + 3, 0, 23, 59, 59) });
+    }
+  }
+  const activeInQuarter = quarter => ranges.filter(item => item.range.start <= quarter.end && item.range.end >= quarter.start);
+  return {
+    labels: quarters.map(quarter => quarter.label),
+    planning: quarters.map(quarter => activeInQuarter(quarter).filter(item => ["Planning", "On Hold"].includes(item.project.status)).length),
+    inProgress: quarters.map(quarter => activeInQuarter(quarter).filter(item => item.project.status === "In Progress").length),
+    atRisk: quarters.map(quarter => activeInQuarter(quarter).filter(item => item.project.status === "At Risk").length),
+    completed: quarters.map(quarter => activeInQuarter(quarter).filter(item => item.project.status === "Completed").length),
+    priority: quarters.map(quarter => activeInQuarter(quarter).filter(item => normalizePriorityGroup(item.project) === "Strategic Priority").length)
+  };
+}
+function getFilteredAdminPortfolioRecords() {
+  const query = ($("#admin-search").value || "").toLowerCase();
+  const department = $("#admin-department-filter").value || "";
+  const status = $("#admin-status-filter").value || "";
+  const pillar = $("#admin-pillar-filter").value || "";
+  const risk = $("#admin-risk-filter").value || "";
+  return projectsForYear().filter(project => {
+    const haystack = [projectImplementationYear(project), project.initiative_name, project.accountable_owner, project.executive_sponsor, project.delivery_lead, project.department, project.initiative_category, project.system_type, project.priority_status].join(" ").toLowerCase();
+    return matchesAdminQuickFilter(project) &&
+      (!query || haystack.includes(query)) &&
+      (!department || project.department === department) &&
+      (!status || project.status === status) &&
+      (!pillar || project.strategic_pillar === pillar) &&
+      (!risk || project.risk_level === risk);
+  });
+}
 function renderAdminPortfolio() {
-  if(currentProfile?.role!=="super_admin")return;const yearRecords=projectsForYear(),filtered=getFilteredAdminPortfolioRecords(),cost=filtered.reduce((s,p)=>s+projectPortfolioCost(p),0),approved=filtered.filter(p=>numericValue(p.approved_budget)!==null).length,atRisk=filtered.filter(p=>p.status==="At Risk"||["High","Extreme"].includes(p.risk_level)).length,ready=filtered.filter(p=>Number(p.readiness_score||0)>=80&&!["High","Extreme"].includes(p.risk_level)&&p.status!=="At Risk").length,today=new Date().toISOString().slice(0,10),ownership=filtered.filter(p=>p.executive_sponsor&&p.accountable_owner&&p.delivery_lead).length,evidence=filtered.length?Math.round(filtered.reduce((s,p)=>s+Number(p.evidence_completeness||0),0)/filtered.length):0,ict=filtered.filter(p=>p.ict_classification==="New - Pending ICT review"||((p.system_type&&p.system_type!=="Non System")&&!p.ict_classification)).length,hr=filtered.filter(p=>["Required","To be confirmed"].includes(p.hr_collaboration_status)&&!["Supported","Not required"].includes(p.hr_review_status)).length,overdue=filtered.filter(p=>p.target_date&&p.target_date<today&&p.status!=="Completed").length;
+  if(currentProfile?.role!=="super_admin")return;const yearRecords=projectsForYear(),filtered=getFilteredAdminPortfolioRecords(),cost=filtered.reduce((s,p)=>s+projectPortfolioCost(p),0),approved=filtered.filter(p=>financialFieldConfirmed(p,"approved_budget")).length,atRisk=filtered.filter(p=>p.status==="At Risk"||["High","Extreme"].includes(p.risk_level)).length,ready=filtered.filter(p=>Number(p.readiness_score||0)>=80&&!["High","Extreme"].includes(p.risk_level)&&p.status!=="At Risk").length,today=new Date().toISOString().slice(0,10),ownership=filtered.filter(p=>p.executive_sponsor&&p.accountable_owner&&p.delivery_lead).length,evidence=filtered.length?Math.round(filtered.reduce((s,p)=>s+Number(p.evidence_completeness||0),0)/filtered.length):0,ict=filtered.filter(p=>p.ict_classification==="New - Pending ICT review"||((p.system_type&&p.system_type!=="Non System")&&!p.ict_classification)).length,hr=filtered.filter(p=>["Required","To be confirmed"].includes(p.hr_collaboration_status)&&!["Supported","Not required"].includes(p.hr_review_status)).length,overdue=filtered.filter(p=>p.target_date&&p.target_date<today&&p.status!=="Completed").length;
   $("#portfolio-kpi-total").textContent=yearRecords.length;$("#portfolio-kpi-filtered").textContent=filtered.length;$("#portfolio-kpi-cost").textContent=compactRinggit(cost);$("#portfolio-kpi-budget").textContent=`${filtered.length?Math.round(approved/filtered.length*100):0}%`;$("#portfolio-kpi-risk").textContent=atRisk;$("#portfolio-kpi-ready").textContent=ready;$("#portfolio-table-count").textContent=`${selectedYearLabel()} · ${filtered.length} record${filtered.length===1?"":"s"}`;$("#portfolio-assurance-ownership").textContent=`${filtered.length?Math.round(ownership/filtered.length*100):0}%`;$("#portfolio-assurance-evidence").textContent=`${evidence}%`;$("#portfolio-assurance-ict").textContent=ict;$("#portfolio-assurance-hr").textContent=hr;$("#portfolio-assurance-overdue").textContent=overdue;
-  const filterCount=[$("#admin-search").value,$("#admin-status-filter").value,$("#admin-pillar-filter").value,$("#admin-risk-filter").value].filter(Boolean).length;$("#portfolio-selection-badge").textContent=filterCount?`${selectedYearLabel()} · ${filterCount} active filters`:selectedYearLabel();
+  const filterCount=[$("#admin-search").value,$("#admin-department-filter").value,$("#admin-status-filter").value,$("#admin-pillar-filter").value,$("#admin-risk-filter").value].filter(Boolean).length+(adminQuickFilter?1:0);const quickLabel=adminQuickFilterLabel();$("#portfolio-selection-badge").textContent=quickLabel?`${selectedYearLabel()} · ${quickLabel}`:filterCount?`${selectedYearLabel()} · ${filterCount} active filters`:selectedYearLabel();
   const topD=aggregateFiltered(filtered,p=>p.department||"Not recorded",projectPortfolioCost)[0],topP=aggregateFiltered(filtered,p=>p.strategic_pillar||"Not recorded",()=>1)[0];
   $("#portfolio-selection-insight").textContent=filtered.length?`${selectedYearLabel()} selection contains ${filtered.length} initiatives with ${formatRinggit(cost)} under the ${costBasisLabel().toLowerCase()} rule. ${atRisk} require risk attention and ${ready} meet the delivery-ready rule.`:`No ${selectedYearLabel()} initiative matches the selected filters.`;
-  $("#portfolio-selection-facts").innerHTML=`<article><strong>${escapeHtml(topD?.label||"No data")}</strong><span>Highest selected cost: ${topD?compactRinggit(topD.value):"RM0"}</span></article><article><strong>${escapeHtml(shortPillar(topP?.label||"No data"))}</strong><span>Largest concentration: ${topP?.value||0} records</span></article><article><strong>${evidence}% evidence maturity</strong><span>${hr} HR and ${ict} ICT follow-ups remain.</span></article>`;
-  $("#admin-portfolio-table tbody").innerHTML=filtered.length?filtered.map(p=>{const profile=profileFor(p.created_by);return`<tr><td><span class="portfolio-year-pill">AMP${projectImplementationYear(p)}</span></td><td><strong>${escapeHtml(p.initiative_name)}</strong></td><td>${escapeHtml(profile?.full_name||profile?.email||"Unknown")}</td><td>${escapeHtml(p.department)}</td><td>${escapeHtml(p.initiative_category||"Not recorded")}</td><td>${escapeHtml(p.system_type||"Not recorded")}</td><td>${escapeHtml(p.priority_status||"Not assessed")}</td><td>${escapeHtml(p.strategic_pillar)}</td><td><span class="status-pill">${escapeHtml(p.status)}</span></td><td><span class="risk-pill">${escapeHtml(p.risk_level)}</span></td><td>${formatRinggit(p.approved_budget)}</td><td>${Number(p.readiness_score||0)}%</td><td>${progressBar(p.progress)}</td><td><button class="text-button" data-admin-edit="${p.id}" type="button">Edit</button></td></tr>`;}).join(""):'<tr><td colspan="14">No records match the active year and filters.</td></tr>';
+  $("#portfolio-selection-facts").innerHTML=`<article><strong>${escapeHtml(topD?.label||"No data")}</strong><span>Highest approved budget: ${topD?compactRinggit(topD.value):"RM0"}</span></article><article><strong>${escapeHtml(shortPillar(topP?.label||"No data"))}</strong><span>Largest concentration: ${topP?.value||0} records</span></article><article><strong>${evidence}% evidence maturity</strong><span>${hr} HR and ${ict} ICT follow-ups remain.</span></article>`;
+  $("#admin-portfolio-table tbody").innerHTML=filtered.length?filtered.map(p=>`<tr><td><span class="portfolio-year-pill">AMP${projectImplementationYear(p)}</span></td><td><strong>${escapeHtml(p.initiative_name)}</strong></td><td>${escapeHtml(p.accountable_owner||"Not recorded")}</td><td>${escapeHtml(p.department)}</td><td>${escapeHtml(p.initiative_category||"Not recorded")}</td><td>${escapeHtml(p.system_type||"Not recorded")}</td><td>${escapeHtml(p.priority_status||"Not assessed")}</td><td>${escapeHtml(p.strategic_pillar)}</td><td><span class="status-pill">${escapeHtml(p.status)}</span></td><td><span class="risk-pill">${escapeHtml(p.risk_level)}</span></td><td>${financialFieldConfirmed(p,"approved_budget") ? formatRinggit(p.approved_budget) : "Not recorded"}</td><td>${Number(p.readiness_score||0)}%</td><td>${progressBar(p.progress)}</td><td><button class="text-button" data-admin-edit="${p.id}" type="button">Edit</button></td></tr>`).join(""):'<tr><td colspan="14">No records match the active year and filters.</td></tr>';
+  renderPortfolioActiveFilters();
+  renderContinuityRegister();
   $$('[data-admin-edit]').forEach(b=>b.addEventListener('click',()=>openInitiativeModal(b.dataset.adminEdit)));
 }
-function exportAdminPortfolioCsv() {if(currentProfile?.role!=="super_admin")return;const records=getFilteredAdminPortfolioRecords(),headers=["Implementation Year","Initiative","Department","Executive Sponsor","Accountable Owner","Delivery Lead","Category","System Type","Priority Status","Strategic Pillar","Status","Risk","Year-Specific Portfolio Cost","Approved Budget","Readiness","Progress","Evidence Completeness"],rows=records.map(p=>[projectImplementationYear(p),p.initiative_name,p.department,p.executive_sponsor,p.accountable_owner,p.delivery_lead,p.initiative_category,p.system_type,p.priority_status,p.strategic_pillar,p.status,p.risk_level,projectPortfolioCost(p),p.approved_budget??"",p.readiness_score??0,p.progress??0,p.evidence_completeness??0]),csv=[headers,...rows].map(r=>r.map(v=>`"${String(v??"").replaceAll('"','""')}"`).join(',')).join('\n'),blob=new Blob([csv],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=`HOME31-${selectedYearLabel().replaceAll(' ','-')}-Portfolio-${new Date().toISOString().slice(0,10)}.csv`;link.click();URL.revokeObjectURL(url);}
+
+function continuityNormalisedTitle(project) {
+  return String(project?.initiative_name || "")
+    .toLowerCase()
+    .replace(/\b(?:amp)?20(?:26|27)\b/g, " ")
+    .replace(/\bno\.?\s*\d+[a-z]?\b/g, " ")
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function continuityTokens(value) {
+  return new Set(String(value || "")
+    .toLowerCase()
+    .replace(/\b(?:amp)?20(?:26|27)\b/g, " ")
+    .replace(/\bno\.?\s*\d+[a-z]?\b/g, " ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .split(/\s+/)
+    .filter(token => token.length > 2 && !CONTINUITY_STOP_WORDS.has(token)));
+}
+
+function continuitySetScores(left, right) {
+  const a = continuityTokens(left);
+  const b = continuityTokens(right);
+  if (!a.size || !b.size) return { jaccard: 0, containment: 0, shared: 0 };
+  const shared = [...a].filter(token => b.has(token)).length;
+  const union = new Set([...a, ...b]).size;
+  return {
+    jaccard: union ? shared / union : 0,
+    containment: Math.min(a.size, b.size) ? shared / Math.min(a.size, b.size) : 0,
+    shared
+  };
+}
+
+function continuityCandidateScore(previous, current) {
+  const previousTitle = continuityNormalisedTitle(previous);
+  const currentTitle = continuityNormalisedTitle(current);
+  const title = continuitySetScores(previousTitle, currentTitle);
+  const previousRef = String(previous.source_reference_no || "").trim().toLowerCase();
+  const currentRef = String(current.source_reference_no || "").trim().toLowerCase();
+  const exactReference = Boolean(previousRef && currentRef && previousRef === currentRef);
+  const exactTitle = Boolean(previousTitle && previousTitle === currentTitle);
+  const departmentMatch = Boolean(previous.department && current.department && previous.department === current.department);
+  const pillarMatch = Boolean(previous.strategic_pillar && current.strategic_pillar && previous.strategic_pillar === current.strategic_pillar);
+  const description = continuitySetScores(previous.project_description || previous.problem_opportunity, current.project_description || current.problem_opportunity);
+  const meaningfulTitle = title.shared >= 2 || (title.shared >= 1 && title.containment >= .66);
+  if (!exactReference && !exactTitle && !meaningfulTitle) return null;
+  let score = exactReference ? 1 : exactTitle ? .97 : (title.jaccard * .38 + title.containment * .37);
+  if (!exactReference && !exactTitle) {
+    if (departmentMatch) score += .11;
+    if (pillarMatch) score += .08;
+    score += Math.min(.06, description.containment * .06);
+  }
+  score = Math.max(0, Math.min(1, score));
+  if (!exactReference && !exactTitle && score < .50) return null;
+  return { score, exactReference, exactTitle, title };
+}
+
+function buildContinuityRegister() {
+  const previous = adminProjects.filter(project => projectImplementationYear(project) === 2026);
+  const current = adminProjects.filter(project => projectImplementationYear(project) === 2027);
+  const candidates = [];
+  previous.forEach(previousProject => {
+    current.forEach(currentProject => {
+      const result = continuityCandidateScore(previousProject, currentProject);
+      if (result) candidates.push({ previous: previousProject, current: currentProject, ...result });
+    });
+  });
+  candidates.sort((a, b) => b.score - a.score);
+  const usedPrevious = new Set();
+  const usedCurrent = new Set();
+  const pairs = [];
+  candidates.forEach(candidate => {
+    if (usedPrevious.has(candidate.previous.id) || usedCurrent.has(candidate.current.id)) return;
+    usedPrevious.add(candidate.previous.id);
+    usedCurrent.add(candidate.current.id);
+    pairs.push({ ...candidate, continuityType: classifyContinuityPair(candidate) });
+  });
+  current.filter(project => !usedCurrent.has(project.id)).forEach(project => pairs.push({
+    previous: null, current: project, score: 0, continuityType: "New / unmatched"
+  }));
+  previous.filter(project => !usedPrevious.has(project.id)).forEach(project => pairs.push({
+    previous: project, current: null, score: 0, continuityType: "No identified continuation"
+  }));
+  return pairs;
+}
+
+function classifyContinuityPair(pair) {
+  const previous = pair.previous;
+  const current = pair.current;
+  if (!previous) return "New / unmatched";
+  if (!current) return "No identified continuation";
+  const title = `${continuityNormalisedTitle(previous)} ${continuityNormalisedTitle(current)}`;
+  const recurringTerms = /\b(annual|annually|yearly|renewal|maintenance|audit|write off|writeoff)\b/i.test(`${previous.initiative_name || ""} ${current.initiative_name || ""}`);
+  const currentTokens = continuityTokens(current.initiative_name);
+  const previousTokens = continuityTokens(previous.initiative_name);
+  const addedTokens = [...currentTokens].filter(token => !previousTokens.has(token)).length;
+  const previousCost = financialFieldConfirmed(previous, "approved_budget") ? projectPortfolioCost(previous) : null;
+  const currentCost = financialFieldConfirmed(current, "approved_budget") ? projectPortfolioCost(current) : null;
+  const materialIncrease = previousCost !== null && currentCost !== null && previousCost > 0 && (currentCost - previousCost) / previousCost >= .20;
+  if (recurringTerms && (pair.exactTitle || pair.score >= .78)) return "Recurring annual activity";
+  if (addedTokens >= 2 || materialIncrease) return "Expanded continuation";
+  if (pair.exactReference || pair.exactTitle || pair.score >= .72 || current.initiative_category === "Carry Forward Initiative") return "Direct carry-forward";
+  return "Evolved / reframed";
+}
+
+function continuityTheme(pair) {
+  const project = pair.current || pair.previous;
+  return String(project?.initiative_name || "Unclassified initiative")
+    .replace(/\b(?:AMP)?20(?:26|27)\b/gi, "")
+    .replace(/\bNo\.?\s*\d+[A-Za-z]?\b/gi, "")
+    .replace(/\s+/g, " ")
+    .replace(/^[\s,:;–—-]+|[\s,:;–—-]+$/g, "") || project?.initiative_name || "Unclassified initiative";
+}
+
+function continuityTreatment(type) {
+  return {
+    "Recurring annual activity": "Track annual approval, delivery and year-on-year outcome consistently.",
+    "Direct carry-forward": "Manage as one continuing programme with a shared benefits baseline.",
+    "Expanded continuation": "Confirm expanded scope, incremental budget and accountable ownership.",
+    "Evolved / reframed": "Validate the changed scope and document the transition from AMP2026.",
+    "New / unmatched": "Confirm that this is genuinely new and not a renamed prior-year initiative.",
+    "No identified continuation": "Confirm closure, completion, deferral or omission from AMP2027."
+  }[type] || "Management review required.";
+}
+
+function continuityPairMatchesControlFilters(pair) {
+  const projects = [pair.previous, pair.current].filter(Boolean);
+  const query = ($("#admin-search").value || "").trim().toLowerCase();
+  const department = $("#admin-department-filter").value || "";
+  const status = $("#admin-status-filter").value || "";
+  const pillar = $("#admin-pillar-filter").value || "";
+  const risk = $("#admin-risk-filter").value || "";
+  const haystack = projects.map(project => [
+    project.initiative_name, project.accountable_owner, project.department,
+    project.source_reference_no, project.strategic_pillar
+  ].join(" ")).join(" ").toLowerCase();
+  return (!adminQuickFilter || projects.some(project => matchesAdminQuickFilter(project))) &&
+    (!query || haystack.includes(query)) &&
+    (!department || projects.some(project => project.department === department)) &&
+    (!status || projects.some(project => project.status === status)) &&
+    (!pillar || projects.some(project => project.strategic_pillar === pillar)) &&
+    (!risk || projects.some(project => project.risk_level === risk));
+}
+
+function continuityBudgetMovement(pair) {
+  const previousConfirmed = pair.previous && financialFieldConfirmed(pair.previous, "approved_budget");
+  const currentConfirmed = pair.current && financialFieldConfirmed(pair.current, "approved_budget");
+  if (!previousConfirmed || !currentConfirmed) return { text: "Not comparable", percent: "Approved Budget missing", className: "neutral" };
+  const previousCost = projectPortfolioCost(pair.previous);
+  const currentCost = projectPortfolioCost(pair.current);
+  const movement = currentCost - previousCost;
+  const percent = previousCost ? movement / previousCost * 100 : (currentCost ? 100 : 0);
+  return {
+    text: `${movement > 0 ? "+" : ""}${formatRinggit(movement)}`,
+    percent: `${percent > 0 ? "+" : ""}${percent.toFixed(1)}%`,
+    className: movement > 0 ? "increase" : movement < 0 ? "reduction" : "neutral"
+  };
+}
+
+function continuityProjectCell(project, year) {
+  if (!project) return `<span class="continuity-empty">No identified ${year === 2026 ? "source" : "continuation"}</span>`;
+  const budget = financialFieldConfirmed(project, "approved_budget") ? `${formatRinggit(project.approved_budget)} approved` : "Approved Budget not confirmed";
+  return `<button class="continuity-project-button" type="button" data-continuity-open="${project.id}"><strong>${escapeHtml(project.source_reference_no ? `${project.source_reference_no} · ` : "")}${escapeHtml(project.initiative_name)}</strong></button><span>${escapeHtml(project.department || "Department not recorded")}</span><em>${escapeHtml(budget)}</em>`;
+}
+
+function renderContinuityRegister() {
+  if (currentProfile?.role !== "super_admin" || !$("#portfolio-continuity-table")) return;
+  const allPairs = buildContinuityRegister();
+  const identified = allPairs.filter(pair => pair.previous && pair.current).length;
+  const newCount = allPairs.filter(pair => !pair.previous && pair.current).length;
+  const endedCount = allPairs.filter(pair => pair.previous && !pair.current).length;
+  $("#continuity-kpi-identified").textContent = identified;
+  $("#continuity-kpi-new").textContent = newCount;
+  $("#continuity-kpi-carried").textContent = identified;
+  $("#continuity-kpi-ended").textContent = endedCount;
+
+  const type = $("#continuity-type-filter").value || "";
+  const search = ($("#continuity-search").value || "").trim().toLowerCase();
+  const filtered = allPairs.filter(pair => {
+    const text = `${continuityTheme(pair)} ${pair.previous?.initiative_name || ""} ${pair.current?.initiative_name || ""}`.toLowerCase();
+    return continuityPairMatchesControlFilters(pair) && (!type || pair.continuityType === type) && (!search || text.includes(search));
+  });
+
+  $("#continuity-table-count").textContent = `${filtered.length} continuity row${filtered.length === 1 ? "" : "s"}`;
+  $("#portfolio-continuity-table tbody").innerHTML = filtered.length ? filtered.map(pair => {
+    const movement = continuityBudgetMovement(pair);
+    const confidence = pair.previous && pair.current ? `${Math.round(pair.score * 100)}% match confidence` : "Unmatched record";
+    return `<tr>
+      <td><strong>${escapeHtml(continuityTheme(pair))}</strong><span>${escapeHtml(continuityTreatment(pair.continuityType))}</span></td>
+      <td>${continuityProjectCell(pair.previous, 2026)}</td>
+      <td>${continuityProjectCell(pair.current, 2027)}</td>
+      <td><strong class="continuity-movement ${movement.className}">${escapeHtml(movement.text)}</strong><span>${escapeHtml(movement.percent)}</span></td>
+      <td><span class="continuity-type-badge">${escapeHtml(pair.continuityType)}</span><small>${escapeHtml(confidence)}</small></td>
+    </tr>`;
+  }).join("") : '<tr><td colspan="5">No AMP2026–AMP2027 continuity rows match the selected filters.</td></tr>';
+
+  $$('[data-continuity-open]').forEach(button => button.addEventListener('click', () => openInitiativeModal(button.dataset.continuityOpen)));
+}
+
+function safeCsvCell(value) {
+  let text = String(value ?? "");
+  if (/^[=+\-@]/.test(text)) text = `'${text}`;
+  return `"${text.replaceAll('"', '""')}"`;
+}
+function exportAdminPortfolioCsv() {if(currentProfile?.role!=="super_admin")return;const records=getFilteredAdminPortfolioRecords(),headers=["Implementation Year","Initiative","Department","Executive Sponsor","Project Owner Name","Delivery Lead","Category","System Type","Priority Status","Strategic Pillar","Status","Risk","Approved Budget","Post-Challenge Cost","Readiness","Progress","Evidence Completeness"],rows=records.map(p=>[projectImplementationYear(p),p.initiative_name,p.department,p.executive_sponsor,p.accountable_owner,p.delivery_lead,p.initiative_category,p.system_type,p.priority_status,p.strategic_pillar,p.status,p.risk_level,financialFieldConfirmed(p,"approved_budget")?(p.approved_budget??0):"",financialFieldConfirmed(p,"estimated_cost_post_challenge")?(p.estimated_cost_post_challenge??0):"",p.readiness_score??0,p.progress??0,p.evidence_completeness??0]),csv="\uFEFF"+[headers,...rows].map(r=>r.map(safeCsvCell).join(',')).join('\n'),blob=new Blob([csv],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=`HOME31-${selectedYearLabel().replaceAll(' ','-')}-Portfolio-${new Date().toISOString().slice(0,10)}.csv`;link.click();URL.revokeObjectURL(url);}
 function renderAdminExceptions() {
   if(currentProfile?.role!=="super_admin")return;const records=projectsForYear(),today=new Date().toISOString().slice(0,10),risk=records.filter(p=>["High","Extreme"].includes(p.risk_level)),readiness=records.filter(p=>Number(p.readiness_score||0)<70),overdue=records.filter(p=>p.target_date&&p.target_date<today&&p.status!=="Completed"),hrPending=records.filter(p=>["Required","To be confirmed"].includes(p.hr_collaboration_status)&&!["Supported","Not required"].includes(p.hr_review_status)),ictPending=records.filter(p=>p.ict_classification==="New - Pending ICT review"||((p.system_type&&p.system_type!=="Non System")&&!p.ict_classification)),evidence=records.filter(p=>Number(p.evidence_completeness||0)<70);
   $("#admin-exception-risk-count").textContent=risk.length;$("#admin-exception-readiness-count").textContent=readiness.length;$("#admin-exception-overdue-count").textContent=overdue.length;$("#admin-exception-hr-count").textContent=hrPending.length;$("#admin-exception-ict-count").textContent=ictPending.length;$("#admin-exception-evidence-count").textContent=evidence.length;$("#admin-exception-risk-badge").textContent=risk.length;$("#admin-exception-readiness-badge").textContent=readiness.length;$("#admin-exception-overdue-badge").textContent=overdue.length;
@@ -1886,7 +3663,7 @@ function renderAdminExceptionCharts(data) {
 
 
 /* ================================================================
-   V7.6 DISPLAY SETTINGS AND RESPONSIVE READABILITY
+   V7.7.1 DISPLAY SETTINGS AND RESPONSIVE READABILITY
    ================================================================ */
 
 function initialiseDisplaySettings() {
@@ -1895,7 +3672,7 @@ function initialiseDisplaySettings() {
     if (DISPLAY_MODES.includes(saved.size)) currentDisplaySize = saved.size;
     highContrastEnabled = Boolean(saved.highContrast);
   } catch (_error) {
-    currentDisplaySize = "comfortable";
+    currentDisplaySize = "standard";
     highContrastEnabled = false;
   }
 
@@ -1974,7 +3751,7 @@ function applyDisplaySettings(announce = true) {
 }
 
 function resetDisplaySettings() {
-  currentDisplaySize = "comfortable";
+  currentDisplaySize = "standard";
   highContrastEnabled = false;
   applyDisplaySettings();
 }
@@ -2060,10 +3837,14 @@ function updateChartReadability() {
   Chart.defaults.font.family =
     '"IBM Plex Sans", "Aptos", "Segoe UI Variable", "Segoe UI", Arial, sans-serif';
   Chart.defaults.font.size = size;
-  Chart.defaults.color = highContrastEnabled ? "#eef6fa" : Chart.defaults.color;
+  Chart.defaults.color = "#33424c";
 
   Object.values(charts).forEach(chart => {
     if (!chart?.options) return;
+    const darkSurface = Boolean(chart.canvas?.closest(".executive-command-centre, .admin-command-module"));
+    const readableColor = darkSurface
+      ? (highContrastEnabled ? "#ffffff" : EXECUTIVE_COLORS.text)
+      : "#251b1c";
 
     const legendLabels = chart.options.plugins?.legend?.labels;
     if (legendLabels) {
@@ -2072,7 +3853,7 @@ function updateChartReadability() {
         family: Chart.defaults.font.family,
         size
       };
-      legendLabels.color = highContrastEnabled ? "#eef6fa" : legendLabels.color;
+      legendLabels.color = readableColor;
       legendLabels.padding = Math.max(Number(legendLabels.padding || 12), 14);
     }
 
@@ -2083,7 +3864,7 @@ function updateChartReadability() {
           family: Chart.defaults.font.family,
           size
         };
-        if (highContrastEnabled) scale.ticks.color = "#eef6fa";
+        scale.ticks.color = readableColor;
       }
 
       if (scale?.title) {
@@ -2093,7 +3874,7 @@ function updateChartReadability() {
           size: size + 1,
           weight: "600"
         };
-        if (highContrastEnabled) scale.title.color = "#eef6fa";
+        scale.title.color = readableColor;
       }
     });
 
