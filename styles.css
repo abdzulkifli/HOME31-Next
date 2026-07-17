@@ -3802,3 +3802,89 @@ body.modal-open .display-settings{
   .executive-workspace-tab{min-height:40px;padding:9px 12px;font-size:13px}
 }
 @media(prefers-reduced-motion:reduce){.executive-workspace-tabs{scroll-behavior:auto}}
+
+
+/* ================================================================
+   V7.9.4.3 PROJECT MANAGEMENT WORKSPACE
+   ================================================================ */
+.project-management-hero{
+  background:
+    radial-gradient(circle at 88% 15%,rgba(209,173,99,.15),transparent 30%),
+    linear-gradient(135deg,#123854,#0b2941 60%,#102e45);
+}
+.pm-control-panel,.pm-board-panel,.pm-register-panel{margin-top:14px}
+.pm-filter-grid{
+  display:grid;
+  grid-template-columns:minmax(230px,1.25fr) repeat(4,minmax(150px,.75fr));
+  gap:10px;
+}
+.pm-filter-grid label{display:grid;gap:6px}
+.pm-filter-grid label>span{
+  color:#9fb5c4;font-size:var(--read-sm);text-transform:uppercase;
+  letter-spacing:.07em;font-weight:700;
+}
+.pm-filter-grid input,.pm-filter-grid select{
+  width:100%;min-height:var(--read-control);padding:12px 14px;
+  border:1px solid #3a5b72;border-radius:11px;color:#edf4f7;background:#09243a;outline:none;
+}
+.pm-filter-grid input:focus,.pm-filter-grid select:focus{
+  border-color:#78aac7;box-shadow:0 0 0 3px rgba(94,154,187,.12);
+}
+.pm-overview-grid{grid-template-columns:minmax(360px,.8fr) minmax(0,1.2fr)}
+.pm-data-note{
+  margin-top:12px;padding-top:10px;border-top:1px solid rgba(102,140,164,.35);
+  color:#9fb5c4;font-size:var(--read-xs);line-height:1.5;
+}
+.pm-attention-item{border-left:4px solid #d1ad63}
+.pm-attention-item.critical{border-left-color:#d26066}
+.pm-attention-item.on-track{border-left-color:#6ca69b}
+.pm-delivery-board{
+  display:grid;grid-template-columns:repeat(5,minmax(230px,1fr));gap:10px;
+  overflow-x:auto;padding-bottom:5px;
+}
+.pm-board-lane{
+  min-width:230px;padding:11px;border:1px solid #31516a;border-radius:16px;background:#0b283e;
+}
+.pm-board-lane-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.pm-board-lane-heading strong{color:#edf4f8;font-size:var(--read-base)}
+.pm-board-lane-heading span{
+  min-width:28px;height:28px;display:grid;place-items:center;border-radius:9px;
+  color:#102638;background:#d1ad63;font-size:var(--read-xs);font-weight:800;
+}
+.pm-board-items{display:grid;gap:8px}
+.pm-board-card{
+  width:100%;display:block;padding:12px;border:1px solid #3b5c73;border-left:4px solid #7f99af;
+  border-radius:13px;color:#dce8ee;background:#102f49;text-align:left;
+}
+.pm-board-card:hover,.pm-board-card:focus-visible{border-color:#78aac7;outline:none;transform:translateY(-1px)}
+.pm-board-card.critical{border-left-color:#d26066}
+.pm-board-card.watch{border-left-color:#d1ad63}
+.pm-board-card.on-track{border-left-color:#6ca69b}
+.pm-board-card.completed{border-left-color:#57999b;opacity:.88}
+.pm-board-card strong{display:block;color:#f2f7f9;font-size:var(--read-sm);line-height:1.4}
+.pm-board-card>span,.pm-board-card small{display:block;margin-top:5px;color:#9fb5c4;font-size:var(--read-xs);line-height:1.4}
+.pm-board-card i{display:block;height:7px;margin-top:10px;overflow:hidden;border-radius:999px;background:#29475b}
+.pm-board-card i span{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,#57999b,#d1ad63)}
+.pm-board-empty{padding:18px 10px;border:1px dashed #3d6077;border-radius:11px;color:#819caf;text-align:center;font-size:var(--read-xs)}
+.pm-project-table{min-width:1700px}
+.pm-project-table td>span{display:block;margin-top:4px;color:#8fa8b8;font-size:var(--read-xs)}
+.pm-health-badge{
+  display:inline-flex;padding:6px 9px;border:1px solid #526f84;border-radius:999px;
+  color:#bad0dc;background:#102f49;font-size:var(--read-xs);font-weight:700;white-space:nowrap;
+}
+.pm-health-badge.critical{border-color:#9c5056;color:#efb4b8;background:rgba(210,96,102,.12)}
+.pm-health-badge.watch{border-color:#8d7444;color:#e5cb87;background:rgba(209,173,99,.12)}
+.pm-health-badge.on-track{border-color:#397d74;color:#a9d7cf;background:rgba(108,166,155,.12)}
+.pm-health-badge.completed{border-color:#467c7e;color:#a9d5d6;background:rgba(87,153,155,.12)}
+
+@media(max-width:1400px){
+  .pm-filter-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .pm-overview-grid{grid-template-columns:1fr}
+}
+@media(max-width:900px){
+  .pm-filter-grid{grid-template-columns:1fr 1fr}
+  .pm-delivery-board{grid-template-columns:repeat(5,minmax(250px,1fr))}
+}
+@media(max-width:560px){
+  .pm-filter-grid{grid-template-columns:1fr}
+}

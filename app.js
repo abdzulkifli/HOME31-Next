@@ -50,6 +50,7 @@ const EXECUTIVE_SERIES_COLORS = {
 };
 
 const EXECUTIVE_PANEL_STATE_KEY = "home31-executive-panel-state-v1";
+const WORKSPACE_MODULE_STATE_KEY = "home31-workspace-module-v1";
 
 const QUADRANT_GUIDE_PLUGIN = {
   id: "quadrantGuide",
@@ -130,6 +131,7 @@ let currentInitiativeFormStep = 1;
 let lastModalTrigger = null;
 let authRouteTimer = null;
 let authRouteRevision = 0;
+let activeWorkspaceModule = null;
 
 const INITIATIVE_DRAFT_PREFIX = "home31-initiative-draft-v1";
 const INITIATIVE_DRAFT_DELAY = 800;
@@ -161,7 +163,10 @@ async function initialise() {
 
   // Keep the auth callback synchronous. Supabase can deadlock when another
   // Supabase API call is awaited directly inside onAuthStateChange.
-  supabase.auth.onAuthStateChange((_event, session) => {
+  supabase.auth.onAuthStateChange((event, session) => {
+    const sameUser = Boolean(session?.user?.id && session.user.id === currentUser?.id);
+    const platformOpen = !$("#platform")?.classList.contains("hidden");
+    if (sameUser && platformOpen && ["TOKEN_REFRESHED", "SIGNED_IN", "USER_UPDATED"].includes(event)) return;
     scheduleAuthRoute(session);
   });
 
@@ -394,12 +399,18 @@ function bindEvents() {
     $("#continuity-search").value = "";
     renderContinuityRegister();
   });
+  $("#pm-search").addEventListener("input", renderProjectManagement);
+  ["#pm-department-filter", "#pm-status-filter", "#pm-risk-filter", "#pm-health-filter"].forEach(selector =>
+    $(selector).addEventListener("change", renderProjectManagement)
+  );
+  $("#pm-clear-filters").addEventListener("click", clearProjectManagementFilters);
 
   $("#admin-create-user-form").addEventListener("submit", createUserAsAdmin);
   $("#generate-password-button").addEventListener("click", generateTemporaryPassword);
   $("#refresh-admin-data").addEventListener("click", loadAdminData);
   $("#admin-overview-refresh").addEventListener("click", loadAdminData);
   $("#admin-portfolio-refresh").addEventListener("click", loadAdminData);
+  $("#pm-refresh").addEventListener("click", loadAdminData);
   $("#admin-export-portfolio").addEventListener("click", exportAdminPortfolioCsv);
   $("#admin-download-template").addEventListener("click", downloadExcelImportTemplate);
   $("#admin-import-excel").addEventListener("click", openExcelImportModal);
@@ -597,7 +608,9 @@ async function openPlatform(revision = authRouteRevision, userId = currentUser?.
   $("#auth-screen").classList.add("hidden");
   $("#force-password-screen").classList.add("hidden");
   $("#platform").classList.remove("hidden");
-  showModule(isSuperAdmin ? "admin-overview" : "user-home");
+  const fallbackModule = isSuperAdmin ? "admin-overview" : "user-home";
+  const restoredModule = readWorkspaceModule(isSuperAdmin) || fallbackModule;
+  showModule(restoredModule, { scrollToTop: false });
 }
 
 function renderIdentity() {
@@ -643,6 +656,7 @@ async function logout() {
     authRouteTimer = null;
   }
 
+  clearWorkspaceModule();
   resetSessionState();
   showAuth();
 }
@@ -774,7 +788,37 @@ async function changeOwnPassword(password) {
   }
 }
 
-function showModule(name) {
+function readWorkspaceModule(isSuperAdmin) {
+  try {
+    const saved = localStorage.getItem(WORKSPACE_MODULE_STATE_KEY);
+    const allowed = isSuperAdmin
+      ? ["admin-overview", "admin-portfolio", "admin-project-management", "admin-users", "admin-exceptions", "admin-system", "account"]
+      : ["user-home", "my-initiatives", "readiness", "account"];
+    return allowed.includes(saved) ? saved : null;
+  } catch (_error) {
+    return null;
+  }
+}
+
+function rememberWorkspaceModule(name) {
+  activeWorkspaceModule = name;
+  try {
+    localStorage.setItem(WORKSPACE_MODULE_STATE_KEY, name);
+  } catch (_error) {
+    // Navigation remains usable when browser storage is unavailable.
+  }
+}
+
+function clearWorkspaceModule() {
+  activeWorkspaceModule = null;
+  try {
+    localStorage.removeItem(WORKSPACE_MODULE_STATE_KEY);
+  } catch (_error) {
+    // No action required.
+  }
+}
+
+function showModule(name, { scrollToTop = true } = {}) {
   $$(".module").forEach(module => module.classList.remove("active"));
   $$(".nav-item").forEach(button => button.classList.remove("active"));
 
@@ -785,18 +829,20 @@ function showModule(name) {
 
   module.classList.add("active");
   nav?.classList.add("active");
+  rememberWorkspaceModule(name);
   $("#page-title").textContent = nav?.querySelector("b")?.textContent || "HOME31";
   if (isMobileNavigation()) closeSidebarDrawer();
   document.body.classList.toggle("admin-command-active", name.startsWith("admin-"));
-  const yearAwareModules = ["admin-overview", "admin-portfolio", "admin-exceptions"];
+  const yearAwareModules = ["admin-overview", "admin-portfolio", "admin-project-management", "admin-exceptions"];
   $("#admin-year-control").classList.toggle("hidden", !yearAwareModules.includes(name));
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  if (scrollToTop) window.scrollTo({ top: 0, behavior: "auto" });
 
   if (name === "user-home") renderUserDashboard();
   if (name === "my-initiatives") renderUserInitiatives();
   if (name === "readiness") renderReadiness();
   if (name === "admin-overview") renderAdminOverview();
   if (name === "admin-portfolio") renderAdminPortfolio();
+  if (name === "admin-project-management") renderProjectManagement();
   if (name === "admin-users") renderAdminUsers();
   if (name === "admin-exceptions") renderAdminExceptions();
   window.setTimeout(() => Object.values(charts).forEach(chart => chart?.resize?.()), 80);
@@ -937,6 +983,7 @@ async function loadAdminData() {
   populateAdminDepartmentOptions();
   renderAdminOverview();
   renderAdminPortfolio();
+  renderProjectManagement();
   renderAdminUsers();
   renderAdminExceptions();
 }
@@ -944,18 +991,21 @@ async function loadAdminData() {
 
 
 function populateAdminDepartmentOptions() {
-  const select = $("#admin-department-filter");
-  if (!select) return;
-  const current = select.value;
   const departments = [...new Set(adminProjects
     .map(project => String(project.department || "").trim())
     .filter(Boolean))]
     .sort((a, b) => a.localeCompare(b, "en", { sensitivity: "base" }));
-  select.innerHTML = [
-    '<option value="">All departments</option>',
-    ...departments.map(department => `<option value="${escapeHtml(department)}">${escapeHtml(department)}</option>`)
-  ].join("");
-  if (departments.includes(current)) select.value = current;
+
+  ["#admin-department-filter", "#pm-department-filter"].forEach(selector => {
+    const select = $(selector);
+    if (!select) return;
+    const current = select.value;
+    select.innerHTML = [
+      '<option value="">All departments</option>',
+      ...departments.map(department => `<option value="${escapeHtml(department)}">${escapeHtml(department)}</option>`)
+    ].join("");
+    if (departments.includes(current)) select.value = current;
+  });
 }
 
 function deriveHome31Fit(project) {
@@ -1361,6 +1411,7 @@ function aggregateFiltered(records, labelFn, valueFn) {
 function clearAdminFilters() {
   adminQuickFilter = "";
   $("#admin-search").value = "";
+  $("#admin-department-filter").value = "";
   $("#admin-status-filter").value = "";
   $("#admin-pillar-filter").value = "";
   $("#admin-risk-filter").value = "";
@@ -3013,6 +3064,7 @@ function handleAdminYearChange(event) {
   updateAdminYearBadge();
   renderAdminOverview();
   renderAdminPortfolio();
+  renderProjectManagement();
   renderAdminExceptions();
 }
 function updateAdminYearBadge() {
@@ -3647,6 +3699,218 @@ function safeCsvCell(value) {
   return `"${text.replaceAll('"', '""')}"`;
 }
 function exportAdminPortfolioCsv() {if(currentProfile?.role!=="super_admin")return;const records=getFilteredAdminPortfolioRecords(),headers=["Implementation Year","Initiative","Department","Executive Sponsor","Project Owner Name","Delivery Lead","Category","System Type","Priority Status","Strategic Pillar","Status","Risk","Approved Budget","Post-Challenge Cost","Readiness","Progress","Evidence Completeness"],rows=records.map(p=>[projectImplementationYear(p),p.initiative_name,p.department,p.executive_sponsor,p.accountable_owner,p.delivery_lead,p.initiative_category,p.system_type,p.priority_status,p.strategic_pillar,p.status,p.risk_level,financialFieldConfirmed(p,"approved_budget")?(p.approved_budget??0):"",financialFieldConfirmed(p,"estimated_cost_post_challenge")?(p.estimated_cost_post_challenge??0):"",p.readiness_score??0,p.progress??0,p.evidence_completeness??0]),csv="\uFEFF"+[headers,...rows].map(r=>r.map(safeCsvCell).join(',')).join('\n'),blob=new Blob([csv],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=`HOME31-${selectedYearLabel().replaceAll(' ','-')}-Portfolio-${new Date().toISOString().slice(0,10)}.csv`;link.click();URL.revokeObjectURL(url);}
+
+function projectManagementDate(value) {
+  if (!value) return "Not set";
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleDateString("en-MY", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+function projectDeliveryHealth(project) {
+  if (project.status === "Completed") return "Completed";
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const target = project.target_date ? new Date(`${project.target_date}T00:00:00`) : null;
+  const overdue = target && !Number.isNaN(target.getTime()) && target < today;
+  if (overdue || project.status === "At Risk" || project.risk_level === "Extreme") return "Critical";
+  if (project.risk_level === "High" || Number(project.readiness_score || 0) < 70 || !project.target_date || !String(project.next_action || "").trim()) return "Watch";
+  return "On track";
+}
+
+function projectHealthClass(health) {
+  return {
+    "Critical": "critical",
+    "Watch": "watch",
+    "On track": "on-track",
+    "Completed": "completed"
+  }[health] || "watch";
+}
+
+function getFilteredProjectManagementRecords() {
+  const query = ($("#pm-search")?.value || "").trim().toLowerCase();
+  const department = $("#pm-department-filter")?.value || "";
+  const status = $("#pm-status-filter")?.value || "";
+  const risk = $("#pm-risk-filter")?.value || "";
+  const health = $("#pm-health-filter")?.value || "";
+  return projectsForYear().filter(project => {
+    const haystack = [
+      project.initiative_name, project.accountable_owner, project.delivery_lead,
+      project.department, project.next_action, project.source_reference_no
+    ].join(" ").toLowerCase();
+    return (!query || haystack.includes(query)) &&
+      (!department || project.department === department) &&
+      (!status || project.status === status) &&
+      (!risk || project.risk_level === risk) &&
+      (!health || projectDeliveryHealth(project) === health);
+  });
+}
+
+function clearProjectManagementFilters() {
+  $("#pm-search").value = "";
+  $("#pm-department-filter").value = "";
+  $("#pm-status-filter").value = "";
+  $("#pm-risk-filter").value = "";
+  $("#pm-health-filter").value = "";
+  renderProjectManagement();
+}
+
+function renderProjectManagementActiveFilters() {
+  const container = $("#pm-active-filters");
+  if (!container) return;
+  const controls = [
+    ["search", $("#pm-search").value.trim(), value => `Search: ${value}`],
+    ["department", $("#pm-department-filter").value, value => `Department: ${value}`],
+    ["status", $("#pm-status-filter").value, value => `Status: ${value}`],
+    ["risk", $("#pm-risk-filter").value, value => `Risk: ${value}`],
+    ["health", $("#pm-health-filter").value, value => `Health: ${value}`]
+  ].filter(([, value]) => value);
+  if (!controls.length) {
+    container.innerHTML = '<span class="portfolio-filter-empty">No active filters. Showing the selected portfolio year.</span>';
+    return;
+  }
+  container.innerHTML = controls.map(([key, value, label]) => `<button class="portfolio-filter-chip" type="button" data-clear-pm-filter="${key}"><span>${escapeHtml(label(value))}</span><b aria-hidden="true">×</b><span class="sr-only">Remove filter</span></button>`).join("");
+  $$('[data-clear-pm-filter]').forEach(button => button.addEventListener('click', () => {
+    const map = {
+      search: "#pm-search", department: "#pm-department-filter", status: "#pm-status-filter",
+      risk: "#pm-risk-filter", health: "#pm-health-filter"
+    };
+    const control = $(map[button.dataset.clearPmFilter]);
+    if (control) control.value = "";
+    renderProjectManagement();
+  }));
+}
+
+function projectManagementAttention(records) {
+  const severity = { Critical: 0, Watch: 1, "On track": 2, Completed: 3 };
+  return records
+    .filter(project => ["Critical", "Watch"].includes(projectDeliveryHealth(project)))
+    .sort((a, b) => severity[projectDeliveryHealth(a)] - severity[projectDeliveryHealth(b)] || Number(a.readiness_score || 0) - Number(b.readiness_score || 0));
+}
+
+function projectAttentionReason(project) {
+  const reasons = [];
+  const today = new Date().toISOString().slice(0, 10);
+  if (project.target_date && project.target_date < today && project.status !== "Completed") reasons.push("overdue");
+  if (project.status === "At Risk") reasons.push("at-risk status");
+  if (["High", "Extreme"].includes(project.risk_level)) reasons.push(`${project.risk_level.toLowerCase()} risk`);
+  if (Number(project.readiness_score || 0) < 70) reasons.push(`${Number(project.readiness_score || 0)}% readiness`);
+  if (!project.target_date) reasons.push("target date missing");
+  if (!String(project.next_action || "").trim()) reasons.push("next action missing");
+  return reasons.join(" · ") || "management review";
+}
+
+function renderProjectManagement() {
+  if (currentProfile?.role !== "super_admin" || !$("#module-admin-project-management")) return;
+  const records = getFilteredProjectManagementRecords();
+  const active = records.filter(project => project.status !== "Completed");
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const dueLimit = new Date(today);
+  dueLimit.setDate(dueLimit.getDate() + 30);
+  const overdue = active.filter(project => {
+    if (!project.target_date) return false;
+    const target = new Date(`${project.target_date}T00:00:00`);
+    return !Number.isNaN(target.getTime()) && target < today;
+  });
+  const dueSoon = active.filter(project => {
+    if (!project.target_date) return false;
+    const target = new Date(`${project.target_date}T00:00:00`);
+    return !Number.isNaN(target.getTime()) && target >= today && target <= dueLimit;
+  });
+  const atRisk = records.filter(project => project.status === "At Risk" || ["High", "Extreme"].includes(project.risk_level));
+  const avgProgress = records.length ? Math.round(records.reduce((sum, project) => sum + Number(project.progress || 0), 0) / records.length) : 0;
+  const noTarget = active.filter(project => !project.target_date).length;
+  $("#pm-kpi-active").textContent = active.length;
+  $("#pm-kpi-risk").textContent = atRisk.length;
+  $("#pm-kpi-overdue").textContent = overdue.length;
+  $("#pm-kpi-due-soon").textContent = dueSoon.length;
+  $("#pm-kpi-progress").textContent = `${avgProgress}%`;
+  $("#pm-kpi-no-target").textContent = noTarget;
+
+  const healthCounts = records.reduce((counts, project) => {
+    const health = projectDeliveryHealth(project);
+    counts[health] = (counts[health] || 0) + 1;
+    return counts;
+  }, {});
+  $("#pm-assurance-on-track").textContent = healthCounts["On track"] || 0;
+  $("#pm-assurance-watch").textContent = healthCounts.Watch || 0;
+  $("#pm-assurance-critical").textContent = healthCounts.Critical || 0;
+  $("#pm-assurance-next-action").textContent = `${records.length ? Math.round(records.filter(project => String(project.next_action || "").trim()).length / records.length * 100) : 0}%`;
+  $("#pm-assurance-target-date").textContent = `${records.length ? Math.round(records.filter(project => project.target_date).length / records.length * 100) : 0}%`;
+
+  renderProjectManagementActiveFilters();
+  renderProjectManagementCharts(records);
+  renderProjectManagementAttention(records);
+  renderProjectManagementBoard(records);
+  renderProjectManagementTable(records);
+}
+
+function renderProjectManagementCharts(records) {
+  charts.pmStatus?.destroy();
+  if (typeof Chart === "undefined" || !$("#pm-status-chart")) return;
+  const statuses = ["Planning", "In Progress", "At Risk", "On Hold", "Completed"];
+  charts.pmStatus = new Chart($("#pm-status-chart"), {
+    type: "doughnut",
+    data: {
+      labels: statuses,
+      datasets: [{
+        data: statuses.map(status => records.filter(project => project.status === status).length),
+        backgroundColor: ["#7f99af", "#57999b", "#d26066", "#d1ad63", "#6ca69b"],
+        borderColor: "#102f49",
+        borderWidth: 4,
+        cutout: "62%"
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { position: "bottom", labels: { color: EXECUTIVE_COLORS.text, usePointStyle: true, boxWidth: 8, font: { size: 12 } } } }
+    }
+  });
+}
+
+function renderProjectManagementAttention(records) {
+  const attention = projectManagementAttention(records);
+  $("#pm-attention-count").textContent = `${attention.length} record${attention.length === 1 ? "" : "s"}`;
+  $("#pm-attention-list").innerHTML = attention.length ? attention.slice(0, 10).map(project => {
+    const health = projectDeliveryHealth(project);
+    return `<div class="admin-command-list-item pm-attention-item ${projectHealthClass(health)}"><div><strong>${escapeHtml(project.initiative_name)}</strong><span>${escapeHtml(project.department || "No department")} · ${escapeHtml(projectAttentionReason(project))}</span></div><button type="button" data-pm-open="${project.id}">Open</button></div>`;
+  }).join("") : '<div class="admin-command-empty">No critical or watch projects in the current selection.</div>';
+  bindProjectManagementOpenButtons();
+}
+
+function renderProjectManagementBoard(records) {
+  const statuses = ["Planning", "In Progress", "At Risk", "On Hold", "Completed"];
+  $("#pm-board-count").textContent = `${records.length} project${records.length === 1 ? "" : "s"}`;
+  $("#pm-delivery-board").innerHTML = statuses.map(status => {
+    const items = records.filter(project => project.status === status);
+    return `<section class="pm-board-lane" data-status="${escapeHtml(status)}"><div class="pm-board-lane-heading"><strong>${escapeHtml(status)}</strong><span>${items.length}</span></div><div class="pm-board-items">${items.length ? items.map(project => {
+      const health = projectDeliveryHealth(project);
+      return `<button class="pm-board-card ${projectHealthClass(health)}" type="button" data-pm-open="${project.id}"><strong>${escapeHtml(project.initiative_name)}</strong><span>${escapeHtml(project.department || "No department")}</span><small>${Number(project.progress || 0)}% progress · ${escapeHtml(health)}</small><i><span style="width:${Math.max(0, Math.min(100, Number(project.progress || 0)))}%"></span></i></button>`;
+    }).join("") : '<div class="pm-board-empty">No projects</div>'}</div></section>`;
+  }).join("");
+  bindProjectManagementOpenButtons();
+}
+
+function renderProjectManagementTable(records) {
+  $("#pm-register-count").textContent = `${records.length} record${records.length === 1 ? "" : "s"}`;
+  $("#pm-project-table tbody").innerHTML = records.length ? records.map(project => {
+    const health = projectDeliveryHealth(project);
+    return `<tr><td><strong>${escapeHtml(project.initiative_name)}</strong><span>${escapeHtml(project.source_reference_no || `AMP${projectImplementationYear(project)}`)}</span></td><td>${escapeHtml(project.accountable_owner || "Not assigned")}</td><td>${escapeHtml(project.department || "Not recorded")}</td><td><span class="status-pill">${escapeHtml(project.status || "Planning")}</span></td><td><span class="risk-pill">${escapeHtml(project.risk_level || "Medium")}</span></td><td>${escapeHtml(projectManagementDate(project.start_date))}</td><td>${escapeHtml(projectManagementDate(project.target_date))}</td><td>${progressBar(project.progress)}</td><td>${Number(project.readiness_score || 0)}%</td><td><span class="pm-health-badge ${projectHealthClass(health)}">${escapeHtml(health)}</span></td><td>${escapeHtml(project.next_action || "Not recorded")}</td><td><button class="text-button" type="button" data-pm-open="${project.id}">Open</button></td></tr>`;
+  }).join("") : '<tr><td colspan="12">No projects match the selected filters.</td></tr>';
+  bindProjectManagementOpenButtons();
+  scheduleResponsiveTableEnhancement();
+}
+
+function bindProjectManagementOpenButtons() {
+  $$('[data-pm-open]').forEach(button => {
+    if (button.dataset.pmBound === "true") return;
+    button.dataset.pmBound = "true";
+    button.addEventListener("click", () => openInitiativeModal(button.dataset.pmOpen));
+  });
+}
+
 function renderAdminExceptions() {
   if(currentProfile?.role!=="super_admin")return;const records=projectsForYear(),today=new Date().toISOString().slice(0,10),risk=records.filter(p=>["High","Extreme"].includes(p.risk_level)),readiness=records.filter(p=>Number(p.readiness_score||0)<70),overdue=records.filter(p=>p.target_date&&p.target_date<today&&p.status!=="Completed"),hrPending=records.filter(p=>["Required","To be confirmed"].includes(p.hr_collaboration_status)&&!["Supported","Not required"].includes(p.hr_review_status)),ictPending=records.filter(p=>p.ict_classification==="New - Pending ICT review"||((p.system_type&&p.system_type!=="Non System")&&!p.ict_classification)),evidence=records.filter(p=>Number(p.evidence_completeness||0)<70);
   $("#admin-exception-risk-count").textContent=risk.length;$("#admin-exception-readiness-count").textContent=readiness.length;$("#admin-exception-overdue-count").textContent=overdue.length;$("#admin-exception-hr-count").textContent=hrPending.length;$("#admin-exception-ict-count").textContent=ictPending.length;$("#admin-exception-evidence-count").textContent=evidence.length;$("#admin-exception-risk-badge").textContent=risk.length;$("#admin-exception-readiness-badge").textContent=readiness.length;$("#admin-exception-overdue-badge").textContent=overdue.length;
