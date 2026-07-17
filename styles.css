@@ -4738,126 +4738,18 @@ body.department-user-shell .pm-outside-view-note strong{color:var(--brand)}
   .pm-timeline-scale button{flex:1}
 }
 
-
 /* ================================================================
-   HOME31 V7.9.4.10.2 ADMIN CONTRAST RECOVERY
-   Restores readable colours inside light super-admin workspaces.
+   HOME31 V7.9.4.10.4 DIRECT PROFESSIONAL NAVY RESTORE
    ================================================================ */
-body.super-admin-shell .admin-command-module:not(.executive-command-centre){
-  --admin-readable-ink:#172631;
-  --admin-readable-body:#334b59;
-  --admin-readable-muted:#667b89;
-  --admin-readable-label:#456779;
-  --admin-readable-line:#d8e2e8;
-  --admin-readable-soft:#f4f7f9;
-  --admin-readable-blue:#2f6d8e;
+.admin-service-status{
+  margin-top:10px;padding:11px 13px;border:1px solid #3c6078;border-left:4px solid #7892a6;
+  border-radius:11px;color:#b8ccd8;background:#0a273d;font-size:var(--read-sm);line-height:1.45;
 }
-
-/* Light operational panels must not inherit the original dark command-centre text. */
-body.super-admin-shell .admin-command-module:not(.executive-command-centre) .admin-command-panel:not(.chart-panel):not(.access-governance-panel),
-body.super-admin-shell .admin-command-module:not(.executive-command-centre) .portfolio-insight-panel,
-body.super-admin-shell .admin-command-module:not(.executive-command-centre) .filter-command-panel{
-  color:var(--admin-readable-ink)!important;
-  background:#fff!important;
-  border-color:var(--admin-readable-line)!important;
-}
-body.super-admin-shell .admin-command-module:not(.executive-command-centre) .admin-command-panel:not(.chart-panel):not(.access-governance-panel) .admin-command-panel-heading h3,
-body.super-admin-shell .portfolio-insight-panel .admin-command-panel-heading h3,
-body.super-admin-shell .filter-command-panel .admin-command-panel-heading h3{
-  color:var(--admin-readable-ink)!important;
-}
-body.super-admin-shell .admin-command-module:not(.executive-command-centre) .admin-command-panel:not(.chart-panel):not(.access-governance-panel) .admin-command-panel-heading p{
-  color:var(--admin-readable-muted)!important;
-}
-
-/* Selection Narrative and comparable operational insight text. */
-body.super-admin-shell .admin-command-module:not(.executive-command-centre) .admin-command-narrative,
-body.super-admin-shell .portfolio-insight-panel #portfolio-selection-insight,
-body.super-admin-shell .portfolio-insight-panel p{
-  color:var(--admin-readable-body)!important;
-  opacity:1!important;
-}
-
-/* Fact tiles were retaining dark translucent backgrounds and pale text. */
-body.super-admin-shell .admin-command-module:not(.executive-command-centre) .admin-command-facts article,
-body.super-admin-shell .portfolio-insight-panel .admin-command-facts article{
-  color:var(--admin-readable-ink)!important;
-  background:var(--admin-readable-soft)!important;
-  border:1px solid var(--admin-readable-line)!important;
-  border-left:4px solid #3f7898!important;
-  border-radius:10px!important;
-  opacity:1!important;
-}
-body.super-admin-shell .admin-command-module:not(.executive-command-centre) .admin-command-facts strong,
-body.super-admin-shell .portfolio-insight-panel .admin-command-facts strong{
-  color:#173042!important;
-  opacity:1!important;
-}
-body.super-admin-shell .admin-command-module:not(.executive-command-centre) .admin-command-facts span,
-body.super-admin-shell .portfolio-insight-panel .admin-command-facts span{
-  color:#5f7482!important;
-  opacity:1!important;
-}
-
-/* KPI supporting text and labels. */
-body.super-admin-shell .admin-command-module:not(.executive-command-centre) .admin-command-kpi>span{
-  color:#456779!important;
-  opacity:1!important;
-}
-body.super-admin-shell .admin-command-module:not(.executive-command-centre) .admin-command-kpi>small{
-  color:#657b88!important;
-  opacity:1!important;
-}
-body.super-admin-shell .admin-command-module:not(.executive-command-centre) .admin-command-kpi>strong{
-  color:#102638!important;
-  opacity:1!important;
-}
-
-/* Filters, supporting labels and clear controls. */
-body.super-admin-shell .admin-command-module:not(.executive-command-centre) .admin-command-filter-grid label>span,
-body.super-admin-shell .admin-command-module:not(.executive-command-centre) .admin-user-filter-grid label>span,
-body.super-admin-shell .admin-command-module:not(.executive-command-centre) .pm-filter-grid label>span,
-body.super-admin-shell .filter-command-panel label>span{
-  color:var(--admin-readable-label)!important;
-  opacity:1!important;
-}
-body.super-admin-shell .admin-command-module:not(.executive-command-centre) .admin-command-text-button,
-body.super-admin-shell .filter-command-panel .admin-command-text-button{
-  color:var(--admin-readable-blue)!important;
-  opacity:1!important;
-}
-body.super-admin-shell .admin-command-module:not(.executive-command-centre) input::placeholder,
-body.super-admin-shell .admin-command-module:not(.executive-command-centre) textarea::placeholder{
-  color:#748996!important;
-  opacity:1!important;
-}
-body.super-admin-shell .admin-command-module:not(.executive-command-centre) .portfolio-filter-empty,
-body.super-admin-shell .admin-command-module:not(.executive-command-centre) .admin-command-empty{
-  color:var(--admin-readable-muted)!important;
-  opacity:1!important;
-}
-
-/* Light lists inside light panels. Dark chart/governance panels remain unchanged. */
-body.super-admin-shell .admin-command-module:not(.executive-command-centre) .admin-command-panel:not(.chart-panel):not(.access-governance-panel) .admin-command-list-item{
-  color:var(--admin-readable-ink)!important;
-  background:#f8fafb!important;
-  border-color:var(--admin-readable-line)!important;
-  box-shadow:none!important;
-}
-body.super-admin-shell .admin-command-module:not(.executive-command-centre) .admin-command-panel:not(.chart-panel):not(.access-governance-panel) .admin-command-list-item strong{
-  color:var(--admin-readable-ink)!important;
-}
-body.super-admin-shell .admin-command-module:not(.executive-command-centre) .admin-command-panel:not(.chart-panel):not(.access-governance-panel) .admin-command-list-item span{
-  color:var(--admin-readable-muted)!important;
-}
-
-/* Keep contextual navigation fully opaque so content never shows through it. */
-body.super-admin-shell .admin-context-nav,
-body.super-admin-shell .admin-secondary-nav,
-body.super-admin-shell .admin-subnav,
-body.super-admin-shell .admin-workspace-tabs{
-  background:#fff!important;
-  opacity:1!important;
-  backdrop-filter:none!important;
-  box-shadow:0 7px 18px rgba(7,27,43,.08)!important;
-}
+.admin-service-status.neutral{border-left-color:#7892a6}
+.admin-service-status.checking{border-left-color:#78a8c4;color:#c8dce7;background:#0c2d45}
+.admin-service-status.success{border-left-color:#57999b;color:#bfe0da;background:#0b343e}
+.admin-service-status.error{border-left-color:#d26066;color:#f0bec1;background:#3a1f2a}
+body.super-admin-shell .admin-command-module{color:var(--admin-text)}
+body.super-admin-shell .admin-command-panel,
+body.super-admin-shell .admin-command-kpi{color:var(--admin-text)}
+body.super-admin-shell .admin-context-navigation{opacity:1;backdrop-filter:blur(14px)}
