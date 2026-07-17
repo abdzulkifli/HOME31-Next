@@ -3850,7 +3850,9 @@ function getFilteredProjectManagementRecords() {
   const status = $("#pm-status-filter")?.value || "";
   const risk = $("#pm-risk-filter")?.value || "";
   const health = $("#pm-health-filter")?.value || "";
-  return projectsForYear().filter(project => {
+  // Super admins use the selected enterprise portfolio year. Normal users use
+  // the department-scoped records returned by RLS and loaded into userProjects.
+  return projectManagementSourceRecords().filter(project => {
     const haystack = [
       project.initiative_name, project.accountable_owner, project.delivery_lead,
       project.department, project.next_action, project.source_reference_no
@@ -3883,7 +3885,9 @@ function renderProjectManagementActiveFilters() {
     ["health", $("#pm-health-filter").value, value => `Health: ${value}`]
   ].filter(([, value]) => value);
   if (!controls.length) {
-    container.innerHTML = '<span class="portfolio-filter-empty">No active filters. Showing the selected portfolio year.</span>';
+    container.innerHTML = currentProfile?.role === "super_admin"
+      ? '<span class="portfolio-filter-empty">No active filters. Showing the selected portfolio year.</span>'
+      : '<span class="portfolio-filter-empty">No active filters. Showing all projects in your assigned department.</span>';
     return;
   }
   container.innerHTML = controls.map(([key, value, label]) => `<button class="portfolio-filter-chip" type="button" data-clear-pm-filter="${key}"><span>${escapeHtml(label(value))}</span><b aria-hidden="true">×</b><span class="sr-only">Remove filter</span></button>`).join("");
@@ -3988,12 +3992,24 @@ function renderProjectManagementCharts(records) {
   });
 }
 
+function projectManagementAccessBadge(project) {
+  if (currentProfile?.role === "super_admin") return "";
+  const owned = canEditInitiative(project);
+  return `<span class="department-access-badge ${owned ? "owned" : "shared"}">${owned ? "My project · Editable" : "Department project · View only"}</span>`;
+}
+
+function projectManagementAccessText(project) {
+  if (currentProfile?.role === "super_admin") return "";
+  return canEditInitiative(project) ? "My project" : "Department project · View only";
+}
+
 function renderProjectManagementAttention(records) {
   const attention = projectManagementAttention(records);
   $("#pm-attention-count").textContent = `${attention.length} record${attention.length === 1 ? "" : "s"}`;
   $("#pm-attention-list").innerHTML = attention.length ? attention.slice(0, 10).map(project => {
     const health = projectDeliveryHealth(project);
-    return `<div class="admin-command-list-item pm-attention-item ${projectHealthClass(health)}"><div><strong>${escapeHtml(project.initiative_name)}</strong><span>${escapeHtml(project.department || "No department")} · ${escapeHtml(projectAttentionReason(project))}</span></div><button type="button" data-pm-open="${project.id}">Open</button></div>`;
+    const access = projectManagementAccessText(project);
+    return `<div class="admin-command-list-item pm-attention-item ${projectHealthClass(health)}"><div><strong>${escapeHtml(project.initiative_name)}</strong><span>${escapeHtml(project.department || "No department")}${access ? ` · ${escapeHtml(access)}` : ""} · ${escapeHtml(projectAttentionReason(project))}</span></div><button type="button" data-pm-open="${project.id}">${canEditInitiative(project) ? "Edit" : "View"}</button></div>`;
   }).join("") : '<div class="admin-command-empty">No critical or watch projects in the current selection.</div>';
   bindProjectManagementOpenButtons();
 }
@@ -4005,7 +4021,8 @@ function renderProjectManagementBoard(records) {
     const items = records.filter(project => project.status === status);
     return `<section class="pm-board-lane" data-status="${escapeHtml(status)}"><div class="pm-board-lane-heading"><strong>${escapeHtml(status)}</strong><span>${items.length}</span></div><div class="pm-board-items">${items.length ? items.map(project => {
       const health = projectDeliveryHealth(project);
-      return `<button class="pm-board-card ${projectHealthClass(health)}" type="button" data-pm-open="${project.id}"><strong>${escapeHtml(project.initiative_name)}</strong><span>${escapeHtml(project.department || "No department")}</span><small>${Number(project.progress || 0)}% progress · ${escapeHtml(health)}</small><i><span style="width:${Math.max(0, Math.min(100, Number(project.progress || 0)))}%"></span></i></button>`;
+      const access = projectManagementAccessText(project);
+      return `<button class="pm-board-card ${projectHealthClass(health)}" type="button" data-pm-open="${project.id}"><strong>${escapeHtml(project.initiative_name)}</strong><span>${escapeHtml(project.department || "No department")}</span><small>${access ? `${escapeHtml(access)} · ` : ""}${Number(project.progress || 0)}% progress · ${escapeHtml(health)}</small><i><span style="width:${Math.max(0, Math.min(100, Number(project.progress || 0)))}%"></span></i></button>`;
     }).join("") : '<div class="pm-board-empty">No projects</div>'}</div></section>`;
   }).join("");
   bindProjectManagementOpenButtons();
@@ -4015,7 +4032,7 @@ function renderProjectManagementTable(records) {
   $("#pm-register-count").textContent = `${records.length} record${records.length === 1 ? "" : "s"}`;
   $("#pm-project-table tbody").innerHTML = records.length ? records.map(project => {
     const health = projectDeliveryHealth(project);
-    return `<tr><td><strong>${escapeHtml(project.initiative_name)}</strong><span>${escapeHtml(project.source_reference_no || `AMP${projectImplementationYear(project)}`)}</span></td><td>${escapeHtml(project.accountable_owner || "Not assigned")}</td><td>${escapeHtml(project.department || "Not recorded")}</td><td><span class="status-pill">${escapeHtml(project.status || "Planning")}</span></td><td><span class="risk-pill">${escapeHtml(project.risk_level || "Medium")}</span></td><td>${escapeHtml(projectManagementDate(project.start_date))}</td><td>${escapeHtml(projectManagementDate(project.target_date))}</td><td>${progressBar(project.progress)}</td><td>${Number(project.readiness_score || 0)}%</td><td><span class="pm-health-badge ${projectHealthClass(health)}">${escapeHtml(health)}</span></td><td>${escapeHtml(project.next_action || "Not recorded")}</td><td><button class="text-button" type="button" data-pm-open="${project.id}">${canEditInitiative(project) ? "Edit" : "View"}</button></td></tr>`;
+    return `<tr><td><strong>${escapeHtml(project.initiative_name)}</strong><span>${escapeHtml(project.source_reference_no || `AMP${projectImplementationYear(project)}`)}</span>${projectManagementAccessBadge(project)}</td><td>${escapeHtml(project.accountable_owner || "Not assigned")}</td><td>${escapeHtml(project.department || "Not recorded")}</td><td><span class="status-pill">${escapeHtml(project.status || "Planning")}</span></td><td><span class="risk-pill">${escapeHtml(project.risk_level || "Medium")}</span></td><td>${escapeHtml(projectManagementDate(project.start_date))}</td><td>${escapeHtml(projectManagementDate(project.target_date))}</td><td>${progressBar(project.progress)}</td><td>${Number(project.readiness_score || 0)}%</td><td><span class="pm-health-badge ${projectHealthClass(health)}">${escapeHtml(health)}</span></td><td>${escapeHtml(project.next_action || "Not recorded")}</td><td><button class="text-button" type="button" data-pm-open="${project.id}">${canEditInitiative(project) ? "Edit" : "View"}</button></td></tr>`;
   }).join("") : '<tr><td colspan="12">No projects match the selected filters.</td></tr>';
   bindProjectManagementOpenButtons();
   scheduleResponsiveTableEnhancement();

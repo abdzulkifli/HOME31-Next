@@ -3940,3 +3940,8 @@ body.admin-command-active .account-department-field input:disabled,
 #initiative-form :disabled{opacity:1}
 .project-management-module .pm-admin-only.hidden{display:none!important}
 @media(max-width:700px){.initiative-card-badges{justify-content:flex-start}.initiative-card-head{display:grid}}
+
+
+/* V7.9.4.5 department Project Management ownership clarity */
+.pm-project-table td:first-child .department-access-badge{margin-top:7px;width:max-content}
+.pm-board-card small{line-height:1.45}
