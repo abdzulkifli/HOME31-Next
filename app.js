@@ -3,6 +3,8 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 const SUPABASE_URL = "https://ueuvavxdvclnfffujafz.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_AhkBD0Tcki8RECDar7_vkw_fsV_wxX0";
 const AUTH_REDIRECT_URL = new URL(".", window.location.href).href;
+const ADMIN_USER_SERVICE_NAME = "admin-user-service";
+const ADMIN_USER_SERVICE_URL = `${SUPABASE_URL}/functions/v1/${ADMIN_USER_SERVICE_NAME}`;
 
 const configured =
   !SUPABASE_URL.includes("YOUR-PROJECT") &&
@@ -52,6 +54,7 @@ const EXECUTIVE_SERIES_COLORS = {
 const EXECUTIVE_PANEL_STATE_KEY = "home31-executive-panel-state-v1";
 const WORKSPACE_MODULE_STATE_KEY = "home31-workspace-module-v1";
 const ADMIN_OVERVIEW_VIEW_KEY = "home31-admin-overview-view-v1";
+const PORTFOLIO_YEAR_COMPARISON_KEY = "home31-portfolio-year-comparison-v1";
 const ADMIN_CONTEXT_CONFIG = {
   "admin-overview": {
     label: "Overview",
@@ -67,6 +70,7 @@ const ADMIN_CONTEXT_CONFIG = {
     items: [
       { key: "register", label: "Initiative Register", target: "portfolio-register-panel" },
       { key: "continuity", label: "Continuity Register", target: "portfolio-continuity-register" },
+      { key: "year-comparison", label: "Year Comparison", target: "portfolio-year-comparison" },
       { key: "finance", label: "Finance Review", managementView: "finance" },
       { key: "ict", label: "ICT Review", managementView: "ict" },
       { key: "actions", label: "Import & Export", target: "portfolio-heading" }
@@ -188,8 +192,13 @@ let lastModalTrigger = null;
 let authRouteTimer = null;
 let authRouteRevision = 0;
 let ownPasswordUpdateInProgress = false;
+let adminUserServiceAvailable = false;
+let adminUserServiceCheckedAt = 0;
+let adminUserServiceCheckPromise = null;
 let activeWorkspaceModule = null;
 let adminOverviewView = "summary";
+let portfolioComparisonYearA = 2026;
+let portfolioComparisonYearB = 2027;
 let activeAdminContextKey = "";
 let activeAdminContextModule = "";
 let initiativeModalReadOnly = false;
@@ -477,6 +486,8 @@ function bindEvents() {
     $("#continuity-search").value = "";
     renderContinuityRegister();
   });
+  $("#portfolio-compare-year-a")?.addEventListener("change", event => handlePortfolioComparisonYearChange("a", event.target.value));
+  $("#portfolio-compare-year-b")?.addEventListener("change", event => handlePortfolioComparisonYearChange("b", event.target.value));
   $("#pm-search").addEventListener("input", renderProjectManagement);
   ["#pm-department-filter", "#pm-status-filter", "#pm-risk-filter", "#pm-health-filter"].forEach(selector =>
     $(selector).addEventListener("change", renderProjectManagement)
@@ -510,7 +521,9 @@ function bindEvents() {
   $("#admin-user-search").addEventListener("input", renderAdminUsers);
   $("#admin-user-role-filter").addEventListener("change", renderAdminUsers);
   $("#admin-user-password-filter").addEventListener("change", renderAdminUsers);
+  $("#admin-user-access-filter").addEventListener("change", renderAdminUsers);
   $("#admin-clear-user-filters").addEventListener("click", clearAdminUserFilters);
+  $("#test-user-service-button").addEventListener("click", () => checkAdminUserService({ force: true }));
   $$("[data-pillar-metric]").forEach(button =>
     button.addEventListener("click", () => {
       pillarMetric = button.dataset.pillarMetric;
@@ -612,6 +625,9 @@ function resetSessionState() {
   userProjects = [];
   adminProjects = [];
   adminProfiles = [];
+  adminUserServiceAvailable = false;
+  adminUserServiceCheckedAt = 0;
+  adminUserServiceCheckPromise = null;
   destroyCharts();
   document.body.classList.remove("super-admin-shell", "department-user-shell", "admin-command-active");
   $("#user-top-nav")?.classList.add("hidden");
@@ -1076,7 +1092,10 @@ function showModule(name, { scrollToTop = true } = {}) {
   if (name === "admin-overview") renderAdminOverview();
   if (name === "admin-portfolio") renderAdminPortfolio();
   if (name === "project-management") renderProjectManagement();
-  if (name === "admin-users") renderAdminUsers();
+  if (name === "admin-users") {
+    renderAdminUsers();
+    checkAdminUserService();
+  }
   if (name === "admin-exceptions") renderAdminExceptions();
   window.setTimeout(() => Object.values(charts).forEach(chart => chart?.resize?.()), 80);
 }
@@ -1715,14 +1734,87 @@ function extractProjectDateRange(project) {
 }
 
 
+function currencyToCents(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const cleaned = String(value).trim().replace(/,/g, "");
+  const match = cleaned.match(/^([+-]?)(\d+)(?:\.(\d+))?$/);
+  if (!match) return null;
+
+  const sign = match[1] === "-" ? -1 : 1;
+  const whole = Number(match[2]);
+  const fraction = String(match[3] || "").padEnd(3, "0");
+  if (!Number.isSafeInteger(whole)) return null;
+
+  let cents = whole * 100 + Number(fraction.slice(0, 2));
+  if (Number(fraction[2] || 0) >= 5) cents += 1;
+  cents *= sign;
+  return Number.isSafeInteger(cents) ? cents : null;
+}
+
+function currencyFromCents(cents) {
+  return Number(cents || 0) / 100;
+}
+
+function currencyValue(value) {
+  const cents = currencyToCents(value);
+  return cents === null ? null : currencyFromCents(cents);
+}
+
+function sumCurrencyValues(values) {
+  let totalCents = 0;
+  for (const value of values) {
+    const cents = currencyToCents(value);
+    if (cents === null) continue;
+    totalCents += cents;
+  }
+  return currencyFromCents(totalCents);
+}
+
+function sumConfirmedCurrency(records, field) {
+  return sumCurrencyValues(records.map(record =>
+    financialFieldConfirmed(record, field) ? record[field] : null
+  ));
+}
+
+function sumProjectPortfolioCost(records) {
+  return sumCurrencyValues(records.map(project => projectPortfolioCost(project)));
+}
+
+function subtractCurrency(left, right) {
+  const leftCents = currencyToCents(left);
+  const rightCents = currencyToCents(right);
+  if (leftCents === null || rightCents === null) return null;
+  return currencyFromCents(leftCents - rightCents);
+}
+
 function compactRinggit(value) {
-  const number = Number(value || 0);
+  const number = currencyValue(value) ?? 0;
   const absolute = Math.abs(number);
   const sign = number < 0 ? "-" : "";
   if (absolute >= 1_000_000_000) return `${sign}RM${(absolute / 1_000_000_000).toFixed(2)}B`;
   if (absolute >= 1_000_000) return `${sign}RM${(absolute / 1_000_000).toFixed(2)}M`;
   if (absolute >= 1_000) return `${sign}RM${(absolute / 1_000).toFixed(1)}K`;
-  return `${sign}RM${absolute.toLocaleString("en-MY", { maximumFractionDigits: 0 })}`;
+  return `${sign}RM${absolute.toLocaleString("en-MY", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function headlineRinggit(value) {
+  const number = currencyValue(value) ?? 0;
+  const absolute = Math.abs(number);
+  const sign = number < 0 ? "-" : "";
+  if (absolute >= 1_000_000_000) return `${sign}RM${(absolute / 1_000_000_000).toFixed(3)}B`;
+  if (absolute >= 1_000_000) return `${sign}RM${(absolute / 1_000_000).toFixed(3)}M`;
+  return `${sign}RM${absolute.toLocaleString("en-MY", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function signedRinggit(value) {
+  const amount = currencyValue(value) ?? 0;
+  if (amount === 0) return formatRinggit(0);
+  return `${amount > 0 ? "+" : "-"}${formatRinggit(Math.abs(amount))}`;
+}
+
+function signedNumber(value) {
+  const number = Number(value || 0);
+  return `${number > 0 ? "+" : ""}${number.toLocaleString("en-MY")}`;
 }
 
 function formatPercent(value) {
@@ -1734,10 +1826,11 @@ function aggregateFiltered(records, labelFn, valueFn) {
   const map = new Map();
   records.forEach(record => {
     const label = labelFn(record);
-    map.set(label, (map.get(label) || 0) + Number(valueFn(record) || 0));
+    const cents = currencyToCents(valueFn(record)) ?? 0;
+    map.set(label, (map.get(label) || 0) + cents);
   });
   return [...map.entries()]
-    .map(([label, value]) => ({ label, value }))
+    .map(([label, cents]) => ({ label, value: currencyFromCents(cents) }))
     .sort((a, b) => b.value - a.value);
 }
 
@@ -1752,19 +1845,29 @@ function clearAdminFilters() {
 }
 
 
+function accountStatusLabel(value) {
+  return { active: "Active", locked: "Frozen", disabled: "Revoked" }[value] || "Active";
+}
+
+function accountStatusClass(value) {
+  return ["active", "locked", "disabled"].includes(value) ? value : "active";
+}
+
 function renderAdminUsers() {
   if (currentProfile?.role !== "super_admin") return;
 
   const query = ($("#admin-user-search").value || "").toLowerCase();
   const role = $("#admin-user-role-filter").value || "";
   const passwordStatus = $("#admin-user-password-filter").value || "";
+  const accessStatus = $("#admin-user-access-filter").value || "";
 
   const filtered = adminProfiles.filter(profile => {
     const haystack = [
       profile.full_name,
       profile.email,
       profile.department,
-      labelRole(profile.role)
+      labelRole(profile.role),
+      accountStatusLabel(profile.account_status)
     ].join(" ").toLowerCase();
 
     const matchesPassword =
@@ -1772,8 +1875,10 @@ function renderAdminUsers() {
       (passwordStatus === "pending" && profile.must_change_password) ||
       (passwordStatus === "complete" && !profile.must_change_password);
 
+    const status = profile.account_status || "active";
     return (!query || haystack.includes(query)) &&
       (!role || profile.role === role) &&
+      (!accessStatus || status === accessStatus) &&
       matchesPassword;
   });
 
@@ -1782,7 +1887,11 @@ function renderAdminUsers() {
   const normal = adminProfiles.filter(profile => profile.role === "normal_user").length;
   const pending = adminProfiles.filter(profile => profile.must_change_password).length;
   const departments = new Set(adminProfiles.map(profile => profile.department).filter(Boolean)).size;
-  const accessReadiness = total ? Math.round((total - pending) / total * 100) : 0;
+  const active = adminProfiles.filter(profile => (profile.account_status || "active") === "active").length;
+  const frozen = adminProfiles.filter(profile => profile.account_status === "locked").length;
+  const revoked = adminProfiles.filter(profile => profile.account_status === "disabled").length;
+  const inactive = frozen + revoked;
+  const accessReadiness = total ? Math.round(active / total * 100) : 0;
 
   $("#users-kpi-total").textContent = total;
   $("#users-kpi-admins").textContent = admins;
@@ -1790,20 +1899,34 @@ function renderAdminUsers() {
   $("#users-kpi-password").textContent = pending;
   $("#users-kpi-departments").textContent = departments;
   $("#users-kpi-readiness").textContent = `${accessReadiness}%`;
-  $("#users-assurance-pending").textContent = pending;
+  $("#users-assurance-pending").textContent = inactive;
   $("#admin-user-directory-count").textContent = `${filtered.length} user${filtered.length === 1 ? "" : "s"}`;
 
   $("#admin-user-list").innerHTML = filtered.length
-    ? filtered.map(profile => `
-      <article class="admin-command-user-card">
+    ? filtered.map(profile => {
+      const status = profile.account_status || "active";
+      const isCurrent = String(profile.id) === String(currentUser.id);
+      const normalUser = profile.role === "normal_user";
+      const accessActions = !isCurrent && normalUser ? `
+        <div class="admin-user-access-actions" aria-label="Account access actions">
+          ${status !== "active" ? `<button class="admin-access-button restore" data-user-access="active" data-user-id="${profile.id}" type="button">Restore access</button>` : ""}
+          ${status !== "locked" ? `<button class="admin-access-button freeze" data-user-access="locked" data-user-id="${profile.id}" type="button">Freeze account</button>` : ""}
+          ${status !== "disabled" ? `<button class="admin-access-button revoke" data-user-access="disabled" data-user-id="${profile.id}" type="button">Revoke access</button>` : ""}
+        </div>` : "";
+      return `
+      <article class="admin-command-user-card access-${accountStatusClass(status)}">
         <div>
-          <strong>${escapeHtml(profile.full_name || profile.email)}</strong>
+          <div class="admin-user-card-title-row">
+            <strong>${escapeHtml(profile.full_name || profile.email)}</strong>
+            <span class="account-access-badge ${accountStatusClass(status)}">${accountStatusLabel(status)}</span>
+          </div>
           <span>${escapeHtml(profile.email)}</span>
-          <span>${escapeHtml(profile.department || "No department")} · Account: ${escapeHtml(profile.account_status || "active")} · Password change: ${profile.must_change_password ? "Required" : "Completed"}</span>
+          <span>${escapeHtml(profile.department || "No department")} · Password change: ${profile.must_change_password ? "Required" : "Completed"}</span>
+          ${accessActions}
         </div>
-        <div>
+        <div class="admin-user-card-controls">
           <span class="role-pill">${labelRole(profile.role)}</span>
-          ${profile.id !== currentUser.id ? `
+          ${!isCurrent ? `
             <button class="text-button" data-toggle-role="${profile.id}" type="button">
               ${profile.role === "super_admin" ? "Make Normal User" : "Make Super Admin"}
             </button>
@@ -1811,18 +1934,21 @@ function renderAdminUsers() {
             <button class="text-button" data-reset-password="${profile.id}" type="button">Reset temporary password</button>
           ` : '<span>Current account</span>'}
         </div>
-      </article>
-    `).join("")
+      </article>`;
+    }).join("")
     : '<div class="admin-command-empty">No users match the selected filters.</div>';
 
-  $$("[data-toggle-role]").forEach(button =>
-    button.addEventListener("click", () => toggleRole(button.dataset.toggleRole))
+  $$('[data-user-access]').forEach(button =>
+    button.addEventListener('click', () => setUserAccessStatus(button.dataset.userId, button.dataset.userAccess))
   );
-  $$("[data-change-department]").forEach(button =>
-    button.addEventListener("click", () => changeUserDepartment(button.dataset.changeDepartment))
+  $$('[data-toggle-role]').forEach(button =>
+    button.addEventListener('click', () => toggleRole(button.dataset.toggleRole))
   );
-  $$("[data-reset-password]").forEach(button =>
-    button.addEventListener("click", () => resetUserPassword(button.dataset.resetPassword))
+  $$('[data-change-department]').forEach(button =>
+    button.addEventListener('click', () => changeUserDepartment(button.dataset.changeDepartment))
+  );
+  $$('[data-reset-password]').forEach(button =>
+    button.addEventListener('click', () => resetUserPassword(button.dataset.resetPassword))
   );
 
   renderAdminUserGovernance();
@@ -1866,13 +1992,15 @@ function renderAdminUserGovernance() {
   const pending = adminProfiles.filter(profile => profile.must_change_password).length;
   const adminCount = adminProfiles.filter(profile => profile.role === "super_admin").length;
   const noDepartment = adminProfiles.filter(profile => !profile.department).length;
-  const duplicateEmails = adminProfiles.length - new Set(adminProfiles.map(profile => String(profile.email || "").toLowerCase())).size;
+  const frozen = adminProfiles.filter(profile => profile.account_status === "locked").length;
+  const revoked = adminProfiles.filter(profile => profile.account_status === "disabled").length;
 
   $("#admin-user-governance-list").innerHTML = [
     ["Privileged accounts", `${adminCount} super-admin account${adminCount === 1 ? "" : "s"}`, adminCount],
     ["First-login follow-up", `${pending} user${pending === 1 ? "" : "s"} must change password`, pending],
-    ["Department incomplete", `${noDepartment} profile${noDepartment === 1 ? "" : "s"} without department`, noDepartment],
-    ["Duplicate email check", `${duplicateEmails} duplicate profile email${duplicateEmails === 1 ? "" : "s"}`, duplicateEmails]
+    ["Frozen accounts", `${frozen} temporarily frozen account${frozen === 1 ? "" : "s"}`, frozen],
+    ["Revoked access", `${revoked} account${revoked === 1 ? "" : "s"} with access revoked`, revoked],
+    ["Department incomplete", `${noDepartment} profile${noDepartment === 1 ? "" : "s"} without department`, noDepartment]
   ].map(([title, detail, value]) => `
     <div class="admin-command-list-item">
       <div><strong>${escapeHtml(title)}</strong><span>${escapeHtml(detail)}</span></div>
@@ -1907,73 +2035,121 @@ function clearAdminUserFilters() {
   $("#admin-user-search").value = "";
   $("#admin-user-role-filter").value = "";
   $("#admin-user-password-filter").value = "";
+  $("#admin-user-access-filter").value = "";
   renderAdminUsers();
 }
 
-async function createUserAsAdmin(event) {
-  event.preventDefault();
-  if (currentProfile?.role !== "super_admin") return;
-
-  const button = event.submitter || event.currentTarget.querySelector('button[type="submit"]');
-  const status = document.getElementById("user-service-status");
-  const setStatus = (state, message) => {
-    if (!status) return;
+function setAdminUserServiceStatus(state, message) {
+  const status = $("#user-service-status");
+  if (status) {
     status.className = `admin-service-status ${state}`;
     status.textContent = message;
-  };
-
-  const password = $("#admin-user-password").value;
-  if (!isStrongPassword(password)) {
-    setStatus("error", "Temporary password does not meet the HOME31 password standard.");
-    return showToast("Temporary password must contain at least 10 characters with uppercase, lowercase, number and symbol.", true);
   }
+  const submit = $("#admin-create-user-submit");
+  if (submit) submit.disabled = !adminUserServiceAvailable;
+}
 
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session?.access_token) {
-    setStatus("error", "Your administrator session has expired. Sign in again.");
-    return showToast("Your session has expired. Sign in again.", true);
-  }
+async function invokeAdminUserService(action, payload = {}) {
+  const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError || !session?.access_token) throw new Error("Your administrator session has expired. Sign in again.");
 
-  if (button) {
-    button.disabled = true;
-    button.textContent = "Creating user…";
-  }
-  setStatus("checking", "Contacting the protected admin-create-user service…");
-
+  let response;
   try {
-    const response = await fetch(`${SUPABASE_URL}/functions/v1/admin-create-user`, {
+    response = await fetch(ADMIN_USER_SERVICE_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${session.access_token}`,
         "apikey": SUPABASE_PUBLISHABLE_KEY
       },
-      body: JSON.stringify({
-        full_name: $("#admin-user-name").value.trim(),
-        department: $("#admin-user-department").value.trim(),
-        email: $("#admin-user-email").value.trim().toLowerCase(),
-        password
-      })
+      body: JSON.stringify({ action, ...payload })
     });
+  } catch (error) {
+    throw new Error(error?.message || `Unable to reach ${ADMIN_USER_SERVICE_NAME}.`);
+  }
 
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      const message = payload.error || `User creation failed with HTTP ${response.status}.`;
-      setStatus("error", `${message} Check the admin-create-user Edge Function logs.`);
-      return showToast(message, true);
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const detail = result.error || result.message || `HTTP ${response.status}`;
+    const error = new Error(detail);
+    error.status = response.status;
+    throw error;
+  }
+  return result;
+}
+
+async function checkAdminUserService({ force = false } = {}) {
+  if (currentProfile?.role !== "super_admin") return false;
+  if (!force && adminUserServiceAvailable && Date.now() - adminUserServiceCheckedAt < 60000) return true;
+  if (adminUserServiceCheckPromise) return adminUserServiceCheckPromise;
+
+  adminUserServiceAvailable = false;
+  setAdminUserServiceStatus("checking", `Checking ${ADMIN_USER_SERVICE_NAME}…`);
+  adminUserServiceCheckPromise = (async () => {
+    try {
+      const result = await invokeAdminUserService("health");
+      adminUserServiceAvailable = true;
+      adminUserServiceCheckedAt = Date.now();
+      setAdminUserServiceStatus("success", result.message || "Protected administrator service is available.");
+      return true;
+    } catch (error) {
+      adminUserServiceAvailable = false;
+      const statusHint = error?.status === 404
+        ? `Deploy the ${ADMIN_USER_SERVICE_NAME} Edge Function.`
+        : error?.status === 401
+          ? "Sign out and sign in again, then retest."
+          : error?.status === 403
+            ? "The signed-in profile must be an active super admin."
+            : "Check the Edge Function logs and allowed origin configuration.";
+      setAdminUserServiceStatus("error", `${error?.message || "Service check failed."} ${statusHint}`);
+      return false;
+    } finally {
+      adminUserServiceCheckPromise = null;
     }
+  })();
+  return adminUserServiceCheckPromise;
+}
 
+async function createUserAsAdmin(event) {
+  event.preventDefault();
+  if (currentProfile?.role !== "super_admin") return;
+
+  const button = event.submitter || $("#admin-create-user-submit");
+  const password = $("#admin-user-password").value;
+  if (!isStrongPassword(password)) {
+    setAdminUserServiceStatus("error", "Temporary password does not meet the HOME31 password standard.");
+    return showToast("Temporary password must contain at least 10 characters with uppercase, lowercase, number and symbol.", true);
+  }
+
+  if (!adminUserServiceAvailable && !(await checkAdminUserService({ force: true }))) {
+    return showToast("The protected administrator service is unavailable. Review the service status above.", true);
+  }
+
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Creating user…";
+  }
+  setAdminUserServiceStatus("checking", "Creating the Auth account and HOME31 profile…");
+
+  try {
+    const result = await invokeAdminUserService("create_user", {
+      full_name: $("#admin-user-name").value.trim(),
+      department: $("#admin-user-department").value.trim(),
+      email: $("#admin-user-email").value.trim().toLowerCase(),
+      password
+    });
     $("#admin-create-user-form").reset();
-    setStatus("success", "Active normal user created. First-login password change is required.");
+    adminUserServiceAvailable = true;
+    setAdminUserServiceStatus("success", result.message || "Active normal user created. First-login password change is required.");
     showToast("Active normal user created. The user must change the temporary password at first login.");
     await loadAdminData();
   } catch (error) {
-    const message = error?.message || "Unable to reach admin-create-user.";
-    setStatus("error", `${message} Confirm that admin-create-user is deployed in this Supabase project.`);
-    showToast("Unable to reach the protected user-creation service.", true);
+    adminUserServiceAvailable = error?.status !== 404 && error?.status !== 0;
+    setAdminUserServiceStatus("error", `${error?.message || "User creation failed."} Check the ${ADMIN_USER_SERVICE_NAME} logs.`);
+    showToast(error?.message || "Unable to create the user.", true);
   } finally {
     if (button) {
-      button.disabled = false;
+      button.disabled = !adminUserServiceAvailable;
       button.textContent = "Create Active User";
     }
   }
@@ -2010,7 +2186,7 @@ function generateTemporaryPassword() {
 }
 
 async function resetUserPassword(profileId) {
-  const profile = adminProfiles.find(item => item.id === profileId);
+  const profile = adminProfiles.find(item => String(item.id) === String(profileId));
   if (!profile) return;
 
   const suggested = createStrongTemporaryPassword();
@@ -2023,27 +2199,34 @@ async function resetUserPassword(profileId) {
     return showToast("Temporary password must contain at least 10 characters with uppercase, lowercase, number and symbol.", true);
   }
 
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session?.access_token) return showToast("Your session has expired. Sign in again.", true);
+  try {
+    const result = await invokeAdminUserService("reset_password", { user_id: profileId, password });
+    window.prompt("Password reset completed. Copy this temporary password and share it securely:", password);
+    showToast(result.message || "Temporary password assigned. The user must change it at next login.");
+    await loadAdminData();
+  } catch (error) {
+    showToast(error?.message || "Unable to reset the user password.", true);
+  }
+}
+
+async function setUserAccessStatus(profileId, status) {
+  if (currentProfile?.role !== "super_admin") return;
+  const profile = adminProfiles.find(item => String(item.id) === String(profileId));
+  if (!profile || profile.role !== "normal_user") return;
+  if (!["active", "locked", "disabled"].includes(status)) return;
+
+  const actionLabel = status === "active" ? "restore access for" : status === "locked" ? "freeze" : "revoke access for";
+  const warning = status === "active"
+    ? `${actionLabel} ${profile.full_name || profile.email}?`
+    : `${actionLabel} ${profile.full_name || profile.email}? The user will be blocked from new sign-ins and HOME31 data access.`;
+  if (!window.confirm(warning)) return;
 
   try {
-    const response = await fetch(`${SUPABASE_URL}/functions/v1/admin-reset-password`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${session.access_token}`,
-        "apikey": SUPABASE_PUBLISHABLE_KEY
-      },
-      body: JSON.stringify({ user_id: profileId, password })
-    });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) return showToast(payload.error || `Password reset failed with HTTP ${response.status}.`, true);
-
-    window.prompt("Password reset completed. Copy this temporary password and share it securely:", password);
-    showToast("Temporary password assigned. The user must change it at next login.");
+    const result = await invokeAdminUserService("set_access", { user_id: profileId, account_status: status });
+    showToast(result.message || `Account status changed to ${accountStatusLabel(status)}.`);
     await loadAdminData();
-  } catch (_error) {
-    showToast("Unable to reach the protected password reset service.", true);
+  } catch (error) {
+    showToast(error?.message || "Unable to update account access.", true);
   }
 }
 
@@ -2602,8 +2785,9 @@ function numberValue(selector) {
 }
 
 function formatRinggit(value) {
-  if (value === null || value === undefined || Number.isNaN(Number(value))) return "Not recorded";
-  return `RM ${Number(value).toLocaleString("en-MY", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const amount = currencyValue(value);
+  if (amount === null) return "Not recorded";
+  return `RM ${amount.toLocaleString("en-MY", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function renderBudgetSummary() {
@@ -2611,8 +2795,8 @@ function renderBudgetSummary() {
   const challenged = numberValue("#initiative-estimated-cost-post-challenge");
   const proposed = numberValue("#initiative-proposed-budget");
   const approved = numberValue("#initiative-approved-budget");
-  const challengeVariance = initial === null || challenged === null ? null : challenged - initial;
-  const approvalVariance = approved === null || challenged === null ? null : approved - challenged;
+  const challengeVariance = subtractCurrency(challenged, initial);
+  const approvalVariance = subtractCurrency(approved, challenged);
 
   $("#initiative-budget-summary").innerHTML = `
     <article><span>Initial estimate</span><strong>${formatRinggit(initial)}</strong></article>
@@ -3167,7 +3351,6 @@ function cleanExcelText(value) {
 
 function parseExcelNumber(value) {
   if (value === null || value === undefined || value === "") return null;
-  if (typeof value === "number") return Number.isFinite(value) ? value : null;
   const text = String(value).trim();
   if (!text) return null;
   const cleaned = text.replace(/\s/g, "").replace(/RM/gi, "").replace(/,/g, "").replace(/%$/, "");
@@ -3475,6 +3658,7 @@ function populateAdminYearOptions() {
   if (!valid.has(String(selectedAdminYear))) selectedAdminYear = valid.has(DEFAULT_ADMIN_YEAR) ? DEFAULT_ADMIN_YEAR : String(sorted.at(-1) || "all");
   $("#admin-year-select").value = String(selectedAdminYear);
   updateAdminYearBadge();
+  populatePortfolioComparisonYearOptions(sorted);
 }
 function handleAdminYearChange(event) {
   selectedAdminYear = event.target.value;
@@ -3507,7 +3691,7 @@ function numericValue(value) {
 }
 function projectPortfolioCost(project) {
   return financialFieldConfirmed(project, "approved_budget")
-    ? (numericValue(project.approved_budget) || 0)
+    ? (currencyValue(project.approved_budget) ?? 0)
     : 0;
 }
 function hasPortfolioCost(project) {
@@ -3528,12 +3712,10 @@ function calculateProjectReadiness(project) {
 }
 function calculateExecutiveMetrics(records=projectsForYear()) {
   const today=new Date().toISOString().slice(0,10), total=records.length;
-  const confirmedSum=field=>records.reduce((sum,project)=>
-    sum + (financialFieldConfirmed(project, field) ? (numericValue(project[field]) || 0) : 0), 0);
-  const originalCost=confirmedSum("estimated_cost");
-  const effectiveCost=confirmedSum("estimated_cost_post_challenge");
-  const proposedBudget=confirmedSum("proposed_budget_post_retreat");
-  const approvedBudget=confirmedSum("approved_budget");
+  const originalCost=sumConfirmedCurrency(records, "estimated_cost");
+  const effectiveCost=sumConfirmedCurrency(records, "estimated_cost_post_challenge");
+  const proposedBudget=sumConfirmedCurrency(records, "proposed_budget_post_retreat");
+  const approvedBudget=sumConfirmedCurrency(records, "approved_budget");
   const portfolioCost=approvedBudget;
   const originalCostCount=records.filter(p=>financialFieldConfirmed(p,"estimated_cost")).length;
   const effectiveCostCount=records.filter(p=>financialFieldConfirmed(p,"estimated_cost_post_challenge")).length;
@@ -3562,7 +3744,7 @@ function calculateExecutiveMetrics(records=projectsForYear()) {
     ["Not Assessed","Watchlist / Under Review"].includes(p.priority_status)
   ).length;
   return {
-    records,total,originalCost,effectiveCost,proposedBudget,approvedBudget,portfolioCost,challengeReduction:originalCost-effectiveCost,
+    records,total,originalCost,effectiveCost,proposedBudget,approvedBudget,portfolioCost,challengeReduction:subtractCurrency(originalCost,effectiveCost) ?? 0,
     originalCostCount,effectiveCostCount,portfolioCostCount:approvedBudgetCount,proposedBudgetCount,approvedBudgetCount,
     strategicPriority:records.filter(p=>["Strategic Priority","Corporate Priority"].includes(p.priority_status)||p.priority==="Strategic").length,
     activeDelivery:records.filter(p=>p.status!=="Completed").length,
@@ -3585,8 +3767,9 @@ function renderAdminOverview() {
   $("#admin-kpi-health").textContent=`${metrics.strategicReadiness}%`;
   $("#admin-kpi-health-note").textContent=`${metrics.fullyReady}/${metrics.total || 0} records meet all seven checks`;
   $("#admin-kpi-cost-label").textContent="Approved Budget";
-  $("#admin-kpi-effective-cost").textContent=compactRinggit(metrics.approvedBudget);
-  $("#admin-kpi-effective-note").textContent=`Portfolio cost basis · ${metrics.approvedBudgetCount}/${metrics.total||0} records`;
+  $("#admin-kpi-effective-cost").textContent=headlineRinggit(metrics.approvedBudget);
+  $("#admin-kpi-effective-exact").textContent=`Exact total: ${formatRinggit(metrics.approvedBudget)}`;
+  $("#admin-kpi-effective-note").textContent=`${metrics.approvedBudgetCount}/${metrics.total||0} records populated`;
   $("#admin-kpi-reduction").textContent=`${metrics.approvedBudgetCoverage}%`;
   $("#admin-kpi-reduction-note").textContent=`${Math.max(0,metrics.total-metrics.approvedBudgetCount)} records missing Approved Budget`;
   $("#admin-kpi-priority").textContent=metrics.activeDelivery;
@@ -3653,12 +3836,12 @@ function renderExecutiveReadiness(metrics) {
 }
 function comparisonMetricsForYear(year) {
   const records=projectsForYear(String(year));
-  return {year,records,portfolioItems:records.length,portfolioCost:records.reduce((s,p)=>s+projectPortfolioCost(p),0),strategicPriority:records.filter(p=>["Strategic Priority","Corporate Priority"].includes(p.priority_status)||p.priority==="Strategic").length,watchlist:records.filter(p=>["Watchlist / Under Review","Not Assessed"].includes(p.priority_status)).length,zeroBudgetOrConfirmedCost:records.filter(p=>!hasPortfolioCost(p)||projectPortfolioCost(p)===0).length,departments:new Set(records.map(p=>p.department).filter(Boolean)).size};
+  return {year,records,portfolioItems:records.length,portfolioCost:sumProjectPortfolioCost(records),strategicPriority:records.filter(p=>["Strategic Priority","Corporate Priority"].includes(p.priority_status)||p.priority==="Strategic").length,watchlist:records.filter(p=>["Watchlist / Under Review","Not Assessed"].includes(p.priority_status)).length,zeroBudgetOrConfirmedCost:records.filter(p=>!hasPortfolioCost(p)||projectPortfolioCost(p)===0).length,departments:new Set(records.map(p=>p.department).filter(Boolean)).size};
 }
 function renderExecutiveComparison() {
   const a=comparisonMetricsForYear(2026), b=comparisonMetricsForYear(2027);
-  const cards=[["Portfolio items","portfolioItems",String],["Portfolio cost basis","portfolioCost",compactRinggit],["Priority / corporate priority","strategicPriority",String],["Watchlist / under review","watchlist",String],["Zero / unconfirmed approved budget","zeroBudgetOrConfirmedCost",String],["Departments represented","departments",String]];
-  $("#admin-comparison-grid").innerHTML=cards.map(([label,key,fmt])=>{const old=a[key],now=b[key],d=now-old,p=old?d/old*100:0;return `<article class="comparison-card"><span>${escapeHtml(label)}</span><div class="comparison-values"><div><span>AMP2026</span><strong>${fmt(old)}</strong></div><div><span>AMP2027</span><strong>${fmt(now)}</strong></div></div><div class="comparison-delta ${d>0?"negative":""}">${d>=0?"+":""}${key==="portfolioCost"?compactRinggit(d):d.toLocaleString("en-MY")} (${d>=0?"+":""}${p.toFixed(1)}%)</div></article>`;}).join("");
+  const cards=[["Portfolio items","portfolioItems",String],["Portfolio cost basis","portfolioCost",headlineRinggit],["Priority / corporate priority","strategicPriority",String],["Watchlist / under review","watchlist",String],["Zero / unconfirmed approved budget","zeroBudgetOrConfirmedCost",String],["Departments represented","departments",String]];
+  $("#admin-comparison-grid").innerHTML=cards.map(([label,key,fmt])=>{const old=a[key],now=b[key],d=now-old,p=old?d/old*100:0;const exactA=key==="portfolioCost"?`<small>${formatRinggit(old)}</small>`:"";const exactB=key==="portfolioCost"?`<small>${formatRinggit(now)}</small>`:"";return `<article class="comparison-card"><span>${escapeHtml(label)}</span><div class="comparison-values"><div><span>AMP2026</span><strong>${fmt(old)}</strong>${exactA}</div><div><span>AMP2027</span><strong>${fmt(now)}</strong>${exactB}</div></div><div class="comparison-delta ${d>0?"negative":""}">${d>=0?"+":""}${key==="portfolioCost"?formatRinggit(d):d.toLocaleString("en-MY")} (${d>=0?"+":""}${p.toFixed(1)}%)</div></article>`;}).join("");
   const badge=$("#admin-comparison-source-status");
   if(!a.records.length&&!b.records.length){badge.textContent="No live year data";badge.className="executive-status-chip critical";}else if(!a.records.length){badge.textContent="AMP2026 data pending";badge.className="executive-status-chip watch";}else if(!b.records.length){badge.textContent="AMP2027 data pending";badge.className="executive-status-chip watch";}else{badge.textContent="Live Supabase comparison";badge.className="executive-status-chip good";}
   $("#admin-comparison-notes").innerHTML=`<div class="comparison-note"><strong>AMP2026 source:</strong> ${a.records.length} live records. Portfolio cost uses Approved Budget.</div><div class="comparison-note"><strong>AMP2027 source:</strong> ${b.records.length} live records. Portfolio cost also uses Approved Budget.</div><div class="comparison-note"><strong>Consistent basis:</strong> Both years use confirmed Approved Budget values; adding, editing or deleting records updates the comparison automatically.</div>`;
@@ -3668,7 +3851,7 @@ function renderExecutiveLists(metrics) {
   const decisions=[["Approved budget coverage",metrics.decisionCounts.approvedBudget],["Post-challenge cost confirmation",metrics.decisionCounts.postChallengeCost],["ICT assessment",metrics.decisionCounts.ict],["HR and workforce review",metrics.decisionCounts.hr],["Evidence closure",metrics.decisionCounts.evidence],["Priority determination",metrics.decisionCounts.priority]].filter(x=>x[1]>0);
   $("#admin-decision-queue").innerHTML=decisions.length?decisions.map(([t,c])=>`<div class="executive-list-item"><div><strong>${escapeHtml(t)}</strong><span>${c} initiatives require follow-up in ${selectedYearLabel()}.</span></div><em>${c}</em></div>`).join(""):'<div class="executive-empty">No executive decision queue is currently outstanding.</div>';
   const top=records.slice().sort((a,b)=>projectPortfolioCost(b)-projectPortfolioCost(a)).filter(p=>projectPortfolioCost(p)>0).slice(0,5);
-  $("#admin-top-cost-list").innerHTML=top.length?top.map(p=>`<div class="executive-list-item"><div><strong>${escapeHtml(p.initiative_name)}</strong><span>AMP${projectImplementationYear(p)} · ${escapeHtml(p.department||"No department")}</span></div><button data-executive-open="${p.id}" type="button">${compactRinggit(projectPortfolioCost(p))}</button></div>`).join(""):'<div class="executive-empty">No selected-year cost records are available.</div>';
+  $("#admin-top-cost-list").innerHTML=top.length?top.map(p=>`<div class="executive-list-item"><div><strong>${escapeHtml(p.initiative_name)}</strong><span>AMP${projectImplementationYear(p)} · ${escapeHtml(p.department||"No department")}</span></div><button data-executive-open="${p.id}" type="button">${formatRinggit(projectPortfolioCost(p))}</button></div>`).join(""):'<div class="executive-empty">No selected-year cost records are available.</div>';
   const order={Extreme:4,High:3,Medium:2,Low:1}, risk=records.slice().sort((a,b)=>(order[b.risk_level]||0)-(order[a.risk_level]||0)||Number(a.readiness_score||0)-Number(b.readiness_score||0)).slice(0,5);
   $("#admin-top-risk-list").innerHTML=risk.length?risk.map(p=>`<div class="executive-list-item"><div><strong>${escapeHtml(p.initiative_name)}</strong><span>AMP${projectImplementationYear(p)} · ${escapeHtml(p.department||"No department")} · ${Number(p.readiness_score||0)}% readiness</span></div><button data-executive-open="${p.id}" type="button">${escapeHtml(p.risk_level||"Not rated")}</button></div>`).join(""):'<div class="executive-empty">No risk records are available.</div>';
 }
@@ -3833,7 +4016,7 @@ function renderLiveDepartmentComparison() {
   const d26=departmentCostData(projectsForYear("2026")),d27=departmentCostData(projectsForYear("2027")),m26=new Map(d26.map(i=>[i.label,i.value])),m27=new Map(d27.map(i=>[i.label,i.value]));
   const labels=[...new Set([...m26.keys(),...m27.keys()])].map(label=>({label,total:(m26.get(label)||0)+(m27.get(label)||0)})).sort((a,b)=>b.total-a.total).slice(0,12).map(i=>i.label);
   charts.adminDepartmentCost=new Chart($("#admin-department-cost-chart"),{type:"bar",data:{labels,datasets:[{label:"AMP2026 Approved Budget",data:labels.map(l=>m26.get(l)||0),backgroundColor:EXECUTIVE_COLORS.blue,borderRadius:6},{label:"AMP2027 Approved Budget",data:labels.map(l=>m27.get(l)||0),backgroundColor:EXECUTIVE_COLORS.gold,borderRadius:6}]},options:{...executiveChartOptions(),indexAxis:"y",onClick:(_e,elements)=>{if(!elements.length)return;selectedAdminYear=elements[0].datasetIndex===0?"2026":"2027";$("#admin-year-select").value=selectedAdminYear;updateAdminYearBadge();$("#admin-search").value=labels[elements[0].index];showModule("admin-portfolio");renderAdminPortfolio();},scales:executiveMoneyScales()}});
-  const t26=projectsForYear("2026").reduce((s,p)=>s+projectPortfolioCost(p),0),t27=projectsForYear("2027").reduce((s,p)=>s+projectPortfolioCost(p),0);
+  const t26=sumProjectPortfolioCost(projectsForYear("2026")),t27=sumProjectPortfolioCost(projectsForYear("2027"));
   $("#admin-cost-concentration-footnote").textContent=`Live sources: AMP2026 approved budget ${formatRinggit(t26)}; AMP2027 approved budget ${formatRinggit(t27)}. Click a bar to open that year and department.`;
 }
 function renderExecutivePillarChart(records = projectsForYear()) {
@@ -3869,8 +4052,8 @@ function renderExecutivePillarChart(records = projectsForYear()) {
     }
   });
 }
-function pillarData(metric="count",records=projectsForYear()) {return pillars.map(p=>{const related=records.filter(r=>r.strategic_pillar===p);return{label:p,value:metric==="cost"?related.reduce((s,r)=>s+projectPortfolioCost(r),0):related.length};}).sort((a,b)=>b.value-a.value);}
-function departmentCostData(records=projectsForYear()) {const map=new Map();records.forEach(p=>{const d=p.department||"Not recorded";map.set(d,(map.get(d)||0)+projectPortfolioCost(p));});return[...map.entries()].map(([label,value])=>({label,value})).sort((a,b)=>b.value-a.value);}
+function pillarData(metric="count",records=projectsForYear()) {return pillars.map(p=>{const related=records.filter(r=>r.strategic_pillar===p);return{label:p,value:metric==="cost"?sumProjectPortfolioCost(related):related.length};}).sort((a,b)=>b.value-a.value);}
+function departmentCostData(records=projectsForYear()) {const map=new Map();records.forEach(p=>{const d=p.department||"Not recorded",cents=currencyToCents(projectPortfolioCost(p))??0;map.set(d,(map.get(d)||0)+cents);});return[...map.entries()].map(([label,cents])=>({label,value:currencyFromCents(cents)})).sort((a,b)=>b.value-a.value);}
 function departmentReadinessData(records=projectsForYear()) {const map=new Map();records.forEach(p=>{const d=p.department||"Not recorded",c=map.get(d)||{total:0,count:0};c.total+=calculateProjectReadiness(p).score;c.count++;map.set(d,c);});return[...map.entries()].map(([label,d])=>({label,value:Math.round(d.total/d.count)})).sort((a,b)=>a.value-b.value);}
 function quarterlyDeliveryData(records = projectsForYear()) {
   const ranges = records.map(project => ({ project, range: extractProjectDateRange(project) })).filter(item => item.range);
@@ -3911,22 +4094,214 @@ function getFilteredAdminPortfolioRecords() {
   });
 }
 function renderAdminPortfolio() {
-  if(currentProfile?.role!=="super_admin")return;const yearRecords=projectsForYear(),filtered=getFilteredAdminPortfolioRecords(),cost=filtered.reduce((s,p)=>s+projectPortfolioCost(p),0),approved=filtered.filter(p=>financialFieldConfirmed(p,"approved_budget")).length,atRisk=filtered.filter(p=>p.status==="At Risk"||["High","Extreme"].includes(p.risk_level)).length,ready=filtered.filter(p=>Number(p.readiness_score||0)>=80&&!["High","Extreme"].includes(p.risk_level)&&p.status!=="At Risk").length,today=new Date().toISOString().slice(0,10),ownership=filtered.filter(p=>p.executive_sponsor&&p.accountable_owner&&p.delivery_lead).length,evidence=filtered.length?Math.round(filtered.reduce((s,p)=>s+Number(p.evidence_completeness||0),0)/filtered.length):0,ict=filtered.filter(p=>p.ict_classification==="New - Pending ICT review"||((p.system_type&&p.system_type!=="Non System")&&!p.ict_classification)).length,hr=filtered.filter(p=>["Required","To be confirmed"].includes(p.hr_collaboration_status)&&!["Supported","Not required"].includes(p.hr_review_status)).length,overdue=filtered.filter(p=>p.target_date&&p.target_date<today&&p.status!=="Completed").length;
-  $("#portfolio-kpi-total").textContent=yearRecords.length;$("#portfolio-kpi-filtered").textContent=filtered.length;$("#portfolio-kpi-cost").textContent=compactRinggit(cost);$("#portfolio-kpi-budget").textContent=`${filtered.length?Math.round(approved/filtered.length*100):0}%`;$("#portfolio-kpi-risk").textContent=atRisk;$("#portfolio-kpi-ready").textContent=ready;$("#portfolio-table-count").textContent=`${selectedYearLabel()} · ${filtered.length} record${filtered.length===1?"":"s"}`;$("#portfolio-assurance-ownership").textContent=`${filtered.length?Math.round(ownership/filtered.length*100):0}%`;$("#portfolio-assurance-evidence").textContent=`${evidence}%`;$("#portfolio-assurance-ict").textContent=ict;$("#portfolio-assurance-hr").textContent=hr;$("#portfolio-assurance-overdue").textContent=overdue;
+  if(currentProfile?.role!=="super_admin")return;const yearRecords=projectsForYear(),filtered=getFilteredAdminPortfolioRecords(),cost=sumProjectPortfolioCost(filtered),approved=filtered.filter(p=>financialFieldConfirmed(p,"approved_budget")).length,atRisk=filtered.filter(p=>p.status==="At Risk"||["High","Extreme"].includes(p.risk_level)).length,ready=filtered.filter(p=>Number(p.readiness_score||0)>=80&&!["High","Extreme"].includes(p.risk_level)&&p.status!=="At Risk").length,today=new Date().toISOString().slice(0,10),ownership=filtered.filter(p=>p.executive_sponsor&&p.accountable_owner&&p.delivery_lead).length,evidence=filtered.length?Math.round(filtered.reduce((s,p)=>s+Number(p.evidence_completeness||0),0)/filtered.length):0,ict=filtered.filter(p=>p.ict_classification==="New - Pending ICT review"||((p.system_type&&p.system_type!=="Non System")&&!p.ict_classification)).length,hr=filtered.filter(p=>["Required","To be confirmed"].includes(p.hr_collaboration_status)&&!["Supported","Not required"].includes(p.hr_review_status)).length,overdue=filtered.filter(p=>p.target_date&&p.target_date<today&&p.status!=="Completed").length;
+  $("#portfolio-kpi-total").textContent=yearRecords.length;
+  $("#portfolio-kpi-filtered").textContent=filtered.length;
+  $("#portfolio-kpi-cost").textContent=headlineRinggit(cost);
+  $("#portfolio-kpi-cost-exact").textContent=`Exact total: ${formatRinggit(cost)}`;
+  $("#portfolio-kpi-cost-note").textContent=`${approved}/${filtered.length || 0} records populated`;
+  $("#portfolio-kpi-budget").textContent=`${filtered.length?Math.round(approved/filtered.length*100):0}%`;
+  $("#portfolio-kpi-risk").textContent=atRisk;
+  $("#portfolio-kpi-ready").textContent=ready;
+  $("#portfolio-table-count").textContent=`${selectedYearLabel()} · ${filtered.length} record${filtered.length===1?"":"s"}`;
+  $("#portfolio-assurance-ownership").textContent=`${filtered.length?Math.round(ownership/filtered.length*100):0}%`;
+  $("#portfolio-assurance-evidence").textContent=`${evidence}%`;
+  $("#portfolio-assurance-ict").textContent=ict;
+  $("#portfolio-assurance-hr").textContent=hr;
+  $("#portfolio-assurance-overdue").textContent=overdue;
   const filterCount=[$("#admin-search").value,$("#admin-department-filter").value,$("#admin-status-filter").value,$("#admin-pillar-filter").value,$("#admin-risk-filter").value].filter(Boolean).length+(adminQuickFilter?1:0);const quickLabel=adminQuickFilterLabel();$("#portfolio-selection-badge").textContent=quickLabel?`${selectedYearLabel()} · ${quickLabel}`:filterCount?`${selectedYearLabel()} · ${filterCount} active filters`:selectedYearLabel();
   const topD=aggregateFiltered(filtered,p=>p.department||"Not recorded",projectPortfolioCost)[0],topP=aggregateFiltered(filtered,p=>p.strategic_pillar||"Not recorded",()=>1)[0];
-  $("#portfolio-selection-insight").textContent=filtered.length?`${selectedYearLabel()} selection contains ${filtered.length} initiatives with ${formatRinggit(cost)} under the ${costBasisLabel().toLowerCase()} rule. ${atRisk} require risk attention and ${ready} meet the delivery-ready rule.`:`No ${selectedYearLabel()} initiative matches the selected filters.`;
-  $("#portfolio-selection-facts").innerHTML=`<article><strong>${escapeHtml(topD?.label||"No data")}</strong><span>Highest approved budget: ${topD?compactRinggit(topD.value):"RM0"}</span></article><article><strong>${escapeHtml(shortPillar(topP?.label||"No data"))}</strong><span>Largest concentration: ${topP?.value||0} records</span></article><article><strong>${evidence}% evidence maturity</strong><span>${hr} HR and ${ict} ICT follow-ups remain.</span></article>`;
+  $("#portfolio-selection-insight").textContent=filtered.length?`${selectedYearLabel()} selection contains ${filtered.length} initiatives with an exact Approved Budget sum of ${formatRinggit(cost)}. Values are summed to the cent before display; no compact rounded values are used in the formula. ${atRisk} require risk attention and ${ready} meet the delivery-ready rule.`:`No ${selectedYearLabel()} initiative matches the selected filters.`;
+  $("#portfolio-selection-facts").innerHTML=`<article><strong>${escapeHtml(topD?.label||"No data")}</strong><span>Highest approved budget: ${topD?formatRinggit(topD.value):"RM 0.00"}</span></article><article><strong>${escapeHtml(shortPillar(topP?.label||"No data"))}</strong><span>Largest concentration: ${topP?.value||0} records</span></article><article><strong>${evidence}% evidence maturity</strong><span>${hr} HR and ${ict} ICT follow-ups remain.</span></article>`;
   $("#admin-portfolio-table tbody").innerHTML=filtered.length?filtered.map(p=>`<tr><td><span class="portfolio-year-pill">AMP${projectImplementationYear(p)}</span></td><td><strong>${escapeHtml(p.initiative_name)}</strong></td><td>${escapeHtml(p.accountable_owner||"Not recorded")}</td><td>${escapeHtml(p.department)}</td><td>${escapeHtml(p.initiative_category||"Not recorded")}</td><td>${escapeHtml(p.system_type||"Not recorded")}</td><td>${escapeHtml(p.priority_status||"Not assessed")}</td><td>${escapeHtml(p.strategic_pillar)}</td><td><span class="status-pill">${escapeHtml(p.status)}</span></td><td><span class="risk-pill">${escapeHtml(p.risk_level)}</span></td><td>${financialFieldConfirmed(p,"approved_budget") ? formatRinggit(p.approved_budget) : "Not recorded"}</td><td>${Number(p.readiness_score||0)}%</td><td>${progressBar(p.progress)}</td><td><button class="text-button" data-admin-edit="${p.id}" type="button">Edit</button></td></tr>`).join(""):'<tr><td colspan="14">No records match the active year and filters.</td></tr>';
   renderPortfolioActiveFilters();
   renderContinuityRegister();
+  renderPortfolioYearComparison();
   $$('[data-admin-edit]').forEach(b=>b.addEventListener('click',()=>openInitiativeModal(b.dataset.adminEdit)));
+}
+
+
+function readPortfolioComparisonPreference() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(PORTFOLIO_YEAR_COMPARISON_KEY) || "null");
+    return saved && Number.isFinite(Number(saved.a)) && Number.isFinite(Number(saved.b))
+      ? { a: Number(saved.a), b: Number(saved.b) }
+      : null;
+  } catch (_error) {
+    return null;
+  }
+}
+
+function savePortfolioComparisonPreference() {
+  try {
+    localStorage.setItem(PORTFOLIO_YEAR_COMPARISON_KEY, JSON.stringify({
+      a: portfolioComparisonYearA,
+      b: portfolioComparisonYearB
+    }));
+  } catch (_error) {
+    // Comparison remains available when browser storage is restricted.
+  }
+}
+
+function portfolioComparisonYears(recordYears = []) {
+  const clean = recordYears.map(Number).filter(year => Number.isFinite(year) && year >= 2025 && year <= 2100);
+  const minimum = Math.min(2025, ...(clean.length ? clean : [2025]));
+  const maximum = Math.max(2031, new Date().getFullYear() + 1, ...(clean.length ? clean : [2031]));
+  return Array.from({ length: maximum - minimum + 1 }, (_value, index) => minimum + index);
+}
+
+function populatePortfolioComparisonYearOptions(recordYears = []) {
+  const years = portfolioComparisonYears(recordYears);
+  const yearSet = new Set(years);
+  const stored = readPortfolioComparisonPreference();
+  const preferredA = stored?.a ?? 2026;
+  const preferredB = stored?.b ?? 2027;
+  portfolioComparisonYearA = yearSet.has(preferredA) ? preferredA : (years.at(-2) || years[0]);
+  portfolioComparisonYearB = yearSet.has(preferredB) ? preferredB : (years.at(-1) || years[0]);
+  if (portfolioComparisonYearA === portfolioComparisonYearB && years.length > 1) {
+    portfolioComparisonYearA = years[Math.max(0, years.indexOf(portfolioComparisonYearB) - 1)];
+  }
+  const options = years.map(year => `<option value="${year}">AMP${year}${year === new Date().getFullYear() ? " · Current year" : ""}</option>`).join("");
+  const selectA = $("#portfolio-compare-year-a");
+  const selectB = $("#portfolio-compare-year-b");
+  if (selectA) { selectA.innerHTML = options; selectA.value = String(portfolioComparisonYearA); }
+  if (selectB) { selectB.innerHTML = options; selectB.value = String(portfolioComparisonYearB); }
+  savePortfolioComparisonPreference();
+}
+
+function handlePortfolioComparisonYearChange(side, value) {
+  const year = Number(value);
+  if (!Number.isFinite(year)) return;
+  if (side === "a") portfolioComparisonYearA = year;
+  if (side === "b") portfolioComparisonYearB = year;
+  savePortfolioComparisonPreference();
+  renderPortfolioYearComparison();
+}
+
+function recordsForPortfolioComparison(year) {
+  const query = ($("#admin-search")?.value || "").trim().toLowerCase();
+  const department = $("#admin-department-filter")?.value || "";
+  const status = $("#admin-status-filter")?.value || "";
+  const pillar = $("#admin-pillar-filter")?.value || "";
+  const risk = $("#admin-risk-filter")?.value || "";
+  return adminProjects.filter(project => {
+    const haystack = [
+      projectImplementationYear(project), project.initiative_name, project.accountable_owner,
+      project.executive_sponsor, project.delivery_lead, project.department,
+      project.initiative_category, project.system_type, project.priority_status
+    ].join(" ").toLowerCase();
+    return projectImplementationYear(project) === Number(year) &&
+      matchesAdminQuickFilter(project) &&
+      (!query || haystack.includes(query)) &&
+      (!department || project.department === department) &&
+      (!status || project.status === status) &&
+      (!pillar || project.strategic_pillar === pillar) &&
+      (!risk || project.risk_level === risk);
+  });
+}
+
+function portfolioYearMetrics(year) {
+  const records = recordsForPortfolioComparison(year);
+  const approvedBudget = sumConfirmedCurrency(records, "approved_budget");
+  const approvedBudgetCount = records.filter(project => financialFieldConfirmed(project, "approved_budget")).length;
+  const today = new Date().toISOString().slice(0, 10);
+  return {
+    year,
+    records,
+    count: records.length,
+    approvedBudget,
+    approvedBudgetCount,
+    coverage: records.length ? Math.round(approvedBudgetCount / records.length * 100) : 0,
+    active: records.filter(project => project.status !== "Completed").length,
+    atRisk: records.filter(project => project.status === "At Risk" || ["High", "Extreme"].includes(project.risk_level)).length,
+    readiness: records.length ? Math.round(records.reduce((sum, project) => sum + Number(project.readiness_score || 0), 0) / records.length) : 0,
+    departments: new Set(records.map(project => project.department).filter(Boolean)).size,
+    overdue: records.filter(project => project.target_date && project.target_date < today && project.status !== "Completed").length
+  };
+}
+
+function comparisonDeltaClass(value, lowerIsBetter = false) {
+  const number = Number(value || 0);
+  if (number === 0) return "neutral";
+  const positive = lowerIsBetter ? number < 0 : number > 0;
+  return positive ? "positive" : "negative";
+}
+
+function renderPortfolioYearComparison() {
+  if (currentProfile?.role !== "super_admin" || !$("#portfolio-year-comparison")) return;
+  const a = portfolioYearMetrics(portfolioComparisonYearA);
+  const b = portfolioYearMetrics(portfolioComparisonYearB);
+  const budgetMovement = subtractCurrency(b.approvedBudget, a.approvedBudget) ?? 0;
+  const budgetPercent = a.approvedBudget ? budgetMovement / a.approvedBudget * 100 : (b.approvedBudget ? 100 : 0);
+  const countMovement = b.count - a.count;
+  const readinessMovement = b.readiness - a.readiness;
+  const riskMovement = b.atRisk - a.atRisk;
+  const maxBudget = Math.max(a.approvedBudget, b.approvedBudget, 1);
+  const continuity = buildContinuityPairs(a.records, b.records);
+  const carried = continuity.filter(pair => pair.previous && pair.current).length;
+  const newItems = continuity.filter(pair => !pair.previous && pair.current).length;
+  const ended = continuity.filter(pair => pair.previous && !pair.current).length;
+
+  $("#portfolio-year-comparison-summary").innerHTML = [a, b].map((metrics, index) => `
+    <article class="year-comparison-year-card ${index === 0 ? "base" : "comparison"}">
+      <div class="year-comparison-year-label"><span>${index === 0 ? "Base year" : "Comparison year"}</span><strong>AMP${metrics.year}</strong></div>
+      <div class="year-comparison-primary-value"><strong>${headlineRinggit(metrics.approvedBudget)}</strong><span>${formatRinggit(metrics.approvedBudget)}</span></div>
+      <div class="year-comparison-card-facts">
+        <span><strong>${metrics.count}</strong> initiatives</span>
+        <span><strong>${metrics.coverage}%</strong> budget coverage</span>
+        <span><strong>${metrics.active}</strong> active</span>
+        <span><strong>${metrics.atRisk}</strong> at risk</span>
+      </div>
+    </article>`).join("");
+
+  const movement = $("#portfolio-year-comparison-budget-movement");
+  movement.textContent = `${signedRinggit(budgetMovement)} · ${budgetPercent > 0 ? "+" : ""}${budgetPercent.toFixed(2)}%`;
+  movement.className = `year-comparison-movement ${comparisonDeltaClass(budgetMovement)}`;
+
+  $("#portfolio-year-comparison-bars").innerHTML = [a, b].map((metrics, index) => `
+    <div class="year-comparison-bar-row ${index === 0 ? "base" : "comparison"}">
+      <div><strong>AMP${metrics.year}</strong><span>${headlineRinggit(metrics.approvedBudget)}</span></div>
+      <i><b style="width:${Math.max(metrics.approvedBudget ? 4 : 0, metrics.approvedBudget / maxBudget * 100)}%"></b></i>
+      <em>${formatRinggit(metrics.approvedBudget)}</em>
+    </div>`).join("");
+
+  $("#portfolio-year-comparison-budget-note").innerHTML = `
+    <strong>${a.approvedBudgetCount}/${a.count || 0}</strong> AMP${a.year} records and
+    <strong>${b.approvedBudgetCount}/${b.count || 0}</strong> AMP${b.year} records contain confirmed Approved Budget values.`;
+
+  $("#portfolio-year-comparison-continuity").innerHTML = `
+    <article class="carried"><strong>${carried}</strong><span>Carried, evolved or recurring</span></article>
+    <article class="new"><strong>${newItems}</strong><span>New or unmatched in AMP${b.year}</span></article>
+    <article class="ended"><strong>${ended}</strong><span>No identified continuation from AMP${a.year}</span></article>`;
+
+  const metrics = [
+    ["Initiatives", a.count, b.count, signedNumber(countMovement), comparisonDeltaClass(countMovement)],
+    ["Approved Budget", headlineRinggit(a.approvedBudget), headlineRinggit(b.approvedBudget), signedRinggit(budgetMovement), comparisonDeltaClass(budgetMovement)],
+    ["Budget coverage", `${a.coverage}%`, `${b.coverage}%`, `${b.coverage - a.coverage > 0 ? "+" : ""}${b.coverage - a.coverage} pp`, comparisonDeltaClass(b.coverage - a.coverage)],
+    ["Active delivery", a.active, b.active, signedNumber(b.active - a.active), "neutral"],
+    ["At risk", a.atRisk, b.atRisk, signedNumber(riskMovement), comparisonDeltaClass(riskMovement, true)],
+    ["Average readiness", `${a.readiness}%`, `${b.readiness}%`, `${readinessMovement > 0 ? "+" : ""}${readinessMovement} pp`, comparisonDeltaClass(readinessMovement)],
+    ["Departments", a.departments, b.departments, signedNumber(b.departments - a.departments), "neutral"],
+    ["Overdue", a.overdue, b.overdue, signedNumber(b.overdue - a.overdue), comparisonDeltaClass(b.overdue - a.overdue, true)]
+  ];
+  $("#portfolio-year-comparison-table").innerHTML = `
+    <div class="year-comparison-table-row heading" role="row">
+      <span role="columnheader">Metric</span><span role="columnheader">AMP${a.year}</span><span role="columnheader">AMP${b.year}</span><span role="columnheader">Movement</span>
+    </div>
+    ${metrics.map(([label, left, right, delta, className]) => `<div class="year-comparison-table-row" role="row"><strong role="cell">${escapeHtml(label)}</strong><span role="cell">${escapeHtml(left)}</span><span role="cell">${escapeHtml(right)}</span><em class="${className}" role="cell">${escapeHtml(delta)}</em></div>`).join("")}`;
+
+  const activeFilterCount = [
+    $("#admin-search")?.value, $("#admin-department-filter")?.value, $("#admin-status-filter")?.value,
+    $("#admin-pillar-filter")?.value, $("#admin-risk-filter")?.value, adminQuickFilter
+  ].filter(Boolean).length;
+  $("#portfolio-year-comparison-basis").innerHTML = `
+    <strong>Consistent comparison basis.</strong> AMP${a.year} and AMP${b.year} use exact confirmed Approved Budget totals, summed in integer cents before display. ${activeFilterCount ? `${activeFilterCount} active Portfolio filter${activeFilterCount === 1 ? "" : "s"} appl${activeFilterCount === 1 ? "ies" : "y"} to both years.` : "No Portfolio filters are active."}`;
 }
 
 function continuityNormalisedTitle(project) {
   return String(project?.initiative_name || "")
     .toLowerCase()
-    .replace(/\b(?:amp)?20(?:26|27)\b/g, " ")
+    .replace(/\b(?:amp)?20\d{2}\b/g, " ")
     .replace(/\bno\.?\s*\d+[a-z]?\b/g, " ")
     .replace(/&/g, " and ")
     .replace(/[^a-z0-9]+/g, " ")
@@ -3937,7 +4312,7 @@ function continuityNormalisedTitle(project) {
 function continuityTokens(value) {
   return new Set(String(value || "")
     .toLowerCase()
-    .replace(/\b(?:amp)?20(?:26|27)\b/g, " ")
+    .replace(/\b(?:amp)?20\d{2}\b/g, " ")
     .replace(/\bno\.?\s*\d+[a-z]?\b/g, " ")
     .replace(/[^a-z0-9]+/g, " ")
     .split(/\s+/)
@@ -3981,9 +4356,7 @@ function continuityCandidateScore(previous, current) {
   return { score, exactReference, exactTitle, title };
 }
 
-function buildContinuityRegister() {
-  const previous = adminProjects.filter(project => projectImplementationYear(project) === 2026);
-  const current = adminProjects.filter(project => projectImplementationYear(project) === 2027);
+function buildContinuityPairs(previous, current) {
   const candidates = [];
   previous.forEach(previousProject => {
     current.forEach(currentProject => {
@@ -4010,6 +4383,12 @@ function buildContinuityRegister() {
   return pairs;
 }
 
+function buildContinuityRegister() {
+  const previous = adminProjects.filter(project => projectImplementationYear(project) === 2026);
+  const current = adminProjects.filter(project => projectImplementationYear(project) === 2027);
+  return buildContinuityPairs(previous, current);
+}
+
 function classifyContinuityPair(pair) {
   const previous = pair.previous;
   const current = pair.current;
@@ -4032,7 +4411,7 @@ function classifyContinuityPair(pair) {
 function continuityTheme(pair) {
   const project = pair.current || pair.previous;
   return String(project?.initiative_name || "Unclassified initiative")
-    .replace(/\b(?:AMP)?20(?:26|27)\b/gi, "")
+    .replace(/\b(?:AMP)?20\d{2}\b/gi, "")
     .replace(/\bNo\.?\s*\d+[A-Za-z]?\b/gi, "")
     .replace(/\s+/g, " ")
     .replace(/^[\s,:;–—-]+|[\s,:;–—-]+$/g, "") || project?.initiative_name || "Unclassified initiative";
@@ -5117,3 +5496,9 @@ function updateChartReadability() {
 }
 
 /* HOME31 V7.9.4.10.4 DIRECT STABLE NAVY BUILD */
+
+
+/* HOME31 V7.9.4.10.6 APPROVED BUDGET PRECISION BUILD */
+
+
+/* HOME31 V7.9.4.10.7 PORTFOLIO YEAR COMPARISON BUILD */

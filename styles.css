@@ -4753,3 +4753,204 @@ body.super-admin-shell .admin-command-module{color:var(--admin-text)}
 body.super-admin-shell .admin-command-panel,
 body.super-admin-shell .admin-command-kpi{color:var(--admin-text)}
 body.super-admin-shell .admin-context-navigation{opacity:1;backdrop-filter:blur(14px)}
+
+
+/* ================================================================
+   HOME31 V7.9.4.10.5 SECURE USER ACCESS ADMINISTRATION
+   ================================================================ */
+.admin-service-status-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:stretch;gap:9px;margin-top:10px}
+.admin-service-status-row .admin-service-status{margin-top:0}
+.admin-service-test-button{min-width:116px;border-radius:11px}
+.admin-command-button:disabled{cursor:not-allowed;opacity:.48;filter:saturate(.55)}
+.admin-user-filter-grid{grid-template-columns:minmax(240px,1fr) 170px 190px 170px auto}
+.admin-command-user-card{position:relative}
+.admin-command-user-card.access-locked{border-color:#8d7444}
+.admin-command-user-card.access-disabled{border-color:#8f494e;background:linear-gradient(145deg,#362837,#252637)}
+.admin-user-card-title-row{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.account-access-badge{display:inline-flex;padding:4px 8px;border:1px solid #397d74;border-radius:999px;color:#a9d7cf;background:rgba(87,153,155,.13);font-size:var(--read-xs);font-weight:700;line-height:1.2}
+.account-access-badge.locked{border-color:#8d7444;color:#e5cb87;background:rgba(209,173,99,.12)}
+.account-access-badge.disabled{border-color:#9c5056;color:#efb4b8;background:rgba(210,96,102,.12)}
+.admin-user-access-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:11px}
+.admin-access-button{min-height:34px;padding:6px 10px;border:1px solid #4f887f;border-radius:9px;color:#bfe0da;background:#0b343e;font-size:var(--read-xs);font-weight:700}
+.admin-access-button.freeze{border-color:#8d7444;color:#e5cb87;background:rgba(209,173,99,.11)}
+.admin-access-button.revoke{border-color:#9c5056;color:#efb4b8;background:rgba(210,96,102,.11)}
+.admin-access-button:hover,.admin-access-button:focus-visible{outline:none;filter:brightness(1.14);transform:translateY(-1px)}
+.admin-user-card-controls{display:flex;flex-direction:column;align-items:flex-end;gap:5px}
+@media(max-width:1250px){.admin-user-filter-grid{grid-template-columns:1fr 1fr}}
+@media(max-width:700px){
+  .admin-service-status-row{grid-template-columns:1fr}
+  .admin-service-test-button{width:100%}
+  .admin-command-user-card{grid-template-columns:1fr}
+  .admin-user-card-controls{align-items:flex-start}
+}
+
+
+/* ================================================================
+   HOME31 V7.9.4.10.6 APPROVED BUDGET PRECISION
+   Full exact totals in headline cards; compact labels remain chart-only.
+   ================================================================ */
+#admin-kpi-effective-cost,
+#portfolio-kpi-cost{
+  font-size:clamp(19px,1.45vw,28px)!important;
+  line-height:1.18!important;
+  letter-spacing:-.025em!important;
+  overflow-wrap:anywhere;
+  font-variant-numeric:tabular-nums;
+}
+
+
+/* ================================================================
+   HOME31 V7.9.4.10.7 — PORTFOLIO YEAR COMPARISON
+   Professional navy command centre · gold financial emphasis · teal stability
+   ================================================================ */
+:root{
+  --home31-navy-950:#061b2b;
+  --home31-navy-900:#0b263b;
+  --home31-navy-800:#102f49;
+  --home31-navy-700:#153953;
+  --home31-gold:#d1ad63;
+  --home31-gold-bright:#e5be65;
+  --home31-teal:#57999b;
+  --home31-green:#6ca69b;
+  --home31-red:#d26066;
+  --home31-blue:#78a8c4;
+  --home31-slate:#8fa8b8;
+}
+
+.financial-kpi-card,.portfolio-financial-kpi{
+  border-color:#8d7444!important;
+  background:
+    radial-gradient(circle at 88% 22%,rgba(209,173,99,.17),transparent 34%),
+    linear-gradient(145deg,#163c57,#0b293f)!important;
+}
+.financial-kpi-card .kpi-icon{background:var(--home31-gold)!important}
+.budget-compact-value{
+  display:block!important;
+  color:var(--home31-gold-bright)!important;
+  font-size:clamp(24px,2vw,36px)!important;
+  line-height:1.08!important;
+  letter-spacing:-.035em!important;
+  white-space:nowrap!important;
+  overflow-wrap:normal!important;
+  font-variant-numeric:tabular-nums;
+}
+.budget-exact-value{
+  display:block!important;
+  margin-top:8px!important;
+  color:#edf4f8!important;
+  font-size:clamp(11px,.8vw,14px)!important;
+  line-height:1.35!important;
+  letter-spacing:.005em!important;
+  font-variant-numeric:tabular-nums;
+  overflow-wrap:anywhere;
+}
+.budget-coverage-note{
+  display:block!important;
+  margin-top:4px!important;
+  color:#9fb5c4!important;
+  font-size:var(--read-xs)!important;
+}
+.portfolio-financial-kpi{min-height:160px}
+
+.portfolio-year-comparison-panel{
+  margin-top:14px;
+  border-color:#496a80;
+  background:
+    radial-gradient(circle at 95% 0%,rgba(209,173,99,.11),transparent 32%),
+    linear-gradient(145deg,#102f49,#0b263b);
+}
+.year-comparison-heading{align-items:center}
+.year-comparison-controls{display:flex;align-items:flex-end;gap:9px;flex-wrap:wrap}
+.year-comparison-controls label{display:grid;gap:6px}
+.year-comparison-controls label>span{
+  color:#9fb5c4;font-size:var(--read-xs);font-weight:700;text-transform:uppercase;letter-spacing:.07em;
+}
+.year-comparison-controls select{
+  min-width:165px;min-height:44px;padding:9px 36px 9px 12px;
+  border:1px solid #52748c;border-radius:11px;color:#f0f5f8;background:#0a273d;
+  font-weight:700;outline:none;
+}
+.year-comparison-controls select:focus{border-color:var(--home31-gold);box-shadow:0 0 0 3px rgba(209,173,99,.13)}
+.year-comparison-versus{
+  min-width:34px;height:34px;display:grid;place-items:center;margin-bottom:5px;border-radius:50%;
+  color:#102638;background:var(--home31-gold);font-size:12px;font-weight:800;text-transform:uppercase;
+}
+.year-comparison-summary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.year-comparison-year-card{
+  position:relative;padding:20px;border:1px solid #3c6179;border-radius:18px;overflow:hidden;
+  background:linear-gradient(145deg,#123651,#0c2940);
+}
+.year-comparison-year-card.base{border-left:5px solid var(--home31-teal)}
+.year-comparison-year-card.comparison{border-left:5px solid var(--home31-gold)}
+.year-comparison-year-card::after{
+  content:"";position:absolute;right:-40px;bottom:-55px;width:150px;height:150px;border-radius:50%;background:rgba(120,168,196,.07);
+}
+.year-comparison-year-label{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.year-comparison-year-label span{color:#93adbd;font-size:var(--read-xs);text-transform:uppercase;letter-spacing:.08em;font-weight:700}
+.year-comparison-year-label strong{color:#f2f7f9;font-size:var(--read-lg)}
+.year-comparison-primary-value{margin-top:15px;position:relative;z-index:1}
+.year-comparison-primary-value strong{display:block;color:var(--home31-gold-bright);font-size:clamp(28px,3vw,44px);line-height:1;font-variant-numeric:tabular-nums}
+.year-comparison-year-card.base .year-comparison-primary-value strong{color:#73b8b7}
+.year-comparison-primary-value span{display:block;margin-top:7px;color:#e3edf2;font-size:var(--read-sm);font-variant-numeric:tabular-nums}
+.year-comparison-card-facts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:17px;position:relative;z-index:1}
+.year-comparison-card-facts span{padding:9px;border:1px solid rgba(105,147,173,.26);border-radius:10px;color:#98afbe;background:rgba(4,22,35,.24);font-size:var(--read-xs)}
+.year-comparison-card-facts strong{display:block;margin-bottom:3px;color:#edf5f8;font-size:var(--read-md)}
+.year-comparison-visual-grid{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(320px,.8fr);gap:12px;margin-top:12px}
+.year-comparison-budget-panel,.year-comparison-continuity-panel{
+  padding:18px;border:1px solid #31516a;border-radius:17px;background:#0c293f;
+}
+.year-comparison-subheading{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:15px}
+.year-comparison-subheading span{display:block;color:#82afcb;font-size:var(--read-xs);font-weight:700;text-transform:uppercase;letter-spacing:.08em}
+.year-comparison-subheading strong{display:block;margin-top:5px;color:#f1f6f9;font-size:var(--read-lg)}
+.year-comparison-movement{display:inline-flex;padding:8px 11px;border:1px solid #526f84;border-radius:999px;color:#bad0dc;background:#102f49;font-size:var(--read-sm);font-weight:700;white-space:nowrap;font-variant-numeric:tabular-nums}
+.year-comparison-movement.positive{border-color:#397d74;color:#9ed1c7;background:rgba(87,153,155,.12)}
+.year-comparison-movement.negative{border-color:#8f494e;color:#efafb4;background:rgba(210,96,102,.11)}
+.year-comparison-bars{display:grid;gap:13px}
+.year-comparison-bar-row{display:grid;grid-template-columns:145px minmax(180px,1fr) minmax(155px,auto);align-items:center;gap:12px}
+.year-comparison-bar-row>div strong{display:block;color:#f0f5f8;font-size:var(--read-base)}
+.year-comparison-bar-row>div span{display:block;margin-top:3px;color:#8fa8b8;font-size:var(--read-xs)}
+.year-comparison-bar-row i{height:18px;overflow:hidden;border-radius:999px;background:#173b54}
+.year-comparison-bar-row i b{display:block;height:100%;min-width:0;border-radius:999px;background:linear-gradient(90deg,#3f8082,#6bb0ad)}
+.year-comparison-bar-row.comparison i b{background:linear-gradient(90deg,#a77e2d,#e2bb61)}
+.year-comparison-bar-row em{color:#dce8ef;font-size:var(--read-sm);font-style:normal;font-weight:700;text-align:right;font-variant-numeric:tabular-nums}
+.year-comparison-note{margin-top:13px;padding-top:11px;border-top:1px solid rgba(102,140,164,.30);color:#9fb5c4;font-size:var(--read-xs);line-height:1.55}
+.year-comparison-note strong{color:#e9f1f5}
+.year-comparison-continuity{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.year-comparison-continuity article{padding:14px;border:1px solid #365870;border-radius:13px;background:#102f49;text-align:center}
+.year-comparison-continuity article.carried{border-top:4px solid var(--home31-teal)}
+.year-comparison-continuity article.new{border-top:4px solid var(--home31-gold)}
+.year-comparison-continuity article.ended{border-top:4px solid var(--home31-red)}
+.year-comparison-continuity strong{display:block;color:#f1f6f9;font-size:var(--read-xl)}
+.year-comparison-continuity span{display:block;margin-top:5px;color:#97aebd;font-size:var(--read-xs);line-height:1.4}
+.year-comparison-metric-table{margin-top:12px;border:1px solid #31516a;border-radius:15px;overflow:hidden}
+.year-comparison-table-row{display:grid;grid-template-columns:minmax(180px,1.3fr) repeat(3,minmax(130px,1fr));align-items:center;gap:1px;background:#31516a}
+.year-comparison-table-row>*{min-height:48px;padding:12px 14px;display:flex;align-items:center;background:#0b283e;color:#c8d6df;font-size:var(--read-sm);font-variant-numeric:tabular-nums}
+.year-comparison-table-row.heading>*{min-height:42px;color:#91b0c2;background:#102f49;font-size:var(--read-xs);font-weight:700;text-transform:uppercase;letter-spacing:.06em}
+.year-comparison-table-row strong{color:#f0f5f8}
+.year-comparison-table-row em{font-style:normal;font-weight:700}
+.year-comparison-table-row em.positive{color:#8fd0c2}
+.year-comparison-table-row em.negative{color:#e99aa0}
+.year-comparison-table-row em.neutral{color:#b4c6d2}
+.comparison-values small{display:block;margin-top:5px;color:#9fb4c2;font-size:var(--read-xs);font-variant-numeric:tabular-nums}
+
+@media(max-width:1200px){
+  .year-comparison-card-facts{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .year-comparison-visual-grid{grid-template-columns:1fr}
+}
+@media(max-width:850px){
+  .year-comparison-summary{grid-template-columns:1fr}
+  .year-comparison-heading{display:block}
+  .year-comparison-controls{margin-top:14px}
+  .year-comparison-controls label{flex:1;min-width:140px}
+  .year-comparison-controls select{width:100%;min-width:0}
+  .year-comparison-bar-row{grid-template-columns:1fr}
+  .year-comparison-bar-row em{text-align:left}
+  .year-comparison-continuity{grid-template-columns:1fr}
+  .year-comparison-metric-table{overflow-x:auto}
+  .year-comparison-table-row{min-width:650px}
+}
+@media(max-width:520px){
+  .budget-compact-value{font-size:clamp(22px,9vw,31px)!important}
+  .year-comparison-controls{display:grid;grid-template-columns:1fr}
+  .year-comparison-versus{margin:0 auto}
+}

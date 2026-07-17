@@ -4,13 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; form-action 'self'; script-src 'self' https://cdn.jsdelivr.net https://cdn.sheetjs.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' https://*.supabase.co; img-src 'self' data:; upgrade-insecure-requests">
-  <meta name="description" content="HOME31 Enterprise Management Platform V7.9.4.10.4 — stable navy administration and multi-year project timeline">
+  <meta name="description" content="HOME31 Enterprise Management Platform V7.9.4.10.7 — portfolio year comparison">
   <meta name="theme-color" content="#061b2b">
-  <title>HOME31 Enterprise Management Platform V7.9.4.10.4</title>
+  <title>HOME31 Enterprise Management Platform V7.9.4.10.7</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=7.9.4.10.4"> 
+    <link rel="stylesheet" href="styles.css?v=7.9.4.10.7"> 
 </head>
 <body>
 
@@ -92,7 +92,7 @@
 
     <div class="auth-card-wrap">
       <div id="configuration-warning" class="notice warning hidden">
-        Configure <code>SUPABASE_URL</code> and <code>SUPABASE_PUBLISHABLE_KEY</code> in <code>app.js?v=7.9.4.10.4</code>.
+        Configure <code>SUPABASE_URL</code> and <code>SUPABASE_PUBLISHABLE_KEY</code> in <code>app.js?v=7.9.4.10.7</code>.
       </div>
 
       <form id="login-form" class="auth-card">
@@ -209,7 +209,7 @@
           <span class="sidebar-logout-icon" aria-hidden="true">↪</span>
           <span class="sidebar-logout-label">Sign out</span>
         </button>
-        <span class="sidebar-version">HOME31 Platform V7.9.4.10.4</span>
+        <span class="sidebar-version">HOME31 Platform V7.9.4.10.7</span>
       </div>
     </aside>
 
@@ -472,11 +472,12 @@
               <strong id="admin-kpi-health">0%</strong>
               <small id="admin-kpi-health-note">Completeness across seven checks</small>
             </article>
-            <article class="executive-kpi-card">
+            <article class="executive-kpi-card financial-kpi-card">
               <div class="kpi-icon">RM</div>
               <span id="admin-kpi-cost-label">Approved Budget</span>
-              <strong id="admin-kpi-effective-cost">RM0</strong>
-              <small id="admin-kpi-effective-note">Approved Budget values</small>
+              <strong id="admin-kpi-effective-cost" class="budget-compact-value">RM0.000M</strong>
+              <small id="admin-kpi-effective-exact" class="budget-exact-value">Exact total: RM 0.00</small>
+              <small id="admin-kpi-effective-note" class="budget-coverage-note">0 of 0 records populated</small>
             </article>
             <article class="executive-kpi-card positive">
               <div class="kpi-icon">%</div>
@@ -732,10 +733,11 @@
               <strong id="portfolio-kpi-filtered">0</strong>
               <small>After active filters</small>
             </article>
-            <article class="admin-command-kpi">
+            <article class="admin-command-kpi portfolio-financial-kpi">
               <span>Approved budget</span>
-              <strong id="portfolio-kpi-cost">RM0</strong>
-              <small>Confirmed portfolio cost basis</small>
+              <strong id="portfolio-kpi-cost" class="budget-compact-value">RM0.000M</strong>
+              <small id="portfolio-kpi-cost-exact" class="budget-exact-value">Exact total: RM 0.00</small>
+              <small id="portfolio-kpi-cost-note" class="budget-coverage-note">Confirmed portfolio cost basis</small>
             </article>
             <article class="admin-command-kpi">
               <span>Approved coverage</span>
@@ -890,6 +892,51 @@
               <span id="continuity-table-count">0 continuity rows</span>
               <span>Department and CONTROL 02 filters also apply to this register.</span>
             </div>
+          </article>
+
+          <article id="portfolio-year-comparison" class="admin-command-panel portfolio-year-comparison-panel">
+            <div class="admin-command-panel-heading year-comparison-heading">
+              <div>
+                <span class="admin-command-section-code">YEAR COMPARISON 05</span>
+                <h3>AMP Year-on-Year Comparison</h3>
+                <p>Compare any two implementation years using the same exact Approved Budget basis. Portfolio filters apply to both years.</p>
+              </div>
+              <div class="year-comparison-controls" aria-label="Select comparison years">
+                <label>
+                  <span>Base year</span>
+                  <select id="portfolio-compare-year-a" aria-label="Select base AMP year"></select>
+                </label>
+                <span class="year-comparison-versus" aria-hidden="true">vs</span>
+                <label>
+                  <span>Comparison year</span>
+                  <select id="portfolio-compare-year-b" aria-label="Select comparison AMP year"></select>
+                </label>
+              </div>
+            </div>
+
+            <div id="portfolio-year-comparison-summary" class="year-comparison-summary"></div>
+
+            <div class="year-comparison-visual-grid">
+              <section class="year-comparison-budget-panel" aria-labelledby="year-comparison-budget-title">
+                <div class="year-comparison-subheading">
+                  <div><span>Approved Budget</span><strong id="year-comparison-budget-title">Exact financial movement</strong></div>
+                  <span id="portfolio-year-comparison-budget-movement" class="year-comparison-movement neutral">RM 0.00</span>
+                </div>
+                <div id="portfolio-year-comparison-bars" class="year-comparison-bars"></div>
+                <div id="portfolio-year-comparison-budget-note" class="year-comparison-note"></div>
+              </section>
+
+              <section class="year-comparison-continuity-panel" aria-labelledby="year-comparison-continuity-title">
+                <div class="year-comparison-subheading">
+                  <div><span>Portfolio continuity</span><strong id="year-comparison-continuity-title">What changed between years</strong></div>
+                </div>
+                <div id="portfolio-year-comparison-continuity" class="year-comparison-continuity"></div>
+                <div class="year-comparison-note">Continuity is a suggested match using source reference, title, department, pillar and description similarity. Management confirmation remains required.</div>
+              </section>
+            </div>
+
+            <div id="portfolio-year-comparison-table" class="year-comparison-metric-table" role="table" aria-label="Year comparison metrics"></div>
+            <div id="portfolio-year-comparison-basis" class="continuity-method-note" role="note"></div>
           </article>
 
           <div id="portfolio-quality" class="admin-command-assurance-strip">
@@ -1140,9 +1187,9 @@
               <small>Organisational coverage</small>
             </article>
             <article class="admin-command-kpi positive">
-              <span>Access readiness</span>
+              <span>Active access</span>
               <strong id="users-kpi-readiness">0%</strong>
-              <small>Permanent password established</small>
+              <small>Profiles currently permitted to sign in</small>
             </article>
           </div>
 
@@ -1157,10 +1204,13 @@
               </div>
 
               <div id="user-service-warning" class="admin-command-notice">
-                Protected service required: <code>admin-create-user</code> Supabase Edge Function.
+                Protected service required: <code>admin-user-service</code> Supabase Edge Function. It handles user creation, password reset, freeze, revoke and restore actions.
               </div>
 
-              <div id="user-service-status" class="admin-service-status neutral" role="status" aria-live="polite">User-creation service has not been tested in this session.</div>
+              <div class="admin-service-status-row">
+                <div id="user-service-status" class="admin-service-status neutral" role="status" aria-live="polite">Checking the protected administrator service…</div>
+                <button id="test-user-service-button" class="admin-command-button ghost admin-service-test-button" type="button">Test Service</button>
+              </div>
 
               <div class="admin-command-form-grid">
                 <label class="admin-command-field">
@@ -1183,7 +1233,7 @@
 
               <div class="admin-command-actions form-actions">
                 <button id="generate-password-button" class="admin-command-button ghost" type="button">Generate Password</button>
-                <button id="admin-create-user-submit" class="admin-command-button gold" type="submit">Create Active User</button>
+                <button id="admin-create-user-submit" class="admin-command-button gold" type="submit" disabled>Create Active User</button>
               </div>
             </form>
 
@@ -1234,6 +1284,15 @@
                   <option value="complete">Changed</option>
                 </select>
               </label>
+              <label>
+                <span>Account access</span>
+                <select id="admin-user-access-filter">
+                  <option value="">All access status</option>
+                  <option value="active">Active</option>
+                  <option value="locked">Frozen</option>
+                  <option value="disabled">Revoked</option>
+                </select>
+              </label>
               <button id="admin-clear-user-filters" class="admin-command-button ghost" type="button">Clear</button>
             </div>
 
@@ -1245,7 +1304,7 @@
             <article><strong>First Login</strong><span>Forced password change</span></article>
             <article><strong>RLS</strong><span>Database-level restrictions</span></article>
             <article><strong>Edge</strong><span>Protected user provisioning</span></article>
-            <article><strong id="users-assurance-pending">0</strong><span>Accounts requiring follow-up</span></article>
+            <article><strong id="users-assurance-pending">0</strong><span>Frozen or revoked accounts</span></article>
           </div>
         </section>
 
@@ -2341,6 +2400,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-    <script type="module" src="app.js?v=7.9.4.10.4"></script>
+    <script type="module" src="app.js?v=7.9.4.10.7"></script>
 </body>
 </html>
