@@ -4740,77 +4740,124 @@ body.department-user-shell .pm-outside-view-note strong{color:var(--brand)}
 
 
 /* ================================================================
-   HOME31 V7.9.4.10 ADMIN LIGHT PASSWORD FIX
-   Navy command shell with light operational admin workspaces.
+   HOME31 V7.9.4.10.2 ADMIN CONTRAST RECOVERY
+   Restores readable colours inside light super-admin workspaces.
    ================================================================ */
-body.super-admin-shell{
-  --admin-navy-950:#071b2b;--admin-navy-900:#0b263a;--admin-navy-800:#102f49;
-  --admin-bg:#f3f6f8;--admin-card:#ffffff;--admin-line:#d8e2e8;
-  --admin-ink:#172631;--admin-muted:#667b89;--admin-gold:#d1ad63;
-  --admin-teal:#57999b;--admin-red:#c65d65;--admin-shadow:0 12px 30px rgba(7,27,43,.08);
+body.super-admin-shell .admin-command-module:not(.executive-command-centre){
+  --admin-readable-ink:#172631;
+  --admin-readable-body:#334b59;
+  --admin-readable-muted:#667b89;
+  --admin-readable-label:#456779;
+  --admin-readable-line:#d8e2e8;
+  --admin-readable-soft:#f4f7f9;
+  --admin-readable-blue:#2f6d8e;
 }
-body.super-admin-shell .topbar{color:#f2f7fa;background:var(--admin-navy-950);border-bottom-color:#27475d}
-body.super-admin-shell .topbar .eyebrow{color:#83b0ca}
-body.super-admin-shell .topbar h1{color:#fff}
-body.super-admin-shell .topbar .icon-button{color:#e8f1f5;background:#102f49;border-color:#35586f}
-body.super-admin-shell .topbar .button.gold{background:linear-gradient(135deg,#c8952f,#e2bb5a);color:#182630}
-body.super-admin-shell .admin-command-module{
-  color:var(--admin-ink)!important;background:var(--admin-bg)!important;background-image:none!important;
+
+/* Light operational panels must not inherit the original dark command-centre text. */
+body.super-admin-shell .admin-command-module:not(.executive-command-centre) .admin-command-panel:not(.chart-panel):not(.access-governance-panel),
+body.super-admin-shell .admin-command-module:not(.executive-command-centre) .portfolio-insight-panel,
+body.super-admin-shell .admin-command-module:not(.executive-command-centre) .filter-command-panel{
+  color:var(--admin-readable-ink)!important;
+  background:#fff!important;
+  border-color:var(--admin-readable-line)!important;
 }
-body.super-admin-shell .admin-command-hero{
-  color:var(--admin-ink)!important;background:var(--admin-card)!important;border:1px solid var(--admin-line)!important;
-  border-left:5px solid var(--admin-gold)!important;box-shadow:var(--admin-shadow)!important;
+body.super-admin-shell .admin-command-module:not(.executive-command-centre) .admin-command-panel:not(.chart-panel):not(.access-governance-panel) .admin-command-panel-heading h3,
+body.super-admin-shell .portfolio-insight-panel .admin-command-panel-heading h3,
+body.super-admin-shell .filter-command-panel .admin-command-panel-heading h3{
+  color:var(--admin-readable-ink)!important;
 }
-body.super-admin-shell .admin-command-code,body.super-admin-shell .admin-command-section-code{color:#335f79!important}
-body.super-admin-shell .admin-command-hero h2,body.super-admin-shell .admin-command-panel-heading h3{color:var(--admin-ink)!important}
-body.super-admin-shell .admin-command-hero p,body.super-admin-shell .admin-command-panel-heading p,
-body.super-admin-shell .admin-command-kpi small,body.super-admin-shell .admin-command-user-card span,
-body.super-admin-shell .admin-command-list-item span,body.super-admin-shell .admin-command-empty{color:var(--admin-muted)!important}
-body.super-admin-shell .admin-command-kpi,body.super-admin-shell .admin-command-panel,
-body.super-admin-shell .admin-command-user-card,body.super-admin-shell .admin-exception-lane,
-body.super-admin-shell .admin-command-assurance-strip article{
-  color:var(--admin-ink)!important;background:var(--admin-card)!important;border-color:var(--admin-line)!important;box-shadow:var(--admin-shadow)!important;
+body.super-admin-shell .admin-command-module:not(.executive-command-centre) .admin-command-panel:not(.chart-panel):not(.access-governance-panel) .admin-command-panel-heading p{
+  color:var(--admin-readable-muted)!important;
 }
-body.super-admin-shell .admin-command-kpi>span{color:#526b79!important}
-body.super-admin-shell .admin-command-kpi>strong,body.super-admin-shell .admin-command-panel strong,
-body.super-admin-shell .admin-command-user-card strong,body.super-admin-shell .admin-command-list-item strong{color:var(--admin-ink)!important}
-body.super-admin-shell .admin-command-kpi.featured{border-top:4px solid #3f7898!important}
-body.super-admin-shell .admin-command-kpi.positive{border-top:4px solid var(--admin-teal)!important}
-body.super-admin-shell .admin-command-kpi.danger{border-top:4px solid var(--admin-red)!important}
-body.super-admin-shell .admin-create-user-panel,body.super-admin-shell .user-directory-panel{background:#fff!important}
-body.super-admin-shell .access-governance-panel,body.super-admin-shell .admin-command-panel.chart-panel{
-  color:#edf4f8!important;background:linear-gradient(145deg,#102f49,#0b263a)!important;border-color:#31516a!important;
+
+/* Selection Narrative and comparable operational insight text. */
+body.super-admin-shell .admin-command-module:not(.executive-command-centre) .admin-command-narrative,
+body.super-admin-shell .portfolio-insight-panel #portfolio-selection-insight,
+body.super-admin-shell .portfolio-insight-panel p{
+  color:var(--admin-readable-body)!important;
+  opacity:1!important;
 }
-body.super-admin-shell .access-governance-panel h3,body.super-admin-shell .admin-command-panel.chart-panel h3,
-body.super-admin-shell .access-governance-panel strong,body.super-admin-shell .admin-command-panel.chart-panel strong{color:#f3f8fa!important}
-body.super-admin-shell .access-governance-panel p,body.super-admin-shell .access-governance-panel span,
-body.super-admin-shell .admin-command-panel.chart-panel p{color:#a9bdcc!important}
-body.super-admin-shell .access-governance-panel .admin-command-list-item{background:#0d2940!important;border-color:#31516a!important;box-shadow:none!important}
-body.super-admin-shell .access-governance-panel .admin-command-list-item strong{color:#f2f7fa!important}
-body.super-admin-shell .access-governance-panel .admin-command-list-item span{color:#9fb5c4!important}
-body.super-admin-shell .admin-command-field input,body.super-admin-shell .admin-command-field select,
-body.super-admin-shell .admin-command-field textarea,body.super-admin-shell .admin-user-filter-grid input,
-body.super-admin-shell .admin-user-filter-grid select,body.super-admin-shell .admin-command-filter-grid input,
-body.super-admin-shell .admin-command-filter-grid select{
-  color:var(--admin-ink)!important;background:#f8fafb!important;border-color:#cbd8df!important;
+
+/* Fact tiles were retaining dark translucent backgrounds and pale text. */
+body.super-admin-shell .admin-command-module:not(.executive-command-centre) .admin-command-facts article,
+body.super-admin-shell .portfolio-insight-panel .admin-command-facts article{
+  color:var(--admin-readable-ink)!important;
+  background:var(--admin-readable-soft)!important;
+  border:1px solid var(--admin-readable-line)!important;
+  border-left:4px solid #3f7898!important;
+  border-radius:10px!important;
+  opacity:1!important;
 }
-body.super-admin-shell .admin-command-field input:focus,body.super-admin-shell .admin-command-field select:focus,
-body.super-admin-shell .admin-user-filter-grid input:focus,body.super-admin-shell .admin-user-filter-grid select:focus{
-  border-color:#3f7898!important;box-shadow:0 0 0 4px rgba(63,120,152,.12)!important;
+body.super-admin-shell .admin-command-module:not(.executive-command-centre) .admin-command-facts strong,
+body.super-admin-shell .portfolio-insight-panel .admin-command-facts strong{
+  color:#173042!important;
+  opacity:1!important;
 }
-body.super-admin-shell .admin-command-button.ghost{color:#244c64!important;background:#fff!important;border-color:#b8cbd6!important}
-body.super-admin-shell .admin-command-button.gold{color:#172631!important;background:linear-gradient(135deg,#c8952f,#e5bd59)!important;border-color:#c8952f!important}
-body.super-admin-shell .admin-command-table-wrap{border:1px solid var(--admin-line)!important;border-radius:14px;background:#fff!important}
-body.super-admin-shell .admin-command-table th{color:#435b69!important;background:#edf3f6!important;border-bottom-color:#d8e2e8!important}
-body.super-admin-shell .admin-command-table td{color:#243641!important;background:#fff!important;border-bottom-color:#e2e9ed!important}
-body.super-admin-shell .admin-command-notice{color:#72551d!important;background:#fff7e4!important;border-color:#d8b66c!important}
-.admin-service-status{margin-top:10px;padding:11px 13px;border:1px solid #cbd8df;border-left:4px solid #8595a0;border-radius:11px;color:#526b79;background:#f5f8fa;font-size:13px;line-height:1.45}
-.admin-service-status.checking{border-left-color:#3f7898;color:#315c74;background:#eef6fa}
-.admin-service-status.success{border-left-color:#57999b;color:#356d68;background:#edf8f5}
-.admin-service-status.error{border-left-color:#c65d65;color:#8f343b;background:#fff0f1}
-body.super-admin-shell .role-pill{color:#72500f!important;background:#fff2cf!important}
-body.super-admin-shell .text-button{color:#2f6d8e!important}
-body.super-admin-shell .admin-command-chip{color:#38586a!important;background:#edf3f6!important;border-color:#c3d3dc!important}
-body.super-admin-shell .admin-command-assurance-strip{border-color:var(--admin-line)!important;background:#eaf0f4!important}
-body.super-admin-shell .admin-command-assurance-strip span{color:#5e7481!important}
-@media(max-width:850px){body.super-admin-shell .admin-command-hero{border-left-width:4px!important}}
+body.super-admin-shell .admin-command-module:not(.executive-command-centre) .admin-command-facts span,
+body.super-admin-shell .portfolio-insight-panel .admin-command-facts span{
+  color:#5f7482!important;
+  opacity:1!important;
+}
+
+/* KPI supporting text and labels. */
+body.super-admin-shell .admin-command-module:not(.executive-command-centre) .admin-command-kpi>span{
+  color:#456779!important;
+  opacity:1!important;
+}
+body.super-admin-shell .admin-command-module:not(.executive-command-centre) .admin-command-kpi>small{
+  color:#657b88!important;
+  opacity:1!important;
+}
+body.super-admin-shell .admin-command-module:not(.executive-command-centre) .admin-command-kpi>strong{
+  color:#102638!important;
+  opacity:1!important;
+}
+
+/* Filters, supporting labels and clear controls. */
+body.super-admin-shell .admin-command-module:not(.executive-command-centre) .admin-command-filter-grid label>span,
+body.super-admin-shell .admin-command-module:not(.executive-command-centre) .admin-user-filter-grid label>span,
+body.super-admin-shell .admin-command-module:not(.executive-command-centre) .pm-filter-grid label>span,
+body.super-admin-shell .filter-command-panel label>span{
+  color:var(--admin-readable-label)!important;
+  opacity:1!important;
+}
+body.super-admin-shell .admin-command-module:not(.executive-command-centre) .admin-command-text-button,
+body.super-admin-shell .filter-command-panel .admin-command-text-button{
+  color:var(--admin-readable-blue)!important;
+  opacity:1!important;
+}
+body.super-admin-shell .admin-command-module:not(.executive-command-centre) input::placeholder,
+body.super-admin-shell .admin-command-module:not(.executive-command-centre) textarea::placeholder{
+  color:#748996!important;
+  opacity:1!important;
+}
+body.super-admin-shell .admin-command-module:not(.executive-command-centre) .portfolio-filter-empty,
+body.super-admin-shell .admin-command-module:not(.executive-command-centre) .admin-command-empty{
+  color:var(--admin-readable-muted)!important;
+  opacity:1!important;
+}
+
+/* Light lists inside light panels. Dark chart/governance panels remain unchanged. */
+body.super-admin-shell .admin-command-module:not(.executive-command-centre) .admin-command-panel:not(.chart-panel):not(.access-governance-panel) .admin-command-list-item{
+  color:var(--admin-readable-ink)!important;
+  background:#f8fafb!important;
+  border-color:var(--admin-readable-line)!important;
+  box-shadow:none!important;
+}
+body.super-admin-shell .admin-command-module:not(.executive-command-centre) .admin-command-panel:not(.chart-panel):not(.access-governance-panel) .admin-command-list-item strong{
+  color:var(--admin-readable-ink)!important;
+}
+body.super-admin-shell .admin-command-module:not(.executive-command-centre) .admin-command-panel:not(.chart-panel):not(.access-governance-panel) .admin-command-list-item span{
+  color:var(--admin-readable-muted)!important;
+}
+
+/* Keep contextual navigation fully opaque so content never shows through it. */
+body.super-admin-shell .admin-context-nav,
+body.super-admin-shell .admin-secondary-nav,
+body.super-admin-shell .admin-subnav,
+body.super-admin-shell .admin-workspace-tabs{
+  background:#fff!important;
+  opacity:1!important;
+  backdrop-filter:none!important;
+  box-shadow:0 7px 18px rgba(7,27,43,.08)!important;
+}
